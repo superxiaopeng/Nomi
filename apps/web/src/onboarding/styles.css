@@ -1,0 +1,202 @@
+.nomi-ob {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at top, #1a1530 0%, #0a0815 45%, #050308 100%);
+  color: #f5f3ec;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.nomi-ob__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px 0;
+  flex-shrink: 0;
+}
+
+.nomi-ob__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.nomi-ob__brand svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nomi-ob__progress {
+  display: flex;
+  gap: 6px;
+}
+
+.nomi-ob__dot {
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 0.4s ease;
+}
+
+.nomi-ob__dot--active { background: #f5f3ec; }
+.nomi-ob__dot--passed { background: rgba(245, 243, 236, 0.45); }
+
+.nomi-ob__skip {
+  background: transparent;
+  border: none;
+  color: rgba(245, 243, 236, 0.55);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.nomi-ob__skip:hover {
+  color: #f5f3ec;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nomi-ob__stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 32px;
+}
+
+.nomi-ob__stage-inner {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.nomi-ob__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px 28px;
+  flex-shrink: 0;
+}
+
+.nomi-ob__back {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(245, 243, 236, 0.7);
+  padding: 10px 20px;
+  border-radius: 100px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nomi-ob__back:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f5f3ec;
+}
+
+.nomi-ob__back:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nomi-ob__act-hint {
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(245, 243, 236, 0.35);
+}
+
+.nomi-ob__footer-spacer { width: 96px; }
+
+.nomi-ob__hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  max-width: 720px;
+  position: relative;
+  z-index: 1;
+}
+
+.nomi-ob__title {
+  font-family: 'Times New Roman', 'Songti SC', serif;
+  font-size: clamp(48px, 7vw, 88px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #f5f3ec 0%, #c4a8f5 50%, #f9b572 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.nomi-ob__sub {
+  font-size: 18px;
+  line-height: 1.7;
+  color: rgba(245, 243, 236, 0.65);
+  max-width: 520px;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.nomi-ob__boot-label {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: rgba(245, 243, 236, 0.4);
+  font-family: 'SF Mono', Menlo, 'JetBrains Mono', monospace;
+  min-height: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.nomi-ob__cta {
+  background: #f5f3ec;
+  color: #0a0815;
+  border: none;
+  padding: 16px 36px;
+  border-radius: 100px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 8px 32px rgba(196, 168, 245, 0.18);
+  position: relative;
+  z-index: 1;
+}
+
+.nomi-ob__cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 48px rgba(196, 168, 245, 0.32);
+}
+
+.nomi-ob__cta:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nomi-ob__orb {
+  position: absolute;
+  width: 720px;
+  height: 720px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(196, 168, 245, 0.18) 0%, rgba(249, 181, 114, 0.06) 40%, transparent 70%);
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}

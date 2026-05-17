@@ -1,4 +1,5 @@
 export const APP_ROUTES = [
+  { path: '/welcome', component: 'OnboardingApp' },
   { path: '/studio/*', component: 'NomiStudioApp' },
   { path: '/share/*', component: 'ShareFullPage' },
   { path: '/', component: 'RedirectToStudio' },
