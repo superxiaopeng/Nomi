@@ -1,0 +1,62 @@
+name: 🐛 Bug 报告
+description: 用着用着出问题了？告诉我哪里坏了。
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量填清楚，我能更快定位问题。
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 你用的系统
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows 10/11
+        - Linux
+        - 源码启动（开发者）
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Nomi 版本
+      description: 在「设置 → 关于」里看，或直接说是哪天下载的
+      placeholder: v0.1.0 / 或：今天刚下的
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 你在做什么、期待发生什么、实际发生了什么
+      placeholder: |
+        我点了「生成图片」按钮之后……
+        我以为会……
+        但是实际……
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 怎么复现（如果你记得）
+      description: 一步一步告诉我怎么操作能再次出现这个问题
+      placeholder: |
+        1. 打开 Nomi
+        2. 新建项目
+        3. ……
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 截图 / 录屏
+      description: 直接拖进来就能上传。出错弹窗、控制台报错都欢迎。
+    validations:
+      required: false

@@ -5,8 +5,8 @@
 <h1 align="center">Nomi</h1>
 
 <p align="center">
-  写剧本，生成图片，生成视频，剪辑导出。<br />
-  <strong>在一个本地工作台里完成，素材不离开你的电脑。</strong>
+  <strong>写一段剧本，自动生成图片、视频、剪辑成片。</strong><br />
+  开源、本地优先、双击即用的 AI 视频创作工作台。
 </p>
 
 <p align="center">
@@ -16,55 +16,121 @@
   ·
   <a href="docs/user-guide.md">使用指南</a>
   ·
-  <a href="docs/provider-integration.md">接入模型</a>
+  <a href="https://github.com/aqm857886159/Nomi/issues/new/choose">反馈问题</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/github/v/release/aqm857886159/Nomi?style=for-the-badge&label=Download&logo=electron&logoColor=white" alt="Download" /></a>
   <a href="https://github.com/aqm857886159/Nomi/stargazers"><img src="https://img.shields.io/github/stars/aqm857886159/Nomi?style=for-the-badge&logo=github" alt="GitHub stars" /></a>
-  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/github/v/release/aqm857886159/Nomi?style=for-the-badge&logo=electron&logoColor=white&label=Desktop%20Download" alt="Desktop Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=for-the-badge" alt="License" /></a>
-  <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
 </p>
 
 ---
 
-## 你可以用它做什么
+## ⬇️ 下载（双击即用）
 
-在创作区写一段剧本，让 Agent 把它拆成 6 个镜头，自动在画布上创建图片节点和视频节点，并行生成，生成完成后按顺序放进时间轴。
+不需要懂代码，下载安装包就能用。
 
-你去倒杯水，回来视频已经排好了。
+| 系统 | 适用机型 | 下载 |
+|------|---------|------|
+| 🍎 **macOS** | Apple Silicon（M1/M2/M3/M4） | [Nomi-mac-arm64.dmg](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-mac-arm64.dmg) |
+| 🍎 **macOS** | Intel 芯片 | [Nomi-mac-intel.dmg](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-mac-intel.dmg) |
+| 🪟 **Windows** | Win 10 / 11 | [Nomi-windows-setup.exe](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-windows-setup.exe) |
 
-这是 Nomi 想解决的问题：**AI 视频创作的每一步都是割裂的**——写稿在一个工具，生图在另一个，生视频又是另一个，剪辑再换一个。Nomi 把这条流打通，放在本地，让 Agent 可以驱动整个过程。
+> **不知道自己是哪种 Mac？** 点左上角苹果图标 → 关于本机 → 看「芯片」一栏。写 M1/M2/M3/M4 → 选 Apple Silicon；写 Intel → 选 Intel。
+
+### ⚠️ 第一次打开有警告？这是正常的
+
+Nomi 还没买代码签名证书（每年要花钱），所以系统会提醒「未知开发者」。一次性绕过方法：
+
+<details>
+<summary><b>macOS：提示「无法打开」或「已损坏」</b></summary>
+
+1. 把 `Nomi.app` 拖进「应用程序」文件夹
+2. 打开「终端」（在「应用程序 → 实用工具」里），粘贴这一行回车：
+   ```bash
+   xattr -cr /Applications/Nomi.app
+   ```
+3. 再双击 Nomi 就能打开了
+</details>
+
+<details>
+<summary><b>Windows：SmartScreen 拦截</b></summary>
+
+1. 点击警告窗口里的「更多信息」
+2. 出现「仍要运行」按钮，点它
+3. 以后再打开就不会拦截了
+</details>
 
 ---
 
-## 三个核心差异
+## 🎬 它能做什么
 
-**全流程，不是单点工具**
-剧本 → 图片节点 → 视频节点 → 时间轴剪辑 → 导出，数据在各环节之间自然流动，不需要手动导入导出。
+一句话：**写剧本的环节、生图的环节、生视频的环节、剪辑的环节，全部连成一条流水线，AI 帮你跑完。**
 
-**本地优先，数据在你手里**
-项目文件、生成素材、剪辑记录全部存在本地。你决定哪些模型需要联网，哪些素材只留在自己的机器上。
+```
+   剧本     →     画布生成     →     时间轴     →     成片导出
+   ↓               ↓                  ↓               ↓
+ 写一段       自动拆镜头           按顺序排好      导出 WebM
+ 故事         并行生成图/视频       预览剪辑        本地保存
+```
 
-**Agent 可以驱动整个工作台**
-不只是聊天框里的 AI 助手。终端里说一句话，Agent 可以操作画布、触发生成、编辑时间轴，Web 界面实时展示变化。你也可以直接在 Web 上点。两种方式操作的是同一套状态。
+**核心差异**
+
+- 🔗 **全流程打通**：不用在 ChatGPT、即梦、剪映之间来回切，素材自动流转。
+- 🏠 **本地优先**：项目、素材、剪辑全在你电脑上，不上传任何素材到我们服务器。
+- 🤖 **Agent 驱动**：在终端说一句"把这段剧本拆 6 个镜头并生成"，画布会自己动起来。
 
 ---
 
-## 快速开始
+## 🚀 打开后 3 步出第一条视频
 
-### 桌面版（推荐）
+**第 1 步：配一个 AI 大脑（用来写脚本、拆镜头）**
 
-从 [GitHub Releases](https://github.com/aqm857886159/Nomi/releases/latest) 下载安装包：
+右上角 → 设置 → 模型管理 → 填以下信息：
 
-- **macOS**：下载 `.dmg`，拖入 Applications，双击打开
-- **Windows**：下载 `.exe`，安装后从开始菜单启动
+```json
+apiBaseUrl: https://api.deepseek.com/v1
+apiKey: 在 https://platform.deepseek.com 注册领，10 块钱够用一周
+model: deepseek-chat
+```
 
-无需 Docker，无需命令行，安装即用。
+> 💡 也支持 OpenAI、通义、Ollama 本地模型。任何 OpenAI 兼容接口都能接。
 
-### 开发者版（源码启动）
+**第 2 步：配一个画图/做视频的模型**
 
-需要 **Node.js 20+** 和 **Docker Desktop**。
+同一个「模型管理」页面 → 添加供应商。推荐起步组合：
+
+- **即梦**（图片，文生图便宜）：[官网](https://www.volcengine.com/product/jimeng)
+- **可灵 / Runway**（视频，按生成秒数计费）
+
+详细接入步骤：[docs/provider-integration.md](docs/provider-integration.md)
+
+**第 3 步：写一段故事，让 Agent 跑**
+
+进入「创作区」，写下你想拍的故事，点「让 Agent 帮我拆镜头」。
+去倒杯水回来，画布上的图片和视频就生成好了，拖到时间轴 → 导出。
+
+完整使用指南：[docs/user-guide.md](docs/user-guide.md)
+
+---
+
+## 💬 用着用着发现问题？
+
+**这是一个验证阶段的项目，我非常需要你的反馈。**
+
+- 🐛 [报告 Bug](https://github.com/aqm857886159/Nomi/issues/new?template=bug_report.yml)
+- ✨ [提需求/吐槽](https://github.com/aqm857886159/Nomi/issues/new?template=feedback.yml)
+- 💭 [使用感受闲聊](https://github.com/aqm857886159/Nomi/discussions)
+
+---
+
+## 👨‍💻 开发者：用源码启动
+
+<details>
+<summary>展开查看完整开发者指南</summary>
+
+需要 **Node.js 20+** 和 **Docker Desktop**（首次启动会跑 Postgres 和 Redis）。
 
 ```bash
 git clone https://github.com/aqm857886159/Nomi.git
@@ -74,35 +140,7 @@ corepack enable && pnpm install && pnpm start:local
 
 打开 **http://localhost:5173**。
 
-> 用 Claude Code / Cursor？把项目根目录的内容发给 AI，让它帮你执行。
-
----
-
-## 配置
-
-### AI 对话（创作区 / 终端 Agent）
-
-编辑 `apps/agents-cli/agents.config.json`：
-
-```json
-{
-  "apiBaseUrl": "https://api.deepseek.com/v1",
-  "apiKey": "your-key",
-  "model": "deepseek-chat"
-}
-```
-
-支持 DeepSeek、OpenAI、Qwen、Ollama 等任何 OpenAI 兼容接口。国内推荐 DeepSeek，便宜且效果好。
-
-### 图片 / 视频生成模型
-
-在 Web UI 里配置：**右上角 → 模型管理 → 添加供应商 → 添加模型**。
-
-支持即梦、可灵、Dreamina、Runway 等，也可以接入私有模型网关。详见 [docs/provider-integration.md](docs/provider-integration.md)。
-
----
-
-## 项目结构
+### 项目结构
 
 ```
 apps/desktop      桌面端（Electron，双击即用）
@@ -112,14 +150,27 @@ apps/agents-cli   终端 Agent
 packages/schemas  共享协议
 ```
 
+### 用 AI 协助安装
+
+把这段话发给 Claude Code / Cursor / Codex：
+
+> 帮我在 ~/Desktop 启动 Nomi 项目。仓库地址：https://github.com/aqm857886159/Nomi
+> 启动命令：`git clone <url> && cd Nomi && corepack enable && pnpm install && pnpm start:local`
+> 如果 Docker 没启动，提醒我开启 Docker Desktop 后重试。
+> 不要覆盖任何已有的 .env 或 agents.config.json 文件。
+
+</details>
+
 ---
 
 ## 关于作者
 
-**青阳** — AI 产品经理 / 创作者。微信：**TZ857886159**
+**青阳** — AI 产品经理 / 创作者
+
+如果你愿意成为第一批种子用户，加我微信 **TZ857886159** 进试用群（我会发版本通知和收集深度反馈）。
 
 <img src="docs/media/qingyang-wechat.jpg" alt="微信二维码" width="140" />
 
 ---
 
-Apache-2.0 License
+Apache-2.0 License · Made with ❤️ in China

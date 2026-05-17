@@ -1,0 +1,38 @@
+name: ✨ 功能建议 / 使用感受
+description: 想要某个功能，或者吐槽哪里不好用。
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎吐槽，不需要太正式。
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: 这是关于
+      options:
+        - 想要一个新功能
+        - 现有功能不好用 / 反人类
+        - 文档没说清楚
+        - 别的 / 闲聊
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: 详细说说
+      description: 你在什么场景下想到这个的？现在的方案为什么不够好？
+      placeholder: 我想用 Nomi 拍系列短视频，但是每次都得手动……
+    validations:
+      required: true
+
+  - type: textarea
+    id: ideal
+    attributes:
+      label: 你期待的样子
+      description: 不用想技术，理想中的体验是什么样？
+      placeholder: 如果能在画布上右键一个节点，直接说「按这个风格再生 5 张」就好了……
+    validations:
+      required: false

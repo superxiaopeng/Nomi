@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 使用闲聊 / 不算 Bug 的问题
+    url: https://github.com/aqm857886159/Nomi/discussions
+    about: 想问点什么、想看看大家怎么用，到 Discussions 里聊。
