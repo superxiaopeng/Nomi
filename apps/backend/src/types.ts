@@ -57,8 +57,8 @@ export type WorkerEnv = Record<string, unknown> & {
 	AGENTS_BRIDGE_TOKEN?: string;
 	AGENTS_BRIDGE_TIMEOUT_MS?: string;
 	// Optional: Nomi upstream config for agents bridge tools
-	TAPCANVAS_API_BASE_URL?: string;
-	TAPCANVAS_API_KEY?: string;
+	NOMI_API_BASE_URL?: string;
+	NOMI_API_KEY?: string;
 	AGENTS_BRIDGE_USE_REQUEST_AUTH?: string;
 	TASK_LOCAL_MODE?: string;
 	TASK_LOCAL_ROOT?: string;
@@ -74,11 +74,11 @@ export type WorkerEnv = Record<string, unknown> & {
 	TASK_LOCAL_GENERATOR_POLL_INTERVAL_MS?: string;
 	TASK_LOCAL_PROMPT_AGENT_MODEL_ALIAS?: string;
 	TASK_LOCAL_PROMPT_AGENT_USER_ID?: string;
-	// Local dev: allow /public auth bypass on loopback with explicit secret header.
-	TAPCANVAS_DEV_PUBLIC_BYPASS?: string;
-	TAPCANVAS_DEV_PUBLIC_BYPASS_SECRET?: string;
-	TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID?: string;
-	TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE?: string;
+	// Local dev: allow /public auth bypass on loopback with explicit secret header (single-user mode).
+	NOMI_SINGLE_USER_MODE?: string;
+	NOMI_SINGLE_USER_SECRET?: string;
+	NOMI_SINGLE_USER_ID?: string;
+	NOMI_SINGLE_USER_ROLE?: string;
 };
 
 export type AppEnv = {

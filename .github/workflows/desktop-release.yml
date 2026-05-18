@@ -40,7 +40,7 @@ jobs:
         env:
           ALLOW_LOCALHOST_IN_PROD_BUILD: '1'
 
-      - name: Build hono-api
+      - name: Build backend
         run: pnpm --filter @nomi/api build
 
       - name: Generate desktop Prisma client
@@ -92,7 +92,7 @@ jobs:
         env:
           ALLOW_LOCALHOST_IN_PROD_BUILD: '1'
 
-      - name: Build hono-api
+      - name: Build backend
         run: pnpm --filter @nomi/api build
 
       - name: Generate desktop Prisma client

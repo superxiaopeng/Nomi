@@ -51,11 +51,11 @@ export async function startApiServer(): Promise<ApiServerResult> {
   process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID = localUserId;
   process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE = 'admin';
 
-  // 动态 require hono-api（必须先 build hono-api）
-  // hono-api build 产物在 apps/hono-api/dist/main.js
+  // 动态 require backend（必须先 build backend）
+  // backend/dist/main.js
   const apiDistPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'hono-api', 'dist', 'main.js')
-    : path.resolve(__dirname, '../../../hono-api/dist/main.js');
+    ? path.join(process.resourcesPath, 'backend/dist/main.js')
+    : path.resolve(__dirname, '../../../backend/dist/main.js');
 
   let createNomiApp: () => Promise<unknown>;
   let createNodeWorkerEnv: () => Promise<unknown>;
@@ -68,7 +68,7 @@ export async function startApiServer(): Promise<ApiServerResult> {
     createHonoNodeServer = apiModule.createHonoNodeServer;
   } catch (err) {
     throw new Error(
-      `Failed to load hono-api from ${apiDistPath}. ` +
+      `Failed to load backend from ${apiDistPath}. ` +
       `Make sure to run "pnpm build:api" before starting the desktop app in production. ` +
       `Original error: ${err instanceof Error ? err.message : err}`
     );

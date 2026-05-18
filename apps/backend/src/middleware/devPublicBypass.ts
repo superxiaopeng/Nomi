@@ -61,10 +61,11 @@ function readLoopbackHostFromContext(c: AppContext): string {
 }
 
 export function resolveDevPublicBypassFromContext(c: AppContext): DevPublicBypassState | null {
-	const enabled = readEnvBool(c.env, "TAPCANVAS_DEV_PUBLIC_BYPASS");
+	// single-user mode: NOMI_SINGLE_USER_MODE enables loopback auth bypass
+	const enabled = readEnvBool(c.env, "NOMI_SINGLE_USER_MODE");
 	if (!enabled) return null;
 
-	const secret = readEnvString(c.env, "TAPCANVAS_DEV_PUBLIC_BYPASS_SECRET");
+	const secret = readEnvString(c.env, "NOMI_SINGLE_USER_SECRET");
 	if (!secret) return null;
 
 	const provided = normalizeHeaderValue(c.req.header("x-tap-dev-bypass"));
@@ -73,8 +74,8 @@ export function resolveDevPublicBypassFromContext(c: AppContext): DevPublicBypas
 	const host = readHostNameFromHostHeader(c.req.header("host") || "");
 	if (!isLoopbackHost(host)) return null;
 
-	const userId = readEnvString(c.env, "TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID") || "dev-local";
-	const role = readEnvString(c.env, "TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE") || "admin";
+	const userId = readEnvString(c.env, "NOMI_SINGLE_USER_ID") || "dev-local";
+	const role = readEnvString(c.env, "NOMI_SINGLE_USER_ROLE") || "admin";
 	return { enabled: true, userId, role };
 }
 

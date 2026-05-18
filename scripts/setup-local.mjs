@@ -15,7 +15,7 @@ function writeFileIfMissing(relativePath, content) {
 }
 
 writeFileIfMissing(
-  "apps/hono-api/.env",
+  "apps/backend/.env",
   `
 DATABASE_URL=postgresql://tapcanvas:tapcanvas@localhost:5432/tapcanvas?schema=public
 JWT_SECRET=nomi-local-dev-secret
@@ -27,7 +27,7 @@ TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE=admin
 );
 
 writeFileIfMissing(
-  "apps/agents-cli/agents.config.json",
+  "apps/agents/agents.config.json",
   `
 {
   "maxTurns": 12000,
@@ -43,4 +43,4 @@ writeFileIfMissing(
 
 console.log("");
 console.log("[setup] local files are ready.");
-console.log("[setup] If you want AI chat/Agent features, edit apps/agents-cli/agents.config.json and fill apiKey.");
+console.log("[setup] If you want AI chat/Agent features, edit apps/agents/agents.config.json and fill apiKey.");

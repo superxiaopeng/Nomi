@@ -49,7 +49,7 @@ jobs:
         run: pnpm build:agents
 
       - name: Test API
-        run: pnpm --filter @nomi/hono-api test
+        run: pnpm --filter @nomi/api test
 
       - name: Test web
         run: pnpm --filter @nomi/web test

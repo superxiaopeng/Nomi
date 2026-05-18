@@ -10,8 +10,8 @@ import { handleWorkflowNodeJob } from "../../modules/execution/execution.queue";
 function readSchemaSql(): string {
 	const candidates = [
 		path.resolve(process.cwd(), "schema.sql"),
-		path.resolve(process.cwd(), "apps/hono-api/schema.sql"),
-		path.resolve(process.cwd(), "../hono-api/schema.sql"),
+		path.resolve(process.cwd(), "apps/backend/schema.sql"),
+		path.resolve(process.cwd(), "../backend/schema.sql"),
 	];
 	for (const p of candidates) {
 		try {
@@ -168,8 +168,8 @@ export async function createNodeWorkerEnv(): Promise<any> {
 		AGENTS_BRIDGE_BASE_URL: process.env.AGENTS_BRIDGE_BASE_URL,
 		AGENTS_BRIDGE_TOKEN: process.env.AGENTS_BRIDGE_TOKEN,
 		AGENTS_BRIDGE_TIMEOUT_MS: process.env.AGENTS_BRIDGE_TIMEOUT_MS,
-		TAPCANVAS_API_BASE_URL: process.env.TAPCANVAS_API_BASE_URL,
-		TAPCANVAS_API_KEY: process.env.TAPCANVAS_API_KEY,
+		NOMI_API_BASE_URL: process.env.NOMI_API_BASE_URL ?? process.env.TAPCANVAS_API_BASE_URL,
+		NOMI_API_KEY: process.env.NOMI_API_KEY ?? process.env.TAPCANVAS_API_KEY,
 		AGENTS_BRIDGE_USE_REQUEST_AUTH: process.env.AGENTS_BRIDGE_USE_REQUEST_AUTH,
 		TASK_LOCAL_MODE: process.env.TASK_LOCAL_MODE,
 		TASK_LOCAL_ROOT: process.env.TASK_LOCAL_ROOT,
@@ -185,10 +185,10 @@ export async function createNodeWorkerEnv(): Promise<any> {
 		TASK_LOCAL_GENERATOR_POLL_INTERVAL_MS: process.env.TASK_LOCAL_GENERATOR_POLL_INTERVAL_MS,
 		TASK_LOCAL_PROMPT_AGENT_MODEL_ALIAS: process.env.TASK_LOCAL_PROMPT_AGENT_MODEL_ALIAS,
 		TASK_LOCAL_PROMPT_AGENT_USER_ID: process.env.TASK_LOCAL_PROMPT_AGENT_USER_ID,
-		TAPCANVAS_DEV_PUBLIC_BYPASS: process.env.TAPCANVAS_DEV_PUBLIC_BYPASS,
-		TAPCANVAS_DEV_PUBLIC_BYPASS_SECRET: process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_SECRET,
-		TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID: process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID,
-		TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE: process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE,
+		NOMI_SINGLE_USER_MODE: process.env.NOMI_SINGLE_USER_MODE ?? process.env.TAPCANVAS_DEV_PUBLIC_BYPASS,
+		NOMI_SINGLE_USER_SECRET: process.env.NOMI_SINGLE_USER_SECRET ?? process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_SECRET,
+		NOMI_SINGLE_USER_ID: process.env.NOMI_SINGLE_USER_ID ?? process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID,
+		NOMI_SINGLE_USER_ROLE: process.env.NOMI_SINGLE_USER_ROLE ?? process.env.TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE,
 	};
 
 	const executionNs = new NodeDurableObjectNamespace(({ state }) => {

@@ -18,6 +18,6 @@ You can ask Nomi Agent to read a provider document and draft the integration pla
 ## Security
 
 - Keep keys in local env files or local agent config.
-- Do not commit `apps/agents-cli/agents.config.json`.
+- Do not commit `apps/agents/agents.config.json`.
 - Do not commit `.env` files.
 - Prefer explicit errors over silent fallbacks when a provider fails.

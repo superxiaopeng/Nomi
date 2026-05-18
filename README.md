@@ -145,8 +145,8 @@ corepack enable && pnpm install && pnpm start:local
 ```
 apps/desktop      桌面端（Electron，双击即用）
 apps/web          Web 工作台（React + Vite）
-apps/hono-api     本地 API（Hono + Prisma）
-apps/agents-cli   终端 Agent
+apps/backend     本地 API（Hono + Prisma）
+apps/agents   终端 Agent
 packages/schemas  共享协议
 ```
 

@@ -15,12 +15,12 @@ function tryLoadEnvFile(filePath: string) {
 export function loadLocalEnvFiles(): void {
 	const cwd = process.cwd();
 
-	// Priority: apps/hono-api/.env -> apps/hono-api/.dev.vars
+	// Priority: apps/backend/.env -> apps/backend/.dev.vars
 	tryLoadEnvFile(path.resolve(cwd, ".env"));
 	tryLoadEnvFile(path.resolve(cwd, ".dev.vars"));
 
 	// If started from repo root, also try nested paths.
-	tryLoadEnvFile(path.resolve(cwd, "apps/hono-api/.env"));
-	tryLoadEnvFile(path.resolve(cwd, "apps/hono-api/.dev.vars"));
+	tryLoadEnvFile(path.resolve(cwd, "apps/backend/.env"));
+	tryLoadEnvFile(path.resolve(cwd, "apps/backend/.dev.vars"));
 }
 

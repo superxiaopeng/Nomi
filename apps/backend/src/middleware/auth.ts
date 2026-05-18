@@ -144,10 +144,10 @@ export async function resolveAuth(
 }
 
 export async function authMiddleware(c: AppContext, next: Next) {
-	// Dev loopback auto-auth: bypass JWT when TAPCANVAS_DEV_PUBLIC_BYPASS=true on localhost
-	if (String(c.env.TAPCANVAS_DEV_PUBLIC_BYPASS || "").trim() === "true" && isLocalDevRequest(c)) {
-		const devUserId = String(c.env.TAPCANVAS_DEV_PUBLIC_BYPASS_USER_ID || "dev-local").trim();
-		const devRole = String(c.env.TAPCANVAS_DEV_PUBLIC_BYPASS_ROLE || "admin").trim();
+	// Dev loopback auto-auth: bypass JWT when NOMI_SINGLE_USER_MODE=true on localhost (single-user mode)
+	if (String(c.env.NOMI_SINGLE_USER_MODE || "").trim() === "true" && isLocalDevRequest(c)) {
+		const devUserId = String(c.env.NOMI_SINGLE_USER_ID || "dev-local").trim();
+		const devRole = String(c.env.NOMI_SINGLE_USER_ROLE || "admin").trim();
 		const devPayload: AuthPayload = { sub: devUserId, login: devUserId, role: devRole };
 		c.set("userId", devUserId);
 		c.set("auth", devPayload);

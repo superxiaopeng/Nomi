@@ -46,10 +46,10 @@ pnpm install
 ### 配置
 
 ```bash
-cp apps/hono-api/.env.example apps/hono-api/.env
+cp apps/backend/.env.example apps/backend/.env
 ```
 
-编辑 `apps/hono-api/.env`：
+编辑 `apps/backend/.env`：
 
 ```env
 DATABASE_URL=postgresql://YOUR_USER@localhost:5432/nomi_dev

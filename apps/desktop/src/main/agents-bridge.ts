@@ -30,8 +30,8 @@ async function waitForHealthy(url: string, timeoutMs: number): Promise<void> {
 
 export async function startAgentsBridge(apiPort: number): Promise<void> {
   const agentsCliEntry = app.isPackaged
-    ? path.join(process.resourcesPath, 'agents-cli', 'dist', 'cli', 'index.js')
-    : path.resolve(__dirname, '../../../agents-cli/dist/cli/index.js');
+    ? path.join(process.resourcesPath, 'agents', 'dist', 'cli', 'index.js')
+    : path.resolve(__dirname, '../../../agents/dist/cli/index.js');
 
   const bridgePort = 8799;
 

@@ -1,6 +1,6 @@
 ## Host path conventions
-## - Default assumes this file lives at <repo>/apps/hono-api, so shared roots resolve from ../..
-## - For flattened deployments like <root>/hono-api + <root>/packages, set TAPCANVAS_SHARED_ROOT=..
+## - Default assumes this file lives at <repo>/apps/backend, so shared roots resolve from ../..
+## - For flattened deployments like <root>/backend + <root>/packages, set TAPCANVAS_SHARED_ROOT=..
 services:
   postgres:
     image: ${DOCKERHUB_REGISTRY:-docker.io}/postgres:16-alpine
@@ -71,26 +71,26 @@ services:
     working_dir: /runtime/workspace
     command: >-
       sh -lc '
-      mkdir -p /runtime/bootstrap/apps/agents-cli /runtime/bootstrap/packages /runtime/workspace/skills /runtime/workspace/project-data &&
-      cp -R /opt/tapcanvas-src/apps/agents-cli/. /runtime/bootstrap/apps/agents-cli &&
+      mkdir -p /runtime/bootstrap/apps/agents /runtime/bootstrap/packages /runtime/workspace/skills /runtime/workspace/project-data &&
+      cp -R /opt/tapcanvas-src/apps/agents/. /runtime/bootstrap/apps/agents &&
       if [ -d /opt/tapcanvas-src/packages ]; then
         cp -R /opt/tapcanvas-src/packages/. /runtime/bootstrap/packages/ || true;
       fi &&
-      if [ -d /opt/tapcanvas-src/apps/agents-cli/skills ]; then
-        cp -R -n /opt/tapcanvas-src/apps/agents-cli/skills/. /runtime/workspace/skills/ || true;
+      if [ -d /opt/tapcanvas-src/apps/agents/skills ]; then
+        cp -R -n /opt/tapcanvas-src/apps/agents/skills/. /runtime/workspace/skills/ || true;
       fi &&
-      cd /runtime/bootstrap/apps/agents-cli &&
+      cd /runtime/bootstrap/apps/agents &&
       pnpm config set registry ${NPM_REGISTRY:-https://registry.npmmirror.com} &&
       ( [ -f node_modules/zod/package.json ] && [ -f node_modules/redis/package.json ] || pnpm install --force --child-concurrency=1 --network-concurrency=1 --registry ${NPM_REGISTRY:-https://registry.npmmirror.com} --no-frozen-lockfile ) &&
       pnpm build &&
       node dist/cli/index.js serve --host 0.0.0.0 --port 8799 --body-limit ${AGENTS_BRIDGE_BODY_LIMIT_BYTES:-8000000}
       '
     volumes:
-      - ../agents-cli:/opt/tapcanvas-src/apps/agents-cli:ro
+      - ../agents-cli:/opt/tapcanvas-src/apps/agents:ro
       - ${TAPCANVAS_SHARED_ROOT:-../..}/packages:/opt/tapcanvas-src/packages:ro
       - ${TAPCANVAS_SHARED_ROOT:-../..}/project-data:/runtime/workspace/project-data
       - ${TAPCANVAS_SHARED_ROOT:-../..}/project-data:/app/project-data
-      - agents_node_modules:/runtime/bootstrap/apps/agents-cli/node_modules
+      - agents_node_modules:/runtime/bootstrap/apps/agents/node_modules
       - agents_memory:/runtime/workspace/.agents
       - agents_runtime_skills:/runtime/workspace/skills
       - pnpm_store:/app/.pnpm-store
@@ -185,7 +185,7 @@ services:
       - ${TAPCANVAS_SHARED_ROOT:-../..}/sql:/app/sql:ro
       - ${TAPCANVAS_SHARED_ROOT:-../..}/packages:/packages:ro
       - ${TAPCANVAS_SHARED_ROOT:-../..}/project-data:/app/project-data
-      - ../agents-cli:/workspace/apps/agents-cli
+      - ../agents-cli:/workspace/apps/agents
       - hono_api_db_backups:/app/backups
       - pnpm_store:/app/.pnpm-store
       - api_node_modules:/app/node_modules

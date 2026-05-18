@@ -149,7 +149,7 @@ export async function createNomiApp(): Promise<OpenAPIHono<AppEnv>> {
 		const uptimeMs = Number.isFinite(bootAt) ? Math.max(0, now - bootAt) : null;
 		return c.json({
 			ok: true,
-			service: "tapcanvas-hono-api",
+			service: "nomi-backend",
 			version: meta.version,
 			gitHash: meta.gitHash,
 			buildTime: meta.buildTime,

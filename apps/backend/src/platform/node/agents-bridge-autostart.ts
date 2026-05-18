@@ -46,7 +46,7 @@ function readAgentsCliNomiConfig(repoRoot: string): {
 	tapcanvasApiBaseUrl?: string;
 } {
 	try {
-		const p = path.join(repoRoot, "apps", "agents-cli", "agents.config.json");
+		const p = path.join(repoRoot, "apps", "agents", "agents.config.json");
 		if (!fs.existsSync(p)) return {};
 		const raw = fs.readFileSync(p, "utf-8");
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -130,23 +130,23 @@ export async function maybeAutostartAgentsBridge(): Promise<void> {
 		typeof process.env.AGENTS_SKILLS_DIR === "string"
 			? process.env.AGENTS_SKILLS_DIR.trim()
 			: "";
-	const defaultSkillsDir = path.join(repoRoot, "apps", "agents-cli", "skills");
+	const defaultSkillsDir = path.join(repoRoot, "apps", "agents", "skills");
 	const childEnv = {
 		...process.env,
 		AGENTS_PROFILE: "code",
-		...(process.env.TAPCANVAS_API_KEY
+		...(process.env.NOMI_API_KEY ?? process.env.TAPCANVAS_API_KEY
 			? {}
 			: cliTapConfig.tapcanvasApiKey
 				? {
-					TAPCANVAS_API_KEY: cliTapConfig.tapcanvasApiKey,
+					NOMI_API_KEY: cliTapConfig.tapcanvasApiKey,
 					tapcanvasApiKey: cliTapConfig.tapcanvasApiKey,
 				}
 				: {}),
-		...(process.env.TAPCANVAS_API_BASE_URL
+		...(process.env.NOMI_API_BASE_URL ?? process.env.TAPCANVAS_API_BASE_URL
 			? {}
 			: cliTapConfig.tapcanvasApiBaseUrl
 				? {
-					TAPCANVAS_API_BASE_URL: cliTapConfig.tapcanvasApiBaseUrl,
+					NOMI_API_BASE_URL: cliTapConfig.tapcanvasApiBaseUrl,
 					tapcanvasApiBaseUrl: cliTapConfig.tapcanvasApiBaseUrl,
 				}
 				: {}),

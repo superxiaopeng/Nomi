@@ -87,7 +87,7 @@ More details: [docs/quickstart.md](docs/quickstart.md).
 
 ### AI Chat (Workspace / Terminal Agent)
 
-Edit `apps/agents-cli/agents.config.json`:
+Edit `apps/agents/agents.config.json`:
 
 ```json
 {
@@ -112,8 +112,8 @@ Supports Kling, Dreamina, Runway, and custom model gateways. See [docs/provider-
 ```
 apps/desktop      Desktop app (Electron, no Docker needed)
 apps/web          Web workspace (React + Vite)
-apps/hono-api     Local API (Hono + Prisma)
-apps/agents-cli   Terminal Agent bridge
+apps/backend     Local API (Hono + Prisma)
+apps/agents   Terminal Agent bridge
 packages/schemas  Shared schemas and protocols
 docs              Documentation
 ```

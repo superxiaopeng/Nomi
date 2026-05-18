@@ -9,7 +9,7 @@ function findPrismaCliPath(): string {
   const candidates = [
     path.join(process.resourcesPath || '', 'prisma-cli', 'node_modules', '.bin', 'prisma'),
     path.resolve(__dirname, '../../../../node_modules/.bin/prisma'),
-    path.resolve(__dirname, '../../../hono-api/node_modules/.bin/prisma'),
+    path.resolve(__dirname, '../../../backend/node_modules/.bin/prisma'),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
@@ -21,7 +21,7 @@ function findPrismaCliPath(): string {
 function findDesktopSchemaPath(): string {
   const candidates = [
     path.join(process.resourcesPath || '', 'prisma', 'schema.desktop.prisma'),
-    path.resolve(__dirname, '../../../hono-api/prisma/schema.desktop.prisma'),
+    path.resolve(__dirname, '../../../backend/prisma/schema.desktop.prisma'),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

@@ -7352,8 +7352,8 @@ export async function runAgentsBridgeChatTask(
 	})();
 	const useRequestAuth = readBoolEnvFlag(c.env.AGENTS_BRIDGE_USE_REQUEST_AUTH);
 	const envTapcanvasApiKey =
-		typeof c.env.TAPCANVAS_API_KEY === "string"
-			? c.env.TAPCANVAS_API_KEY.trim()
+		typeof c.env.NOMI_API_KEY === "string"
+			? c.env.NOMI_API_KEY.trim()
 			: "";
 	const reqAuthorization = (c.req.header("authorization") || "").trim();
 	const reqApiKey = (c.req.header("x-api-key") || "").trim();

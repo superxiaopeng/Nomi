@@ -72,15 +72,15 @@ export function readAgentsBridgeBaseUrl(c: AppContext): string {
 
 export function readNomiApiBaseFromEnv(c: AppContext): string {
 	const rawInternal =
-		typeof c.env.TAPCANVAS_API_INTERNAL_BASE === "string"
-			? c.env.TAPCANVAS_API_INTERNAL_BASE
+		typeof c.env.NOMI_API_INTERNAL_BASE === "string"
+			? c.env.NOMI_API_INTERNAL_BASE
 			: "";
 	const rawBase =
-		typeof c.env.TAPCANVAS_API_BASE_URL === "string"
-			? c.env.TAPCANVAS_API_BASE_URL
+		typeof c.env.NOMI_API_BASE_URL === "string"
+			? c.env.NOMI_API_BASE_URL
 			: "";
-	const rawProcessInternal = readProcessEnv("TAPCANVAS_API_INTERNAL_BASE");
-	const rawProcessBase = readProcessEnv("TAPCANVAS_API_BASE_URL");
+	const rawProcessInternal = readProcessEnv("NOMI_API_INTERNAL_BASE");
+	const rawProcessBase = readProcessEnv("NOMI_API_BASE_URL");
 	const raw = rawInternal || rawBase || rawProcessInternal || rawProcessBase;
 	return raw.trim().replace(/\/+$/, "");
 }
