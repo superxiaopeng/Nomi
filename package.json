@@ -3,12 +3,12 @@
   "private": true,
   "packageManager": "pnpm@10.8.1",
   "scripts": {
-    "dev": "pnpm run dev:web",
+    "dev": "pnpm run dev:desktop",
     "dev:web": "pnpm --filter @nomi/web dev",
     "dev:api": "pnpm --filter @nomi/api dev",
     "dev:api:stable": "pnpm --filter @nomi/api dev:stable",
     "dev:agents": "pnpm --filter @nomi/agents dev",
-    "build": "pnpm run build:site",
+    "build": "pnpm run build:desktop",
     "build:app": "pnpm run build:web && pnpm run build:api && pnpm run build:agents",
     "build:site": "node -e \"const fs=require('fs'); for (const file of ['site/index.html','site/robots.txt','site/sitemap.xml']) { if (!fs.existsSync(file)) throw new Error(file + ' is missing'); } console.log('site build ready');\"",
     "build:web": "pnpm -w install --frozen-lockfile && pnpm --filter @nomi/web build",
@@ -16,10 +16,8 @@
     "build:agents": "pnpm --filter @nomi/agents build",
     "verify:env": "node apps/web/scripts/verify-env.ts",
     "test": "pnpm run build:web && pnpm run build:api && pnpm run build:agents",
-    "compose:up": "docker compose up -d",
-    "compose:down": "docker compose down",
     "dev:desktop": "pnpm --filter @nomi/desktop dev",
-    "build:desktop": "pnpm --filter @nomi/web build -- --mode desktop && pnpm --filter @nomi/desktop build",
+    "build:desktop": "pnpm --filter @nomi/web build:desktop && pnpm --filter @nomi/desktop build",
     "dist:desktop": "pnpm build:desktop && pnpm --filter @nomi/desktop dist"
   }
 }
