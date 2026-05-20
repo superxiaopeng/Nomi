@@ -144,8 +144,11 @@ export async function resolveAuth(
 }
 
 export async function authMiddleware(c: AppContext, next: Next) {
-	// Dev loopback auto-auth: bypass JWT when NOMI_SINGLE_USER_MODE=true on localhost (single-user mode)
-	if (String(c.env.NOMI_SINGLE_USER_MODE || "").trim() === "true" && isLocalDevRequest(c)) {
+	// Dev loopback auto-auth: bypass JWT when NOMI_SINGLE_USER_MODE is enabled on localhost (single-user mode)
+	// Accept '1', 'true', 'yes', 'on' — api-server.ts sets '1'; .env may set 'true'.
+	const _singleUserRaw = String(c.env.NOMI_SINGLE_USER_MODE || "").trim().toLowerCase();
+	const _singleUserEnabled = _singleUserRaw === "1" || _singleUserRaw === "true" || _singleUserRaw === "yes" || _singleUserRaw === "on";
+	if (_singleUserEnabled && isLocalDevRequest(c)) {
 		const devUserId = String(c.env.NOMI_SINGLE_USER_ID || "dev-local").trim();
 		const devRole = String(c.env.NOMI_SINGLE_USER_ROLE || "admin").trim();
 		const devPayload: AuthPayload = { sub: devUserId, login: devUserId, role: devRole };
