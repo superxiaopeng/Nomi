@@ -4571,14 +4571,14 @@ function selectChunkAnchorRoleReferenceEntries(
 
 async function resolveLocalCollageScriptPath(): Promise<string> {
 	const candidates = [
-		"/workspace/apps/agents-cli/skills/tapcanvas-collage-local/scripts/collage.py",
+		"/workspace/apps/agents/skills/tapcanvas-collage-local/scripts/collage.py",
 		path.resolve(
 			process.cwd(),
-			"apps/agents-cli/skills/tapcanvas-collage-local/scripts/collage.py",
+			"apps/agents/skills/tapcanvas-collage-local/scripts/collage.py",
 		),
 		path.resolve(
 			process.cwd(),
-			"../agents-cli/skills/tapcanvas-collage-local/scripts/collage.py",
+			"../agents/skills/tapcanvas-collage-local/scripts/collage.py",
 		),
 		path.resolve(
 			process.cwd(),

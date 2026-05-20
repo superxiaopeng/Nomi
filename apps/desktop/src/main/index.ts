@@ -6,6 +6,7 @@ import { initDatabase } from './db-init';
 import { registerIpcHandlers } from './ipc-handlers';
 import { setupTray } from './tray';
 import { checkForUpdates } from './updater';
+import { startAgentsBridge } from './agents-bridge';
 
 // 单实例锁
 const gotLock = app.requestSingleInstanceLock();
@@ -52,7 +53,14 @@ app.whenReady().then(async () => {
     console.log(`[desktop] Dev fallback: using external API on port ${apiPort}`);
   }
 
-  // 4. 通知预加载脚本 API 端口（通过环境变量在 webContents 创建前设置）
+  // 4a. 启动 Agents Bridge
+  try {
+    await startAgentsBridge(apiPort);
+  } catch (err) {
+    console.warn('[desktop] Agents bridge failed to start (non-fatal):', err);
+  }
+
+  // 4b. 通知预加载脚本 API 端口（port 已确定后再加载页面，避免竞态）
   process.env.NOMI_API_PORT = String(apiPort);
 
   // 5. 加载 Web UI
@@ -69,7 +77,7 @@ app.whenReady().then(async () => {
   setMainWindowReady();
 
   // 6. 设置托盘
-  setupTray(win);
+  setupTray();
 
   // 7. 检查更新（生产环境）
   if (!isDev) {

@@ -2,7 +2,9 @@ import { BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 
 export function checkForUpdates(win: BrowserWindow): void {
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] Error:', err);
+  });
 
   autoUpdater.on('update-available', (info) => {
     win.webContents.send('update-available', info);
@@ -11,4 +13,6 @@ export function checkForUpdates(win: BrowserWindow): void {
   autoUpdater.on('update-downloaded', () => {
     win.webContents.send('update-ready');
   });
+
+  autoUpdater.checkForUpdatesAndNotify();
 }

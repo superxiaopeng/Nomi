@@ -125,8 +125,8 @@ function buildPersonaDirectivePrompt(files: PersonaContextFile[]): string {
 }
 
 export function resolvePersonaWorkspaceRoot(files: PersonaContextFile[]): string {
-	return files[0]?.path.includes("apps/agents-cli")
-		? path.resolve(process.cwd(), "apps/agents-cli")
+	return files[0]?.path.includes("apps/agents")
+		? path.resolve(process.cwd(), "apps/agents")
 		: process.cwd();
 }
 
@@ -140,13 +140,13 @@ export function resolvePersonaRootCandidates(cwd: string): string[] {
 		seen.add(normalized);
 		roots.push(normalized);
 	};
-	pushRoot("/workspace/apps/agents-cli");
+	pushRoot("/workspace/apps/agents");
 	pushRoot("/workspace");
 	let cursor = start;
 	for (let depth = 0; depth < 5; depth += 1) {
 		pushRoot(cursor);
-		pushRoot(path.join(cursor, "apps/agents-cli"));
-		pushRoot(path.join(cursor, "agents-cli"));
+		pushRoot(path.join(cursor, "apps/agents"));
+		pushRoot(path.join(cursor, "agents"));
 		const parent = path.resolve(cursor, "..");
 		if (parent === cursor) break;
 		cursor = parent;

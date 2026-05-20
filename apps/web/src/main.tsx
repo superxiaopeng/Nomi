@@ -8,6 +8,8 @@ import './styles/index.css'
 import { blockNonCanonicalDevEntry } from './auth/devEntryGuard'
 import { installAuth401Interceptor } from './auth/fetch401Interceptor'
 import { buildNomiTheme } from './design'
+import { ErrorBoundary } from './shared/ErrorBoundary'
+import { DesktopUpdateBanner } from './shared/DesktopUpdateBanner'
 
 const DEFAULT_COLOR_SCHEME = 'light'
 
@@ -32,13 +34,16 @@ const root = container ? createRoot(container) : null
 
 root?.render(
   <React.StrictMode>
-    <MantineProvider forceColorScheme={DEFAULT_COLOR_SCHEME} defaultColorScheme={DEFAULT_COLOR_SCHEME}>
-      <DynamicThemeProvider>
-        <ModalsProvider>
-          <Notifications position="top-right" zIndex={2000} />
-          <NomiRouterApp />
-        </ModalsProvider>
-      </DynamicThemeProvider>
-    </MantineProvider>
+    <ErrorBoundary>
+      <DesktopUpdateBanner />
+      <MantineProvider forceColorScheme={DEFAULT_COLOR_SCHEME} defaultColorScheme={DEFAULT_COLOR_SCHEME}>
+        <DynamicThemeProvider>
+          <ModalsProvider>
+            <Notifications position="top-right" zIndex={2000} />
+            <NomiRouterApp />
+          </ModalsProvider>
+        </DynamicThemeProvider>
+      </MantineProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 )

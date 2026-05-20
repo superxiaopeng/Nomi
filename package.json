@@ -17,7 +17,7 @@
     "verify:env": "node apps/web/scripts/verify-env.ts",
     "test": "pnpm run build:web && pnpm run build:api && pnpm run build:agents",
     "dev:desktop": "pnpm --filter @nomi/desktop dev",
-    "build:desktop": "pnpm --filter @nomi/web build:desktop && pnpm --filter @nomi/desktop build",
+    "build:desktop": "pnpm run build:api && pnpm run build:agents && pnpm --filter @nomi/web build:desktop && pnpm --filter @nomi/desktop build",
     "dist:desktop": "pnpm build:desktop && pnpm --filter @nomi/desktop dist"
   }
 }

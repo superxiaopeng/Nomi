@@ -12,6 +12,11 @@ export function registerIpcHandlers(): void {
 
   // 读取本地文件（拖拽上传用）
   ipcMain.handle('read-local-file', async (_event, filePath: string) => {
+    const ALLOWED_EXTENSIONS = new Set(['jpg','jpeg','png','gif','webp','mp4','mov','webm','mp3','wav']);
+    const ext = path.extname(filePath).toLowerCase().slice(1);
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      throw new Error(`Unsupported file type: .${ext}`);
+    }
     const stat = await fs.promises.stat(filePath);
     const buffer = await fs.promises.readFile(filePath);
     const ext = path.extname(filePath).toLowerCase().slice(1);
@@ -58,6 +63,11 @@ export function registerIpcHandlers(): void {
 
   // 在系统浏览器中打开 URL
   ipcMain.handle('open-external', (_event, url: string) => {
+    const allowedProtocols = ['https:', 'http:'];
+    try {
+      const u = new URL(url);
+      if (!allowedProtocols.includes(u.protocol)) return;
+    } catch { return; }
     shell.openExternal(url);
   });
 }

@@ -23,12 +23,27 @@ extraResources:
     filter:
       - "**/*.js"
       - "**/*.json"
-  - from: "../backend/prisma/schema.prisma"
-    to: "prisma/schema.prisma"
-  - from: "../backend/node_modules/.bin/prisma"
-    to: "prisma-cli/node_modules/.bin/prisma"
+      - "**/*.wasm"
+      - "**/*.node"
+  - from: "../backend/dist"
+    to: "backend/dist"
+    filter:
+      - "**/*.js"
+      - "**/*.json"
+  - from: "../backend/node_modules"
+    to: "backend/node_modules"
     filter:
       - "**"
+  - from: "../backend/prisma/schema.desktop.prisma"
+    to: "prisma/schema.desktop.prisma"
+  - from: "../backend/prisma/schema.prisma"
+    to: "prisma/schema.prisma"
+  - from: "../backend/node_modules/prisma"
+    to: "prisma-cli/node_modules/prisma"
+    filter:
+      - "**"
+  - from: "../backend/node_modules/.bin/prisma"
+    to: "prisma-cli/node_modules/.bin/prisma"
 
 mac:
   target:
