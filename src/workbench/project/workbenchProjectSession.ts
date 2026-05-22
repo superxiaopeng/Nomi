@@ -159,8 +159,7 @@ export function subscribeWorkbenchProjectPersistence(options: WorkbenchProjectPe
     onSaved: options.onSaved,
   })
   return () => {
-    flushPendingSave()
-    disposed = true
+    // Cancel the debounce timer so it doesn't fire after disposal
     if (saveTimer) {
       clearTimeout(saveTimer)
       saveTimer = null
@@ -170,5 +169,21 @@ export function subscribeWorkbenchProjectPersistence(options: WorkbenchProjectPe
     unsubscribeWorkbench()
     unsubscribeGeneration()
     clearActiveWorkbenchProjectSaveTarget(options.projectId)
+    // CRITICAL: Flush any pending save BEFORE marking disposed.
+    // We bypass the async save queue (whose drain loop short-circuits on
+    // `!isActive` i.e. `disposed`) and call saveProject directly. This is
+    // essential to prevent data loss when the subscription is torn down by
+    // a Vite hot-reload, a project rename, or a component unmount while
+    // there are debounced changes still pending.
+    if (saveScheduled || saveTimer !== null) {
+      saveScheduled = false
+      const payload = readCurrentWorkbenchProjectPayload()
+      const finalProjectId = options.projectId
+      const finalProjectName = options.projectName
+      void options.saveProject(finalProjectId, payload, finalProjectName)
+        .then((record) => { options.onSaved(record) })
+        .catch((error: unknown) => { options.onSaveError?.(error) })
+    }
+    disposed = true
   }
 }
