@@ -2,9 +2,13 @@ import { IconSend2, IconX } from '@tabler/icons-react'
 import { NomiAILabel, WorkbenchButton, WorkbenchIconButton } from '../../../design'
 import React from 'react'
 import { cn } from '../../../utils/cn'
-import { buildPlannedEdges, toCreateNodeInputs } from '../agent/generationCanvasAgentPlan'
-import { sendGenerationCanvasAgentMessage } from '../agent/generationCanvasAgentClient'
+import {
+  sendGenerationCanvasAgentMessage,
+  type ToolCallEvent,
+} from '../agent/generationCanvasAgentClient'
 import { generationCanvasTools } from '../agent/generationCanvasTools'
+import { getGenerationNodeDefaultTitle } from '../model/generationNodeKinds'
+import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { AiReplyActionButton } from '../../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../../ai/aiComposerKeyboard'
@@ -118,6 +122,7 @@ export default function CanvasAssistantPanel({
     ])
     setBusy(true)
     void (async () => {
+      let toolActionCount = 0
       try {
         const result = await sendGenerationCanvasAgentMessage({
           message: text,
@@ -125,40 +130,48 @@ export default function CanvasAssistantPanel({
           selectedNodes,
           mode,
           onContent: (_delta, streamedText) => {
-            if (mode === 'chat') updateMessage(assistantMessageId, streamedText || '处理中...')
+            updateMessage(assistantMessageId, streamedText || '处理中...')
+          },
+          onToolCall: (event: ToolCallEvent) => {
+            // Read-only tools auto-execute without user interaction.
+            if (event.toolName === 'read_canvas_state') {
+              const snap = generationCanvasTools.read_canvas()
+              void event.confirm({ ok: true, result: snap })
+              return
+            }
+            // Destructive / state-changing tools wait for explicit user
+            // approval through the pending tool-call card.
+            pendingToolCallsRef.current.enqueue({
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              args: event.args,
+              confirm: async (decision) => {
+                if (decision.ok) {
+                  try {
+                    const result = await applyConfirmedToolCall(event.toolName, event.args)
+                    toolActionCount += 1
+                    await event.confirm({ ok: true, result })
+                  } catch (error: unknown) {
+                    const message = error instanceof Error && error.message ? error.message : String(error)
+                    await event.confirm({ ok: false, message })
+                  }
+                } else {
+                  await event.confirm(decision)
+                }
+              },
+            })
           },
         })
 
-        if (mode === 'chat') {
-          updateMessage(assistantMessageId, result.response.text || '已回答。')
-          return
+        const finalText = result.response.text?.trim() || ''
+        if (toolActionCount > 0) {
+          updateMessage(
+            assistantMessageId,
+            `${finalText ? finalText + '\n\n' : ''}已执行 ${toolActionCount} 个工具调用。`,
+          )
+        } else {
+          updateMessage(assistantMessageId, finalText || '已完成。')
         }
-
-        if (mode === 'refine') {
-          const plan = result.plan
-          if (plan?.nodes.length && selectedNodes.length > 0) {
-            const firstNode = plan.nodes[0]
-            if (firstNode?.prompt) {
-              generationCanvasTools.update_node_prompt(selectedNodes[0].id, firstNode.prompt)
-              updateMessage(assistantMessageId, '已更新选中节点的提示词。')
-              return
-            }
-          }
-          updateMessage(assistantMessageId, result.response.text || '润色完成。')
-          return
-        }
-
-        if (!result.plan) {
-          throw new Error('生成区 Agent 没有返回节点计划。')
-        }
-        const nodeInputs = toCreateNodeInputs(result.plan)
-        const createdNodes = generationCanvasTools.create_nodes(nodeInputs)
-        const edges = buildPlannedEdges(result.plan, createdNodes.map((node) => node.id))
-        if (edges.length > 0) generationCanvasTools.connect_nodes(edges)
-        updateMessage(
-          assistantMessageId,
-          `已创建 ${createdNodes.length} 个待确认节点${edges.length > 0 ? `，并连接 ${edges.length} 条关系` : ''}。你可以先检查提示词，再点击节点上的生成按钮。`,
-        )
       } catch (error: unknown) {
         updateMessage(
           assistantMessageId,

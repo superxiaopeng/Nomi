@@ -562,8 +562,8 @@ Spawn final audit agent，全面 review。
 
 | 删除 | Phase | 文件/标识 | 删除 commit | 状态 |
 |---|---|---|---|---|
-| `<generation_canvas_plan>` 正则 + 解析 | B7 | `src/workbench/generationCanvasV2/agent/generationCanvasAgentPlan.ts` 中的 `PLAN_BLOCK_RE` 等 | TBD | ⏸ |
-| 假流式逻辑 | B4 | `src/api/server.ts:openDesktopAgentsChatStream` 旧实现 | TBD | ⏸ |
+| `<generation_canvas_plan>` XML parser 整文件 | B7 | `src/workbench/generationCanvasV2/agent/generationCanvasAgentPlan.ts` (PLAN_BLOCK_RE / parseGenerationCanvasAgentPlan / 相关 schema 与类型；B6 后无外部引用) | (本 commit) | ✅ |
+| 假流式逻辑 | B4 | `src/api/server.ts:openDesktopAgentsChatStream` 旧实现 | rebased SHA in branch | ✅ |
 | 22 个 legacy skill | D4 | `skills/tapcanvas-*` 等 | TBD | ⏸ |
 | `apps/` 目录 | (已删) | / | `--` (untracked clean) | ✅ |
 | `apps/agents` 在 docs 中的引用 | D5 | `docs/user-guide.md`, `docs/provider-integration.md`, `README.md` | TBD | ⏸ |
