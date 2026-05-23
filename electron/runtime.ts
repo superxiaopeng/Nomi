@@ -2,6 +2,8 @@ import { app } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { generateText } from "ai";
+import { buildAiSdkModel } from "./ai/buildAiSdkModel";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -1803,25 +1805,41 @@ export async function runAgentChat(payload: unknown): Promise<unknown> {
   const { vendor, model, apiKey } = chooseTextModel();
   const systemPrompt = trim(raw.systemPrompt);
   const skillSystemPrompt = buildSkillSystemPrompt(raw);
-  const messages = [
-    ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
-    ...(skillSystemPrompt ? [{ role: "system", content: skillSystemPrompt }] : []),
-    { role: "user", content: trim(raw.prompt) || trim(raw.displayPrompt) },
-  ];
-  const response = await postJson(endpoint(vendor, "/v1/chat/completions"), apiKey, vendor, {
-    model: model.modelAlias || model.modelKey,
-    messages,
+  const userPrompt = trim(raw.prompt) || trim(raw.displayPrompt);
+
+  // Compose system prompts into one (AI SDK `generateText` takes a single
+  // `system` string); fall back to undefined if both pieces are empty.
+  const systemParts = [systemPrompt, skillSystemPrompt].filter((part) => part && part.length > 0);
+  const system = systemParts.length > 0 ? systemParts.join("\n\n") : undefined;
+
+  const providerKind: AiSdkProviderKind = vendor.providerKind || "openai-compatible";
+  const baseURL = providerKind === "anthropic"
+    ? (vendor.baseUrlHint || "").trim()
+    : endpoint(vendor, "/v1");
+
+  const languageModel = buildAiSdkModel({
+    kind: providerKind,
+    baseURL,
+    apiKey,
+    modelId: model.modelAlias || model.modelKey,
+  });
+
+  const result = await generateText({
+    model: languageModel,
+    ...(system ? { system } : {}),
+    messages: [{ role: "user", content: userPrompt }],
     temperature: typeof raw.temperature === "number" ? raw.temperature : 0.7,
   });
-  const text = firstString(
-    ((response as JsonRecord).choices as JsonRecord[] | undefined)?.[0]?.message && (((response as JsonRecord).choices as JsonRecord[])[0].message as JsonRecord).content,
-    ((response as JsonRecord).choices as JsonRecord[] | undefined)?.[0]?.text,
-    (response as JsonRecord).text,
-  );
+
   return {
     id: `agent-${crypto.randomUUID()}`,
-    text,
-    raw: response,
+    text: result.text,
+    raw: {
+      finishReason: result.finishReason,
+      usage: result.usage,
+      response: result.response,
+      providerMetadata: result.providerMetadata,
+    },
     toolCalls: [],
     artifacts: [],
   };
