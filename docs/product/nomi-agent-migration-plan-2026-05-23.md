@@ -611,21 +611,23 @@ Agent({
 
 ### 当前状态
 
-**总进度**: 0/29 tasks (0%)
-**当前 Phase**: 待启动 Phase A
-**最后更新**: 2026-05-23 18:35
+**总进度**: 6/29 tasks (21%)
+**当前 Phase**: ✅ Phase A 完成 → 启动 Phase B
+**最后更新**: 2026-05-23 (Phase A 完结)
 
 ### Phase A 进度
 
 | Task | 状态 | Commit |
 |---|---|---|
-| A1 引入依赖 | ⏸ | - |
-| A2 Model factory | ⏸ | - |
-| A3 Vendor schema | ⏸ | - |
-| A4 迁移 runAgentChat | ⏸ | - |
-| A5 Anthropic 端到端 | ⏸ | - |
-| A6 单元测试 | ⏸ | - |
-| A 验证关卡 | ⏸ | - |
+| A1 引入依赖 | ✅ | `b3b31fb` |
+| A2 Model factory | ✅ | `8ba59c9` |
+| A3 Vendor schema | ✅ | `d20e28a` |
+| A4 迁移 runAgentChat | ✅ | `40247c4` |
+| A5 Anthropic 端到端 (wiring) | ✅ | `68273e1` |
+| A6 单元测试 (4 tests, 92.85% cov) | ✅ | `9eddd9f` |
+| A 验证关卡 (independent audit) | ✅ | VERDICT: PROCEED_TO_PHASE_B |
+
+**Phase A 备注**：A5 manual call + screenshot 由于沙箱无 dev 环境未执行，wiring 完整。建议人工跑一次 Claude key 验证 UI 路径。
 
 ### Phase B 进度
 
