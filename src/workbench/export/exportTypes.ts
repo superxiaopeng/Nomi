@@ -1,11 +1,16 @@
+import type { ExportPreset, ExportQuality, ExportResolution } from '../../../electron/export/exportTypes'
 import type { TimelineState } from '../timeline/timelineTypes'
 import type { PreviewAspectRatio } from '../workbenchTypes'
 
-export type ExportPreset = 'publish' | 'edit' | 'share' | 'webm'
-
-export type ExportResolution = '720p' | '1080p' | 'source'
-
-export type ExportQuality = 'small' | 'standard' | 'high'
+export type {
+  ExportAspectRatio,
+  ExportJobStatus,
+  ExportPreset,
+  ExportProfile,
+  ExportQuality,
+  ExportResolution,
+  ExportStage,
+} from '../../../electron/export/exportTypes'
 
 export type ExportRequest = {
   projectId: string
