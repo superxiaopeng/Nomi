@@ -1011,7 +1011,11 @@ export default function BaseGenerationNode({ node, selected, readOnly = false, f
         </div>
       ) : null}
 
-      {selected && !readOnly && node.kind !== 'panorama' ? (
+      {/* E.2C-18: shots 分类节点的 composer 永久可见（不再 gated by selected）。
+          其它分类保持选中浮层。配合 §6.1 修正 3 决策：composer 内嵌到节点视觉里。
+          注：当前实现仍是 absolute 浮在节点下方（小改动），future iteration
+          会把它真正放进 card flex 流里。 */}
+      {(node.categoryId === 'shots' || selected) && !readOnly && node.kind !== 'panorama' ? (
         <div
           className={cn(
             'generation-canvas-v2-node__composer',
@@ -1020,6 +1024,8 @@ export default function BaseGenerationNode({ node, selected, readOnly = false, f
             'border border-nomi-line-soft rounded-nomi',
             'bg-nomi-paper shadow-nomi-lg overflow-auto',
             '-translate-x-1/2',
+            // 未选中且永久显示时，降低视觉权重避免与近邻节点抢注意力
+            node.categoryId === 'shots' && !selected && 'opacity-90',
           )}
           style={{
             width: composerLayout.width,

@@ -862,7 +862,7 @@ export const iconsByName = {
 
 ## 10. 进度跟踪
 
-**有效进度**: 6 / 18 tasks (33%)（W2 5 个分离组件 over-engineered，简化合并；W0 升级 → E.3）
+**有效进度**: 7 / 18 tasks (39%)（W2 5 个分离组件 over-engineered，简化合并；W0 升级 → E.3）
 **当前 Wave**: 🚧 W2 进行中（简化版）
 **最后更新**: 2026-05-25
 
@@ -885,7 +885,7 @@ export const iconsByName = {
 | W1 | E.2C-15 | Node 类型扩展（renderKind / regeneratedFrom / shotIndex）| ✓ | pending |
 | W1 | E.2C-16 | Migration v51→v60 | ✓ | pending |
 | W2 | E.2C-17 | TitlePill 组件 + 集成（合并自 NodeShell） | ✓ | pending |
-| W2 | E.2C-18 | composer 永久内嵌（shots 分类） | ⏸ | - |
+| W2 | E.2C-18 | composer 永久内嵌（shots 分类） | ✓ | pending |
 | ~~W2~~ | E.2C-19 | CharacterCardNode | → 简化合并到 W3 视觉装饰 | - |
 | ~~W2~~ | E.2C-20 | SceneCardNode | → 简化合并到 W3 视觉装饰 | - |
 | ~~W2~~ | E.2C-21 | PropCardNode | → 简化合并到 W3 视觉装饰 | - |
