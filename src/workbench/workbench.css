@@ -68,6 +68,17 @@
   box-sizing: border-box;
 }
 
+/* v0.7.8: 显式去掉 contenteditable 的浏览器默认 focus outline。
+   之前在 macOS 上 outline:auto 会跟系统强调色 — 用户设了"黄色"就出黄框。
+   我们的设计里整个外层 section 已经有 border + shadow，编辑区本身不需要再画框。 */
+.workbench-editor__scroll .ProseMirror:focus,
+.workbench-editor__scroll .ProseMirror:focus-visible,
+.workbench-editor__scroll .tiptap:focus,
+.workbench-editor__scroll .tiptap:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .workbench-editor__content p {
   margin: 0 0 14px;
 }

@@ -267,6 +267,9 @@ export default function WorkbenchEditor(): JSX.Element {
         'border border-workbench-border rounded-workbench',
         'bg-workbench-surface-solid shadow-workbench-md',
         'overflow-hidden',
+        // v0.7.8: focus-within 时用 accent 蓝紫细边，不再依赖系统 outline（macOS 系统强调色为黄时会出大黄框）
+        'transition-colors duration-150',
+        'focus-within:border-[color-mix(in_srgb,var(--nomi-accent)_55%,transparent)]',
       )}
       aria-label="创作文档编辑区"
       onKeyDown={(event) => event.stopPropagation()}
