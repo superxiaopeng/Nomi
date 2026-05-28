@@ -84,6 +84,10 @@ export async function runOnboardingTrial(input: OnboardingAgentInput): Promise<T
   let stepCount = 0;
 
   try {
+    // Some reasoning models (o1, o3, kimi-k2.x) only accept temperature: 1.
+    const restrictedTempModels = /^(o1|o3|kimi-k2)/i;
+    const temperature = restrictedTempModels.test(input.agent.modelId) ? 1 : 0.1;
+
     const result = await generateText({
       model,
       system: buildSystemPrompt(input.targetKind, input.docsUrl),
@@ -93,7 +97,9 @@ export async function runOnboardingTrial(input: OnboardingAgentInput): Promise<T
       }],
       tools,
       maxSteps: input.maxSteps ?? 10,
-      temperature: 0.1,
+      temperature,
+      // Moonshot defaults max_tokens too low (causes truncated tool-call JSON). Force higher.
+      maxTokens: 4096,
       onStepFinish: (step) => {
         stepCount += 1;
         input.onEvent?.({

@@ -7,7 +7,7 @@
  * Goal: stop the agent from "I didn't see X in the doc, so it doesn't exist"
  * mistakes. Forces explicit reasoning about every common field.
  *
- * Each item has a `commonAliases` list — the agent must consider that
+ * Each item has a `commonAliases` list  -  the agent must consider that
  * doc authors use different names for the same concept.
  */
 import type { ModelKind } from "./types";
@@ -82,7 +82,7 @@ export function formatChecklistForPrompt(kind: ModelKind): string {
   const lines = items.map((item) => {
     const aliases = item.commonAliases.length > 0 ? ` (also: ${item.commonAliases.join(", ")})` : "";
     const tag = item.importance === "core" ? "[CORE]" : item.importance === "common" ? "[COMMON]" : "[OPT]";
-    return `  ${tag} ${item.field}${aliases} — ${item.description}`;
+    return `  ${tag} ${item.field}${aliases}  -  ${item.description}`;
   });
   return `Standard ${kind} model fields:\n${lines.join("\n")}`;
 }

@@ -3,10 +3,10 @@
  *
  * Design principles:
  *  1. Each tool is small + Zod-validated + has clear failure mode
- *  2. Tools mutate a draft (never the real catalog) — commit_model is the only promote step
+ *  2. Tools mutate a draft (never the real catalog)  -  commit_model is the only promote step
  *  3. Tools that touch the network use hardenedFetch (SSRF / size limits)
- *  4. execute_test_curl uses {{user_api_key}} placeholder — agent never sees real key
- *  5. add_field_with_evidence requires non-trivial evidence — Zod enforces
+ *  4. execute_test_curl uses {{user_api_key}} placeholder  -  agent never sees real key
+ *  5. add_field_with_evidence requires non-trivial evidence  -  Zod enforces
  *
  * Each tool returns a normalized result:
  *   { ok: true, value: ... }  or  { ok: false, error: string }
@@ -29,9 +29,9 @@ export type ToolHooks = {
   sessionId: string;
   /** The real API key for the model being onboarded. Never passed into agent context. */
   resolveUserApiKey: () => string;
-  /** Optional logger called per tool invocation — used by the trial reporter. */
+  /** Optional logger called per tool invocation  -  used by the trial reporter. */
   onToolCall?: (event: { tool: string; args: unknown; result: unknown }) => void;
-  /** Domain whitelist for execute_test_curl — derived from current draft.vendorBaseUrl. */
+  /** Domain whitelist for execute_test_curl  -  derived from current draft.vendorBaseUrl. */
   allowedDomain?: () => string | undefined;
 };
 
@@ -48,8 +48,10 @@ const err = (msg: string): ToolErr => ({ ok: false, error: msg });
 
 const ParamControlSchema = z.enum(["select", "number", "text", "boolean", "image-url"]);
 
+// Moonshot's tokenizer chokes on JSON Schema array-of-types (z.union with primitives).
+// Force values as strings; runtime parses based on field type.
 const ParamOptionSchema = z.object({
-  value: z.union([z.string(), z.number(), z.boolean()]),
+  value: z.string().describe("Value as string; runtime parses to number/boolean per field type"),
   label: z.string(),
 });
 
@@ -195,19 +197,19 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 5. add_field_with_evidence  — HARD-ENFORCED EVIDENCE
+    // 5. add_field_with_evidence   -  HARD-ENFORCED EVIDENCE
     // -----------------------------------------------------------
     add_field_with_evidence: tool({
       description:
         "Add a parameter field to this model, with MANDATORY evidence quoting the doc. " +
-        "Evidence must be ≥20 chars of the actual doc text. evidence_location must say where (e.g. 'parameter table row 3', 'curl example line 2'). " +
+        "Evidence must be >=20 chars of the actual doc text. evidence_location must say where (e.g. 'parameter table row 3', 'curl example line 2'). " +
         "If you can't cite evidence, you can't add the field. Better to omit a field than fabricate it.",
       parameters: z.object({
         key: z.string().min(1).describe("Field name as the server expects, e.g. 'duration', 'aspect_ratio'"),
         displayName: z.string().min(1),
         type: ParamControlSchema,
         options: z.array(ParamOptionSchema).optional(),
-        default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+        default: z.string().optional().describe("Default value as string; runtime parses per field type"),
         evidence: EvidenceSchema,
       }),
       execute: async (params) => {
@@ -231,20 +233,20 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 6. check_completeness  — hard gate before commit
+    // 6. check_completeness   -  hard gate before commit
     // -----------------------------------------------------------
     check_completeness: tool({
       description:
         "Get the standard checklist of common fields for this model kind. " +
         "For EACH item you must declare: 'has' / 'no' / 'unsure'. " +
-        "'unsure' is not allowed in final state — you must re-read docs and resolve. " +
+        "'unsure' is not allowed in final state  -  you must re-read docs and resolve. " +
         "Call this near the end, before commit_model.",
       parameters: z.object({
         kind: z.enum(["text", "image", "video", "audio"]),
         assessment: z.array(z.object({
           field: z.string(),
           status: z.enum(["has", "no", "unsure"]),
-          reasoning: z.string().min(10).describe("Why has/no/unsure — cite evidence if has, justify if no"),
+          reasoning: z.string().min(10).describe("Why has/no/unsure  -  cite evidence if has, justify if no"),
         })).optional().describe("If you have an assessment to record, pass it here. Otherwise omit to just retrieve the checklist."),
       }),
       execute: async ({ kind, assessment }) => {
@@ -276,7 +278,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 7. set_mapping_request  — define create/query operation
+    // 7. set_mapping_request   -  define create/query operation
     // -----------------------------------------------------------
     set_mapping_request: tool({
       description:
@@ -289,7 +291,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
         method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
         path: z.string().min(1).describe("Path relative to baseUrl, e.g. '/v1/task'"),
         headers: z.record(z.string()).optional(),
-        query: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+        query: z.record(z.string()).optional().describe("Query param values as strings"),
         body: z.unknown().optional(),
       }),
       execute: async ({ stage, method, path, headers, query, body }) => {
@@ -308,7 +310,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 8. set_mapping_response  — define field extraction from response
+    // 8. set_mapping_response   -  define field extraction from response
     // -----------------------------------------------------------
     set_mapping_response: tool({
       description:
@@ -338,18 +340,18 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 9. execute_test_curl  — agent's reality check
+    // 9. execute_test_curl   -  agent's reality check
     // -----------------------------------------------------------
     execute_test_curl: tool({
       description:
         "Actually send the request defined by the current draft to the server. " +
-        "Use {{user_api_key}} placeholder in your body/headers — the runtime fills the real key. " +
+        "Use {{user_api_key}} placeholder in your body/headers  -  the runtime fills the real key. " +
         "Returns structured response: ok / status / body / diagnostics. " +
         "Diagnostics translate common HTTP errors (401/422/404) into actionable hints. " +
         "You MUST get an `ok: true` response from this before commit_model.",
       parameters: z.object({
         stage: z.enum(["create", "query"]),
-        prompt: z.string().describe("A simple test prompt — keep short to minimize cost"),
+        prompt: z.string().describe("A simple test prompt  -  keep short to minimize cost"),
         params: z.record(z.unknown()).optional().describe("Extra params to substitute into the body template"),
       }),
       execute: async ({ stage, prompt, params }) => {
@@ -378,7 +380,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
           const target = new URL(renderedUrl);
           const allowed = new URL(allowedDomain || "");
           if (target.hostname !== allowed.hostname) {
-            return err(`SAFETY: execute_test_curl rejected — target ${target.hostname} not in allowlist (${allowed.hostname})`);
+            return err(`SAFETY: execute_test_curl rejected  -  target ${target.hostname} not in allowlist (${allowed.hostname})`);
           }
         } catch {
           return err(`Invalid URL: ${renderedUrl}`);
@@ -417,7 +419,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
           try { respBody = JSON.parse(result.bytes.toString("utf8")); } catch { respBody = result.bytes.toString("utf8"); }
           okFlag = result.status >= 200 && result.status < 300;
         } catch (e) {
-          // hardenedFetch throws on non-2xx — try to extract status if present
+          // hardenedFetch throws on non-2xx  -  try to extract status if present
           const msg = e instanceof Error ? e.message : String(e);
           const statusMatch = msg.match(/HTTP\s+(\d+)/i);
           status = statusMatch ? Number(statusMatch[1]) : 0;
@@ -448,13 +450,13 @@ export function buildOnboardingTools(hooks: ToolHooks) {
     }),
 
     // -----------------------------------------------------------
-    // 10. commit_model  — hard gate
+    // 10. commit_model   -  hard gate
     // -----------------------------------------------------------
     commit_model: tool({
       description:
         "Promote the current draft into a real catalog entry. " +
         "Requires: vendor + model + mapping.create + at least one successful execute_test_curl + check_completeness with no 'unsure' items. " +
-        "If the checks fail, returns the list of issues — fix and call again.",
+        "If the checks fail, returns the list of issues  -  fix and call again.",
       parameters: z.object({
         confirm: z.literal(true),
       }),
@@ -485,7 +487,7 @@ export function buildOnboardingTools(hooks: ToolHooks) {
 }
 
 // =================================================================
-// Template rendering — supports {{request.prompt}} etc.
+// Template rendering  -  supports {{request.prompt}} etc.
 // =================================================================
 
 function readPath(ctx: unknown, expr: string): unknown {
