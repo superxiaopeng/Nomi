@@ -48,15 +48,16 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function targetKindToBilling(kind: string): "text" | "image" | "video" {
-  if (kind === "text" || kind === "image" || kind === "video") return kind;
-  throw new Error(`Unsupported kind '${kind}' (audio not in BillingModelKind yet)`);
+function targetKindToBilling(kind: string): "text" | "image" | "video" | "audio" {
+  if (kind === "text" || kind === "image" || kind === "video" || kind === "audio") return kind;
+  throw new Error(`Unsupported kind '${kind}'`);
 }
 
 function targetKindToTaskKind(kind: string): string {
   if (kind === "text") return "chat";
   if (kind === "image") return "text_to_image";
   if (kind === "video") return "text_to_video";
+  if (kind === "audio") return "text_to_audio";
   throw new Error(`Unsupported kind '${kind}'`);
 }
 

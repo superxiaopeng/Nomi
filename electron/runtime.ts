@@ -35,7 +35,7 @@ type ProjectRecord = {
   payload?: unknown;
 };
 
-type BillingModelKind = "text" | "image" | "video";
+type BillingModelKind = "text" | "image" | "video" | "audio";
 type ProfileKind =
   | "chat"
   | "prompt_refine"
@@ -43,7 +43,9 @@ type ProfileKind =
   | "image_to_prompt"
   | "image_to_video"
   | "text_to_video"
-  | "image_edit";
+  | "image_edit"
+  | "text_to_audio"
+  | "image_to_audio";
 
 type AiSdkProviderKind = "openai-compatible" | "anthropic";
 
@@ -1015,7 +1017,7 @@ export function getModelCatalogHealth(): unknown {
     const apiKey = state.apiKeysByVendor[model.vendorKey];
     return Boolean(vendor?.enabled && (vendor.authType === "none" || (apiKey?.enabled && apiKey.apiKey)));
   });
-  const byKind = (["text", "image", "video"] as BillingModelKind[]).map((kind) => ({
+  const byKind = (["text", "image", "video", "audio"] as BillingModelKind[]).map((kind) => ({
     kind,
     enabledModels: enabledModels.filter((model) => model.kind === kind).length,
     executableModels: executableModels.filter((model) => model.kind === kind).length,
@@ -1144,13 +1146,13 @@ export function commitOnboardedModelToCatalog(payload: {
   }
   if (!userApiKey) throw new Error("userApiKey required to commit a model");
 
-  // Audio not yet in BillingModelKind — accept up to image/video/text only.
   let billingKind: BillingModelKind;
   let taskKind: ProfileKind;
   if (targetKind === "text") { billingKind = "text"; taskKind = "chat"; }
   else if (targetKind === "image") { billingKind = "image"; taskKind = "text_to_image"; }
   else if (targetKind === "video") { billingKind = "video"; taskKind = "text_to_video"; }
-  else throw new Error(`Unsupported model kind '${targetKind}' (audio support pending in catalog)`);
+  else if (targetKind === "audio") { billingKind = "audio"; taskKind = "text_to_audio"; }
+  else throw new Error(`Unsupported model kind '${targetKind}'`);
 
   const auth = (draft.vendorAuth || {}) as JsonRecord;
   const authType = (auth.type as Vendor["authType"]) || "bearer";

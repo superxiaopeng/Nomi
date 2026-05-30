@@ -296,6 +296,16 @@ export function buildRequestProfileV2Template(taskKind: ProfileKind): Record<str
       duration: '{{request.params.duration}}',
       size: '{{request.params.size}}',
     },
+    text_to_audio: {
+      model: '{{model.model_key}}',
+      prompt: '{{request.prompt}}',
+      duration: '{{request.params.duration}}',
+    },
+    image_to_audio: {
+      model: '{{model.model_key}}',
+      prompt: '{{request.prompt}}',
+      image_url: '{{request.params.image_url}}',
+    },
   }
 
   return {

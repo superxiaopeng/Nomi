@@ -1,10 +1,10 @@
 import React from 'react'
 import { IconDownload, IconPhoto, IconPlugConnected } from '@tabler/icons-react'
-import type { WorkspaceMode } from '../workbenchStore'
-import { importImageFilesToGenerationCanvas } from '../generationCanvasV2/adapters/assetImportAdapter'
+import type { WorkspaceMode } from '../../workbench/workbenchStore'
+import { importImageFilesToGenerationCanvas } from '../../workbench/generationCanvasV2/adapters/assetImportAdapter'
 import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
 import { cn } from '../../utils/cn'
-import ProjectCostBadge from '../cost/ProjectCostBadge'
+import ProjectCostBadge from '../../workbench/cost/ProjectCostBadge'
 
 type NomiAppBarProps = {
   workspaceMode: WorkspaceMode

@@ -1,7 +1,7 @@
 import React from 'react'
 import './workbench.css'
 import './workbench-ai.css'
-import NomiAppBar from './nomi/NomiAppBar'
+import NomiAppBar from '../ui/app-shell/NomiAppBar'
 import { isWorkspaceMode, useWorkbenchStore, type WorkspaceMode } from './workbenchStore'
 import { cn } from '../utils/cn'
 

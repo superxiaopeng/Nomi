@@ -1,6 +1,6 @@
 import { getDesktopBridge, type DesktopBridge } from '../desktop/bridge'
 
-export type BillingModelKind = 'text' | 'image' | 'video'
+export type BillingModelKind = 'text' | 'image' | 'video' | 'audio'
 
 export type ProfileKind =
   | 'chat'
@@ -10,6 +10,8 @@ export type ProfileKind =
   | 'image_to_video'
   | 'text_to_video'
   | 'image_edit'
+  | 'text_to_audio'
+  | 'image_to_audio'
 
 export type ModelCatalogVendorAuthType = 'none' | 'bearer' | 'x-api-key' | 'query'
 export type ModelCatalogVendorProviderKind = 'openai-compatible' | 'anthropic'

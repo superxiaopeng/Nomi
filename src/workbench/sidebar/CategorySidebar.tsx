@@ -1,7 +1,7 @@
 import React from 'react'
 import { cn } from '../../utils/cn'
 import { BUILTIN_CATEGORIES, getBuiltinCategoryById, type ProjectCategory } from '../project/projectCategories'
-import { showUndoToast } from '../feedback/showUndoToast'
+import { showUndoToast } from '../../utils/showUndoToast'
 import { useWorkbenchStore } from '../workbenchStore'
 import { useGenerationCanvasStore } from '../generationCanvasV2/store/generationCanvasStore'
 import CategoryItem from './CategoryItem'
