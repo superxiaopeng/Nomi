@@ -15,7 +15,7 @@
  */
 import React from 'react'
 import { Stack, Group, Text, PasswordInput } from '@mantine/core'
-import { DesignButton, DesignModal, DesignTextInput } from '../../design'
+import { DesignButton, DesignTextInput } from '../../design'
 import { getDesktopBridge } from '../../desktop/bridge'
 
 type Phase = 'input' | 'running' | 'success' | 'error'
@@ -47,10 +47,11 @@ const MILESTONE_BY_TOOL: Record<string, Milestone['id']> = {
   check_completeness: 'fields',
 }
 
-export function OnboardingWizard({ opened, onClose, onCommitted }: {
-  opened: boolean
-  onClose: () => void
+export function OnboardingWizard({ onCommitted, onCancel }: {
+  /** Called once a model is committed to the catalog. */
   onCommitted?: (model: unknown) => void
+  /** Optional cancel — shows a button to step out (e.g. close drawer). */
+  onCancel?: () => void
 }): JSX.Element {
   const bridge = getDesktopBridge()
   const [phase, setPhase] = React.useState<Phase>('input')
@@ -67,14 +68,14 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
   const trialIdRef = React.useRef<string | null>(null)
   const unsubRef = React.useRef<(() => void) | null>(null)
 
-  // Reset everything when modal opens (keeps the user's last URL/key on retry though).
+  // Clean up event subscription on unmount.
   React.useEffect(() => {
-    if (!opened) {
+    return () => {
       unsubRef.current?.()
       unsubRef.current = null
       trialIdRef.current = null
     }
-  }, [opened])
+  }, [])
 
   const resetToInput = React.useCallback(() => {
     setPhase('input')
@@ -176,17 +177,12 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
   const canStart = docsUrl.trim().length > 0 && userApiKey.trim().length > 0 && phase === 'input'
 
   return (
-    <DesignModal
-      opened={opened}
-      onClose={onClose}
-      title="添加一个 AI 模型"
-      size={560}
-      centered
-      closeOnClickOutside={phase !== 'running'}
-      closeOnEscape={phase !== 'running'}
-    >
-      <Stack gap="md">
+    <Stack gap="md" px="md" py="md">
+      <Group justify="space-between" align="center">
+        <Text size="sm" fw={700} c="var(--nomi-ink)">添加一个 AI 模型</Text>
         <ProgressDots phase={phase} />
+      </Group>
+      <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
 
         {phase === 'input' && (
           <Stack gap="md">
@@ -226,9 +222,11 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
               ))}
             </Stack>
             <Text size="xs" c="var(--nomi-ink-60)">预计还需 30-60 秒</Text>
-            <Group justify="flex-start">
-              <DesignButton variant="subtle" onClick={onClose}>取消</DesignButton>
-            </Group>
+            {onCancel && (
+              <Group justify="flex-start">
+                <DesignButton variant="subtle" onClick={onCancel}>取消</DesignButton>
+              </Group>
+            )}
           </Stack>
         )}
 
@@ -237,9 +235,8 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
             <Text size="xl" c="var(--nomi-ink)">✓</Text>
             <Text size="md" c="var(--nomi-ink)">{resultLabel} 已添加</Text>
             <Text size="sm" c="var(--nomi-ink-60)">现在可以在节点里选择这个模型</Text>
-            <Group justify="space-between" w="100%">
+            <Group justify="flex-start" w="100%">
               <DesignButton variant="subtle" onClick={() => { resetToInput(); }}>再添加一个</DesignButton>
-              <DesignButton onClick={onClose}>完成</DesignButton>
             </Group>
           </Stack>
         )}
@@ -251,15 +248,12 @@ export function OnboardingWizard({ opened, onClose, onCommitted }: {
             {errorHint && <Text size="sm" c="var(--nomi-ink-60)">{errorHint}</Text>}
             <Group justify="space-between">
               <DesignButton variant="subtle" onClick={handleCopyLog} disabled={!traceJson}>复制日志</DesignButton>
-              <Group>
-                <DesignButton variant="subtle" onClick={resetToInput}>改一改重试</DesignButton>
-                <DesignButton onClick={onClose}>关闭</DesignButton>
-              </Group>
+              <DesignButton variant="subtle" onClick={resetToInput}>改一改重试</DesignButton>
             </Group>
           </Stack>
         )}
       </Stack>
-    </DesignModal>
+    </Stack>
   )
 }
 

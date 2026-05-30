@@ -4,7 +4,8 @@ import WorkbenchShell from './WorkbenchShell'
 import ProjectLibraryPage from './library/ProjectLibraryPage'
 import { CanvasAssistantPanel, GenerationCanvas } from './generationCanvasV2'
 import { ToastHost } from '../ui/toast'
-import StatsModelCatalogManagement from '../ui/stats/system/modelCatalog/StatsModelCatalogManagement'
+import { OnboardingWizard } from '../ui/onboarding/OnboardingWizard'
+import { notifyModelOptionsRefresh } from '../config/useModelOptions'
 import {
   createLocalProject,
   deleteLocalProject,
@@ -267,7 +268,7 @@ export default function NomiStudioApp(): JSX.Element {
         zIndex={4000}
         withinPortal
       >
-        <StatsModelCatalogManagement className={cn('nomi-model-catalog-drawer__content')} compact />
+        <OnboardingWizard onCommitted={() => notifyModelOptionsRefresh('all')} />
       </DesignDrawer>
       <ToastHost />
     </div>
