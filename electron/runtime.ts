@@ -11,7 +11,7 @@ import { assertProjectExportRelativePath, ensureExportDirs } from "./export/expo
 import { ExportJobManager, type ExportJobEvent, type ExportJobSnapshot } from "./export/exportJobManager";
 import { assertValidManifest, type NomiRenderManifestV1 } from "./export/exportManifest";
 import { planExport } from "./export/exportPlanner";
-import { transcodeWebmFileToMp4, transcodeWebmToMp4 } from "./export/ffmpegRunner";
+import { ExportCancelledError, transcodeWebmFileToMp4, transcodeWebmToMp4 } from "./export/ffmpegRunner";
 import { appendExportTempInputChunk, finishExportTempInput as finishExportTempInputFile, removeExportTempInput } from "./export/exportTempInput";
 import {
   canvasNodeKindSchema,
@@ -29,6 +29,18 @@ import {
   extractTaskId as extractTaskIdShared,
   looksLikeLogicalError,
 } from "./ai/requestPipeline";
+import { discoverLegacyProjects, isLegacyProjectSuppressed, suppressLegacyProjectRediscovery } from "./workspace/legacyProjectMigration";
+import {
+  createWorkspaceProject,
+  listWorkspaceProjects,
+  readWorkspaceProject,
+  removeWorkspaceProjectReference,
+  resolveWorkspaceProjectDir,
+  saveWorkspaceProject,
+  type WorkspaceRepositoryDeps,
+} from "./workspace/workspaceRepository";
+import { rememberWorkspace } from "./workspace/workspaceRegistry";
+import { resolveWorkspaceRelativePath } from "./workspace/workspacePaths";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -43,6 +55,8 @@ type ProjectRecord = {
   thumbnailUrls?: string[];
   version: number;
   payload?: unknown;
+  rootPath?: string;
+  missing?: boolean;
 };
 
 type BillingModelKind = "text" | "image" | "video" | "audio";
@@ -290,15 +304,11 @@ type LocalAssetRecord = {
   };
 };
 
-import { parseSkillManifest, type SkillManifest } from "./skills/skillManifestSchema";
-
 type SkillRecord = {
   name: string;
   directoryName: string;
   filePath: string;
   body: string;
-  manifest: SkillManifest | null;
-  manifestPath: string | null;
 };
 
 function nowIso(): string {
@@ -312,6 +322,13 @@ function getProjectsRoot(): string {
 
 function getSettingsRoot(): string {
   return app.getPath("userData");
+}
+
+function getWorkspaceRepositoryDeps(): WorkspaceRepositoryDeps {
+  return {
+    settingsRoot: getSettingsRoot(),
+    defaultProjectsRoot: getProjectsRoot(),
+  };
 }
 
 function getSkillsRoots(): string[] {
@@ -362,42 +379,21 @@ function normalizeSkillLookupKey(value: unknown): string {
     .toLowerCase();
 }
 
-function readSkillManifestFromDisk(dir: string): { manifest: SkillManifest | null; manifestPath: string | null } {
-  const manifestPath = path.join(dir, "skill.json");
-  if (!fs.existsSync(manifestPath)) return { manifest: null, manifestPath: null };
-  try {
-    const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    const result = parseSkillManifest(raw);
-    if (result.ok) return { manifest: result.manifest, manifestPath };
-    console.warn(`[skill] invalid manifest at ${manifestPath}: ${result.error}`);
-  } catch (err) {
-    console.warn(`[skill] failed to read manifest at ${manifestPath}:`, err);
-  }
-  return { manifest: null, manifestPath: null };
-}
-
 function readSkillRecords(): SkillRecord[] {
   const records: SkillRecord[] = [];
   for (const root of getSkillsRoots()) {
     if (!fs.existsSync(root)) continue;
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      // Skip the archive directory; legacy skills live under skills/legacy/ but
-      // are not loadable until they are upgraded to the v2 manifest format.
-      if (entry.name === "legacy") continue;
-      const skillDir = path.join(root, entry.name);
-      const filePath = path.join(skillDir, "SKILL.md");
+      const filePath = path.join(root, entry.name, "SKILL.md");
       if (!fs.existsSync(filePath)) continue;
       const body = readText(filePath).trim();
       if (!body) continue;
-      const { manifest, manifestPath } = readSkillManifestFromDisk(skillDir);
       records.push({
-        name: manifest?.name || parseSkillName(body, entry.name),
+        name: parseSkillName(body, entry.name),
         directoryName: entry.name,
         filePath,
         body,
-        manifest,
-        manifestPath,
       });
     }
   }
@@ -466,38 +462,15 @@ function buildSkillSystemPrompt(payload: JsonRecord): string {
       "继续按用户请求和当前上下文完成任务；不要声称已经加载不存在的 skill。",
     ].join("\n");
   }
-  const lines = [
+  return [
     "Nomi 桌面 Agent 已加载本地 skill。以下内容是本次回复必须参考的领域方法论和输出约束。",
     "注意：本桌面运行时只把 skill 作为本地知识注入；skill 中提到的外部 CLI、HTTP 或文件工具不会自动执行，除非当前对话/界面明确提供了对应能力。",
     `skillKey: ${requested.key || skill.name}`,
     `skillName: ${requested.name || skill.name}`,
     `skillFile: ${path.relative(process.cwd(), skill.filePath)}`,
-  ];
-  if (skill.manifest) {
-    lines.push(
-      `skillVersion: ${skill.manifest.version}`,
-      `skillTools (whitelist): ${skill.manifest.tools.join(", ") || "(none)"}`,
-      `skillPermissions: ${skill.manifest.permissions.join(", ") || "(none)"}`,
-      "重要：本 skill 只允许调用 skillTools 中列出的工具。其他工具即便平台暴露，也不要调用。",
-    );
-  }
-  lines.push("", skill.body);
-  return lines.join("\n");
-}
-
-/**
- * Return the tool whitelist declared by the active skill's manifest, or null
- * when the request resolves to a legacy markdown-only skill (in which case
- * callers should not restrict the tool set).
- *
- * Exported for use by the agent runtime when constructing streamText calls.
- */
-export function resolveSkillToolWhitelist(payload: JsonRecord): string[] | null {
-  const requested = readRequestedSkill(payload);
-  if (!requested.key && !requested.name) return null;
-  const skill = findSkillRecord(requested.key, requested.name);
-  if (!skill || !skill.manifest) return null;
-  return [...skill.manifest.tools];
+    "",
+    skill.body,
+  ].join("\n");
 }
 
 function writeJson(filePath: string, value: unknown): void {
@@ -546,17 +519,23 @@ function normalizeProjectRecord(input: unknown): ProjectRecord {
   };
 }
 
-function projectDirById(projectId: string): string | null {
+function legacyProjectDirById(projectId: string): string | null {
   const root = getProjectsRoot();
   ensureDir(root);
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const projectFile = path.join(root, entry.name, PROJECT_FILE);
+    const projectDir = path.join(root, entry.name);
+    if (isLegacyProjectSuppressed(projectDir)) continue;
     if (!fs.existsSync(projectFile)) continue;
     const record = readJson<ProjectRecord | null>(projectFile, null);
-    if (record?.id === projectId) return path.join(root, entry.name);
+    if (record?.id === projectId) return projectDir;
   }
   return null;
+}
+
+function projectDirById(projectId: string): string | null {
+  return resolveWorkspaceProjectDir(projectId, getWorkspaceRepositoryDeps()) || legacyProjectDirById(projectId);
 }
 
 function ensureProjectFolders(projectDir: string): void {
@@ -570,19 +549,26 @@ function toSummary(record: ProjectRecord): Omit<ProjectRecord, "payload"> {
   return summary;
 }
 
+function getInputRootPath(input: unknown): string | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const rootPath = (input as JsonRecord).rootPath;
+  return typeof rootPath === "string" && rootPath.trim() ? rootPath.trim() : null;
+}
+
 export function listProjects(): Array<Omit<ProjectRecord, "payload">> {
-  const root = getProjectsRoot();
-  ensureDir(root);
-  const projects: Array<Omit<ProjectRecord, "payload">> = [];
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const record = readJson<ProjectRecord | null>(path.join(root, entry.name, PROJECT_FILE), null);
-    if (record?.id) projects.push(toSummary(normalizeProjectRecord(record)));
+  const deps = getWorkspaceRepositoryDeps();
+  for (const legacyProject of discoverLegacyProjects(deps.defaultProjectsRoot)) {
+    rememberWorkspace(deps.settingsRoot, legacyProject);
   }
-  return projects.sort((a, b) => b.updatedAt - a.updatedAt);
+  return listWorkspaceProjects(deps).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function createProject(input: unknown): ProjectRecord {
+  const rootPath = getInputRootPath(input);
+  if (rootPath) {
+    return createWorkspaceProject({ rootPath, record: input }, getWorkspaceRepositoryDeps());
+  }
+
   const root = getProjectsRoot();
   ensureDir(root);
   const record = normalizeProjectRecord(input);
@@ -593,15 +579,23 @@ export function createProject(input: unknown): ProjectRecord {
 }
 
 export function readProject(projectId: string): ProjectRecord | null {
-  const projectDir = projectDirById(String(projectId || "").trim());
+  const id = String(projectId || "").trim();
+  const workspaceRecord = readWorkspaceProject(id, getWorkspaceRepositoryDeps());
+  if (workspaceRecord) return workspaceRecord;
+
+  const projectDir = legacyProjectDirById(id);
   if (!projectDir) return null;
   return normalizeProjectRecord(readJson<ProjectRecord>(path.join(projectDir, PROJECT_FILE), {} as ProjectRecord));
 }
 
 export function saveProject(projectId: string, input: unknown): ProjectRecord {
   const id = String(projectId || "").trim();
+  if (readWorkspaceProject(id, getWorkspaceRepositoryDeps())) {
+    return saveWorkspaceProject(id, input, getWorkspaceRepositoryDeps());
+  }
+
   const record = normalizeProjectRecord({ ...(input as JsonRecord), id });
-  const projectDir = projectDirById(id) || uniqueDir(getProjectsRoot(), record.name);
+  const projectDir = legacyProjectDirById(id) || uniqueDir(getProjectsRoot(), record.name);
   ensureProjectFolders(projectDir);
   writeJson(path.join(projectDir, PROJECT_FILE), record);
   return record;
@@ -610,8 +604,21 @@ export function saveProject(projectId: string, input: unknown): ProjectRecord {
 export function deleteProject(projectId: string): { id: string; deleted: boolean } {
   const id = String(projectId || "").trim();
   if (!id) throw new Error("projectId is required");
-  const projectDir = projectDirById(id);
+  if (readWorkspaceProject(id, getWorkspaceRepositoryDeps())) {
+    const workspaceDir = resolveWorkspaceProjectDir(id, getWorkspaceRepositoryDeps());
+    const result = removeWorkspaceProjectReference(id, getWorkspaceRepositoryDeps());
+    if (workspaceDir && fs.existsSync(path.join(workspaceDir, PROJECT_FILE))) {
+      suppressLegacyProjectRediscovery(workspaceDir);
+    }
+    return result;
+  }
+
+  const projectDir = legacyProjectDirById(id);
   if (!projectDir) return { id, deleted: false };
+  if (fs.existsSync(path.join(projectDir, ".nomi", PROJECT_FILE))) {
+    suppressLegacyProjectRediscovery(projectDir);
+    return { id, deleted: false };
+  }
   const root = path.resolve(getProjectsRoot());
   const resolvedProjectDir = path.resolve(projectDir);
   const rootWithSep = `${root}${path.sep}`;
@@ -625,12 +632,9 @@ export function deleteProject(projectId: string): { id: string; deleted: boolean
 export function resolveProjectRelativePath(projectId: string, relativePath: string): string {
   const projectDir = projectDirById(String(projectId || "").trim());
   if (!projectDir) throw new Error("Project not found");
-  const resolved = path.resolve(projectDir, String(relativePath || ""));
-  const rootWithSep = `${path.resolve(projectDir)}${path.sep}`;
-  if (resolved !== path.resolve(projectDir) && !resolved.startsWith(rootWithSep)) {
-    throw new Error("Path escapes project root");
-  }
-  return resolved;
+  const value = String(relativePath || "");
+  if (!value.trim()) return path.resolve(projectDir);
+  return resolveWorkspaceRelativePath(projectDir, value);
 }
 
 function bufferFromExportBytes(input: TimelineMp4ExportRequest["webmBytes"]): Buffer {
@@ -715,12 +719,14 @@ export async function cancelExportJob(jobId: string): Promise<{ ok: true }> {
   const id = String(jobId || "").trim();
   if (!id) throw new Error("jobId is required");
   const job = exportJobManager.getJob(id);
+  activeExportAbortControllers.get(id)?.abort();
   await exportJobManager.cancelJob(id);
   if (job) removeExportTempInput(job);
   return { ok: true };
 }
 
 const EXPORT_TEMP_INPUT_WRITABLE_STATUSES = new Set(["queued", "preparing", "planning", "rendering", "encoding", "muxing", "finalizing"]);
+const activeExportAbortControllers = new Map<string, AbortController>();
 
 function requireWritableExportJob(jobId: unknown): ExportJobSnapshot {
   const id = String(jobId || "").trim();
@@ -765,14 +771,19 @@ export async function writeExportTempInput(payload: unknown): Promise<{ ok: true
 export async function finishExportTempInput(payload: unknown): Promise<unknown> {
   const raw = (payload || {}) as ExportTempInputRequest;
   const job = requireWritableExportJob(raw.jobId);
+  const controller = new AbortController();
+  activeExportAbortControllers.set(job.id, controller);
   try {
     const { inputPath } = finishExportTempInputFile(job);
     const profile = job.manifest.profile;
+    const durationMs = Math.max(0, (job.manifest.timeline.durationFrames / Math.max(1, job.manifest.timeline.fps)) * 1000);
+    const stderrLogPath = path.join(job.jobDir, "ffmpeg.log");
     exportJobManager.updateJob(job.id, {
       status: "encoding",
-      progress: { ratio: Math.max(job.progress.ratio, 0.86), stage: "encoding", message: "Encoding MP4" },
+      progress: { ratio: Math.max(job.progress.ratio, 0.12), stage: "encoding", message: "Encoding MP4" },
     });
     const result = await transcodeWebmFileToMp4({
+      jobId: job.id,
       projectDir: job.projectDir,
       inputPath,
       outputName: job.outputName || "nomi-export",
@@ -780,17 +791,45 @@ export async function finishExportTempInput(payload: unknown): Promise<unknown> 
       aspectRatio: aspectRatioFromProfile(profile),
       quality: profile.quality || "standard",
       fps: profile.fps || job.manifest.timeline.fps || 30,
+      durationMs,
+      signal: controller.signal,
+      stderrLogPath,
+      onProgress: (progress) => {
+        const current = exportJobManager.getJob(job.id);
+        if (!current || current.cancelled) return;
+        exportJobManager.updateJob(job.id, {
+          status: "encoding",
+          progress: {
+            ratio: Math.max(current.progress.ratio, 0.12 + progress.ratio * 0.84),
+            stage: "encoding",
+            message: progress.message || "Encoding MP4",
+          },
+        });
+      },
+    });
+    if (controller.signal.aborted || exportJobManager.getJob(job.id)?.cancelled) {
+      throw new ExportCancelledError();
+    }
+    exportJobManager.updateJob(job.id, {
+      status: "finalizing",
+      progress: { ratio: 0.98, stage: "finalizing", message: "Finalizing MP4" },
     });
     exportJobManager.completeJob(job.id, {
       outputPath: result.absolutePath,
       relativeOutputPath: result.relativePath,
       bytes: result.size,
+      durationMs,
     });
     return result;
   } catch (error) {
-    exportJobManager.failJob(job.id, error);
+    if (error instanceof ExportCancelledError || exportJobManager.getJob(job.id)?.cancelled) {
+      await exportJobManager.cancelJob(job.id);
+    } else {
+      exportJobManager.failJob(job.id, error);
+    }
     throw error;
   } finally {
+    activeExportAbortControllers.delete(job.id);
     removeExportTempInput(job);
   }
 }
@@ -2292,24 +2331,12 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   }
 
   if (wantedKind === "text") {
-    const aiSdkModel = buildAiSdkModel({
-      kind: vendor.providerKind || "openai-compatible",
-      baseURL: endpoint(vendor, "/v1"),
-      apiKey,
-      modelId: model.modelAlias || model.modelKey,
-    });
-    const result = await generateText({
-      model: aiSdkModel,
+    const response = await postJson(endpoint(vendor, "/v1/chat/completions"), apiKey, vendor, {
+      model: model.modelAlias || model.modelKey,
       messages: [{ role: "user", content: request.prompt }],
       temperature: 0.7,
     });
-    return {
-      id: taskId,
-      kind,
-      status: "succeeded",
-      assets: [],
-      raw: { text: result.text, response: result.response, finishReason: result.finishReason },
-    };
+    return { id: taskId, kind, status: "succeeded", assets: [], raw: response };
   }
 
   const suffix = wantedKind === "video" ? "/v1/videos/generations" : "/v1/images/generations";
