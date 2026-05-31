@@ -252,7 +252,6 @@ export default function NomiStudioApp(): JSX.Element {
         generationAiLayout={generationAiCollapsed ? 'overlay' : 'sidebar'}
         generationAi={<CanvasAssistantPanel defaultCollapsed onCollapsedChange={setGenerationAiCollapsed} />}
         projectName={activeProject?.name}
-        projectId={activeProject?.id ?? null}
         onBackToLibrary={backToLibrary}
         onOpenModelCatalog={() => setModelCatalogOpened(true)}
         onRenameProject={handleRenameProject}

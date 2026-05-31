@@ -20,13 +20,6 @@ type Props = {
   onRegenerate?: (provenance: GenerationProvenance) => void
 }
 
-function formatCost(value?: { amount: number; currency: string }): string {
-  if (!value) return '—'
-  if (value.amount < 0.01) return `<$0.01 ${value.currency}`
-  if (value.amount < 1) return `$${value.amount.toFixed(3)} ${value.currency}`
-  return `$${value.amount.toFixed(2)} ${value.currency}`
-}
-
 function copyToClipboard(text: string): void {
   if (!text) return
   try { void navigator.clipboard?.writeText(text) } catch { /* ignore */ }
@@ -80,7 +73,6 @@ export default function ProvenancePanel({ node, open, onClose, onRegenerate }: P
             {typeof provenance.seed === 'number' ? (
               <ProvenanceRow label="Seed" value={String(provenance.seed)} mono />
             ) : null}
-            <ProvenanceRow label="估算费用" value={formatCost(provenance.cost)} />
             <div>
               <div className="text-[10.5px] text-nomi-ink-40 uppercase tracking-wide mb-1">Prompt</div>
               <div className="bg-nomi-bg border border-nomi-line-soft rounded-nomi-sm p-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words text-nomi-ink-80">

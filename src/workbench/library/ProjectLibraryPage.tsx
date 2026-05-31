@@ -105,12 +105,17 @@ function ThumbnailMosaic({ urls }: { urls: string[] }): JSX.Element {
 }
 
 export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onNewProject, onTryExample, projects }: Props): JSX.Element {
+  const [query, setQuery] = React.useState('')
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredProjects = normalizedQuery
+    ? projects.filter((project) => project.name.toLowerCase().includes(normalizedQuery))
+    : projects
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-nomi-bg text-nomi-ink font-nomi-sans text-[13px] leading-normal antialiased">
       <main className="flex-1 overflow-y-auto px-14 pt-[60px] pb-20 flex flex-col gap-5">
 
         {/* ── Header ── */}
-        <section className="flex flex-col gap-2 mb-3">
+        <section className="shrink-0 flex flex-col gap-2 mb-3">
           <h1 className="flex items-center gap-[11px] font-nomi-display text-[28px] font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
             <NomiLogoMark size={28} />
             <span>No<span className="text-nomi-accent">m</span>i 项目库</span>
@@ -122,7 +127,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
         {onTryExample ? (
           <section
             className={cn(
-              'relative flex flex-col gap-3 px-5 py-[18px] mb-4',
+              'shrink-0 relative flex flex-col gap-3 px-5 py-[18px] mb-4',
               'border border-nomi-line rounded-nomi-lg bg-nomi-paper shadow-nomi-sm overflow-hidden',
             )}
             data-try-now-hero="true"
@@ -172,7 +177,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
 
         {/* ── Search ── */}
         <div className={cn(
-          'flex items-center gap-2 h-9 max-w-[360px] px-3',
+          'shrink-0 flex items-center gap-2 h-9 max-w-[360px] px-3',
           'border border-nomi-line rounded-nomi-sm bg-nomi-paper',
           'transition-[border-color,box-shadow] duration-150',
           'focus-within:border-[color-mix(in_oklch,var(--nomi-accent)_50%,transparent)]',
@@ -186,11 +191,13 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
             type="search"
             placeholder="搜索项目名称…"
             aria-label="搜索项目"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
         </div>
 
         {/* ── Grid ── */}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-[14px]">
+        <div className="shrink-0 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-[14px]">
 
           {/* New project — first card, plain solid style */}
           <button
@@ -226,7 +233,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
             </div>
           </button>
 
-          {projects.map((project) => {
+          {filteredProjects.map((project) => {
             const urls = project.thumbnailUrls || (project.thumbnail ? [project.thumbnail] : [])
             return (
               <div

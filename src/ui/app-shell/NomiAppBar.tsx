@@ -4,19 +4,17 @@ import type { WorkspaceMode } from '../../workbench/workbenchStore'
 import { importImageFilesToGenerationCanvas } from '../../workbench/generationCanvasV2/adapters/assetImportAdapter'
 import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
 import { cn } from '../../utils/cn'
-import ProjectCostBadge from '../../workbench/cost/ProjectCostBadge'
 
 type NomiAppBarProps = {
   workspaceMode: WorkspaceMode
   onWorkspaceModeChange: (mode: WorkspaceMode) => void
   projectName?: string
-  projectId?: string | null
   onBackToLibrary?: () => void
   onOpenModelCatalog?: () => void
   onRenameProject?: (name: string) => void
 }
 
-export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, projectName, projectId, onBackToLibrary, onOpenModelCatalog, onRenameProject }: NomiAppBarProps): JSX.Element {
+export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, projectName, onBackToLibrary, onOpenModelCatalog, onRenameProject }: NomiAppBarProps): JSX.Element {
   const assetInputRef = React.useRef<HTMLInputElement>(null)
   const [editingProjectName, setEditingProjectName] = React.useState(false)
   const [projectTitle, setProjectTitle] = React.useState(projectName || '未命名 Nomi 项目')
@@ -163,7 +161,6 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
         role="toolbar"
         aria-label="全局操作"
       >
-        {projectId ? <ProjectCostBadge projectId={projectId} /> : null}
         <input
           ref={assetInputRef}
           className={cn(
