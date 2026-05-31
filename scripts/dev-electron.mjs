@@ -1,9 +1,40 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import fs from "node:fs";
 import path from "node:path";
 import net from "node:net";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
+const repoRoot = path.dirname(fileURLToPath(new URL("..", import.meta.url)));
+
+/**
+ * Make the onboarding agent work in `pnpm dev` without manual `export`s.
+ *
+ * The onboarding agent LLM (dm-fox gpt-5.5) is configured via NOMI_ONBOARDING_AGENT_*
+ * env vars. Before this, a plain restart that forgot the exports left the wizard
+ * showing "还没有配置用来阅读文档的 AI" even though the key file was sitting right
+ * there. We auto-load `.secrets/agent.key` and apply the documented dm-fox defaults.
+ * An already-exported env var always wins, so manual overrides still work.
+ */
+function loadOnboardingAgentEnv() {
+  const out = {};
+  const keyPath = path.join(repoRoot, ".secrets", "agent.key");
+  let key = process.env.NOMI_ONBOARDING_AGENT_KEY || "";
+  if (!key && fs.existsSync(keyPath)) {
+    try { key = fs.readFileSync(keyPath, "utf8").trim(); } catch { /* ignore */ }
+  }
+  if (!key) {
+    console.warn("⚠  No onboarding agent key (.secrets/agent.key missing and NOMI_ONBOARDING_AGENT_KEY unset). Model onboarding will be disabled.");
+    return out;
+  }
+  out.NOMI_ONBOARDING_AGENT_KEY = key;
+  out.NOMI_ONBOARDING_AGENT_BASE_URL = process.env.NOMI_ONBOARDING_AGENT_BASE_URL || "https://dm-fox.rjj.cc/codex/v1";
+  out.NOMI_ONBOARDING_AGENT_MODEL = process.env.NOMI_ONBOARDING_AGENT_MODEL || "gpt-5.5";
+  out.NOMI_ONBOARDING_AGENT_PROVIDER = process.env.NOMI_ONBOARDING_AGENT_PROVIDER || "openai-compatible";
+  console.log(`▶  Onboarding agent: ${out.NOMI_ONBOARDING_AGENT_MODEL} via ${out.NOMI_ONBOARDING_AGENT_BASE_URL}`);
+  return out;
+}
 const electron = require("electron");
 const vitePackagePath = require.resolve("vite/package.json");
 const viteBin = path.join(path.dirname(vitePackagePath), "bin", "vite.js");
@@ -98,6 +129,7 @@ const app = startElectron({
   env: electronEnv({
     NOMI_DESKTOP_DEV: "1",
     VITE_DEV_SERVER_URL: rendererUrl,
+    ...loadOnboardingAgentEnv(),
   }),
 });
 

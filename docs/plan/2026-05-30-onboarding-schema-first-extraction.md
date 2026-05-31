@@ -97,8 +97,20 @@ v1 上线后真机重跑 kie GPT Image-2,仍 `partial`、参数只有 `aspect_ra
 
 > 方法论沉淀:抽取层确定性 → 可离线对任意真实文档回归,这是「持续优化但每次都通用泛化」的工程支点,不必每次都真机跑 agent。
 
+## 5d. 真机再复盘：onboarding 起不来 + spec-only 参数发不出（同日）
+
+用户重启后真机重试，报两个新症状：
+
+1. **onboarding 直接起不来**：wizard 报「还没有配置用来阅读文档的 AI」。根因：onboarding agent 的 LLM（dm-fox gpt-5.5）**只**靠 `NOMI_ONBOARDING_AGENT_*` 三个环境变量配置，renderer 从不传 `payload.agent`，而 `pnpm dev`/`pnpm start` 脚本**从不加载** `.secrets/agent.key`。手动 `export` 一旦忘记（重启常态），agent 配置即丢 → 连不上。这也解释了为什么用户「明明有 GPT-5.5」却被告知没有 AI：GPT-5.5 在 `.secrets` 里躺着，但没人把它喂进 env。
+   - **通用修复**：`scripts/dev-electron.mjs` + `scripts/start-electron.mjs` 启动时自动读 `.secrets/agent.key`，套用文档化的 dm-fox 默认值（`https://dm-fox.rjj.cc/codex/v1` / `gpt-5.5` / `openai-compatible`）。已 `export` 的 env 永远优先（手动覆盖仍生效）。无 key 时 dev 打印告警而非静默失败。
+2. **spec-only 参数选了发不出**：agent 只 templatize curl 里出现过的参数，spec 补出来的 `resolution`/`duration` 在节点上能选，但 `mappingCreate.body` 里没有 `{{request.params.<key>}}` 槽 → 选了等于没选。
+   - **通用修复**：`mergeMissingParamsIntoBody(body, fieldKeys)`（curlBlueprint.ts，纯函数）。从 body 里既有的 `{{request.params.*}}`/`{{request.prompt}}` 占位符**反推参数所在嵌套层**（如 kie 的 `input`），把缺失的 field key 注入同一层；已存在的字面值就地 templatize；不硬编码任何平台 body 形状。`commitOnboardedModelToCatalog`（runtime.ts）在 `upsertModelCatalogMapping` 前对 create.body 做一次对账。
+   - 测试：`curlBlueprint.test.ts` 7 个新单测（kie 嵌套注入 / 纯函数不变 / prompt-container 兜底 / 扁平 body / 字面值就地 templatize / 全有时 no-op / 非对象原样）。302 测试全绿。
+
+> 注：`recordInfo is null` 422 是上一轮 **partial 模型**遗留的 query 阶段问题（URL 没带 `?taskId=`），依赖一次干净 re-onboard 才能拿到新 trace 定位；不在本次盲改范围。
+
 ## 6. 后续（不在本轮）
 
-- 把 spec-only 参数合并进请求 body 模板（`resolution` 选了能真正发出）。
+- ~~把 spec-only 参数合并进请求 body 模板~~（已在 5d 完成）。
 - R2 增强：跟随链接抓外部 `openapi.json`。
 - R3 探针：对仍为空的 enum 发非法值，从 4xx 错误回显补全。

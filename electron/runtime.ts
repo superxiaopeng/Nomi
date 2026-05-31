@@ -6,6 +6,7 @@ import { hardenedFetch, hardenedFetchText } from "./hardenedFetch";
 import { generateText, streamText, tool } from "ai";
 import { z } from "zod";
 import { buildAiSdkModel } from "./ai/buildAiSdkModel";
+import { mergeMissingParamsIntoBody } from "./ai/onboarding/curlBlueprint";
 import { assertProjectExportRelativePath, ensureExportDirs } from "./export/exportPaths";
 import { ExportJobManager, type ExportJobEvent, type ExportJobSnapshot } from "./export/exportJobManager";
 import { assertValidManifest, type NomiRenderManifestV1 } from "./export/exportManifest";
@@ -1311,12 +1312,20 @@ export function commitOnboardedModelToCatalog(payload: {
   const mappingCreate = draft.mappingCreate as HttpOperation | undefined;
   const mappingQuery = draft.mappingQuery as HttpOperation | undefined;
   if (mappingCreate) {
+    // Reconcile: the agent only templatizes params it saw in the curl example,
+    // so spec-derived params (resolution, duration, ...) the user can now select
+    // on the node have no {{request.params.*}} slot in the body and would send
+    // nothing. Inject the missing field keys at the param nesting level.
+    const reconciledCreate: HttpOperation =
+      mappingCreate.body !== undefined && onboardingFields.length > 0
+        ? { ...mappingCreate, body: mergeMissingParamsIntoBody(mappingCreate.body, onboardingFields.map((f) => f.key)) }
+        : mappingCreate;
     upsertModelCatalogMapping({
       vendorKey,
       taskKind,
       name: modelDisplayName,
       enabled: true,
-      create: mappingCreate,
+      create: reconciledCreate,
       ...(mappingQuery ? { query: mappingQuery } : {}),
     });
   }

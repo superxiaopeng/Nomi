@@ -181,6 +181,60 @@ function templatizeBody(body: unknown, fields: CurlBlueprint["suggested_fields"]
   return walk(body);
 }
 
+/**
+ * Ensure every onboarding field has a {{request.params.<key>}} slot in the
+ * request body. The agent templatizes only the params it saw in the curl
+ * example, so spec-derived params (resolution, duration, ...) that the user can
+ * now select on the node would otherwise never be sent. We inject the missing
+ * ones at the same nesting level where prompt / existing params live (e.g.
+ * kie's `input` object), so they ride along in the same place as the rest.
+ *
+ * Pure + deterministic: deep-clones, never mutates the input. Generalizable —
+ * it discovers the param container from existing placeholders rather than
+ * hard-coding any provider's body shape.
+ */
+export function mergeMissingParamsIntoBody(body: unknown, fieldKeys: string[]): unknown {
+  if (!body || typeof body !== "object") return body;
+  const clone = JSON.parse(JSON.stringify(body)) as unknown;
+  const PARAM_RE = /^\{\{\s*request\.params\.([A-Za-z0-9_]+)\s*\}\}$/;
+  const PROMPT_RE = /^\{\{\s*request\.prompt\s*\}\}$/;
+  const keySet = new Set(fieldKeys);
+
+  const present = new Set<string>(); // keys already wired as {{request.params.*}}
+  const literalHolders = new Map<string, Record<string, unknown>>(); // field key → obj holding a literal value
+  let paramContainer: Record<string, unknown> | null = null; // where params live
+  let promptContainer: Record<string, unknown> | null = null; // fallback nesting
+
+  const walk = (val: unknown): void => {
+    if (!val || typeof val !== "object") return;
+    if (Array.isArray(val)) { val.forEach(walk); return; }
+    const obj = val as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === "string") {
+        const pm = PARAM_RE.exec(v);
+        if (pm) { present.add(pm[1]); paramContainer = obj; }
+        else if (PROMPT_RE.test(v)) { promptContainer = obj; present.add(k); }
+        else if (keySet.has(k)) { literalHolders.set(k, obj); }
+      }
+      walk(v);
+    }
+  };
+  walk(clone);
+
+  const container = paramContainer || promptContainer || (clone as Record<string, unknown>);
+  for (const key of fieldKeys) {
+    if (present.has(key)) continue; // already a placeholder
+    const placeholder = `{{request.params.${key}}}`;
+    const literalHolder = literalHolders.get(key);
+    if (literalHolder) {
+      literalHolder[key] = placeholder; // templatize an existing literal in place
+    } else {
+      container[key] = placeholder; // inject a brand-new slot at the param level
+    }
+  }
+  return clone;
+}
+
 /** Templatize Authorization-like headers. */
 function templatizeHeaders(
   headers: Array<{ name: string; value: string }>,
