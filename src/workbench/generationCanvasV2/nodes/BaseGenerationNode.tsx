@@ -552,8 +552,6 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
   const size = node.size || { width: 320, height: 360 }
   // E.2.1: shots 分类的 composer 真正 flex-inlined（不再 absolute 浮在节点下方）
   // 配合 spec §6.1 修正 3：composer 内嵌到 card flex 流，与图像区共占节点视觉空间
-  const isInlineComposer = node.categoryId === 'shots' && !readOnly && node.kind !== 'panorama'
-
   // [DESIGN-CARDS-07] renderKind 分发：非 shots 分类用专属 card 组件
   // renderKind 优先级：node.renderKind > 按 categoryId 推断
   const renderKind = (node.renderKind as string | undefined) ?? (
@@ -731,20 +729,18 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
         'absolute p-0 border-0 rounded-none bg-transparent shadow-none',
         'cursor-grab select-none touch-none overflow-visible',
         'data-[selected=true]:z-[5]',
-        // E.2.1: inline composer 时改用 flex column 让图像区和 composer 共享垂直空间
-        isInlineComposer ? 'flex flex-col' : 'block',
+        'block',
       )}
       data-kind={node.kind}
       data-expanded={selected ? 'true' : 'false'}
       data-selected={selected ? 'true' : 'false'}
       data-focus-flash={focusFlash ? 'true' : 'false'}
-      data-inline-composer={isInlineComposer ? 'true' : 'false'}
       data-status={status}
       style={{
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
         width: visualSize.width,
         height: visualSize.height,
-        ...(isInlineComposer ? {} : { gridTemplateRows: `${previewHeight}px` }),
+        gridTemplateRows: `${previewHeight}px`,
         willChange: 'transform',
       }}
       onPointerDown={handlePointerDown}
@@ -989,11 +985,11 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
       <div
         className={cn(
           'generation-canvas-v2-node__preview',
-          'relative w-full min-h-0 overflow-hidden',
-          // E.2.1: inline composer 时图像区取 flex-1（剩余空间），否则填满 grid 行
-          isInlineComposer ? 'flex-1' : 'h-full',
+          'relative w-full h-full min-h-0 overflow-hidden',
           'rounded-nomi shadow-nomi-md cursor-grab touch-none',
-          'bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_10px,var(--nomi-ink-10)_10px_20px)]',
+          // 棋盘格占位底纹只在「未生成」态出现；有结果后节点尺寸已贴合图片比例，
+          // 不再露出底纹，避免图片外面套一层框。
+          !hasResult && 'bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_10px,var(--nomi-ink-10)_10px_20px)]',
           // [DESIGN-CARDS-07] 卡片模式隐藏 preview div
           isCardKind && 'hidden',
         )}
@@ -1118,11 +1114,10 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
         </div>
       ) : null}
 
-      {/* E.2.1 + v0.7.1: composer 渲染分两种模式：
-          - inline (shots 分类): 作为 flex child 嵌入 card 下半部分 (Mura 设计)
-          - floating (其它分类 + selected, 含 4 类卡片): absolute 浮在节点下方
-          v0.7 误屏蔽了 4 类卡的 composer (!isCardKind)，v0.7.1 修正：卡片选中也弹 composer。 */}
-      {(isInlineComposer || (selected && !readOnly && node.kind !== 'panorama')) ? (
+      {/* composer：仅在节点被选中时浮出（含 4 类卡片）。
+          用户体验：未选中时只看图，参数框不常驻；点中节点才弹出 prompt + 参数 + 生成按钮。
+          absolute 浮在节点下方，不占用图像区垂直空间（保证图片按自身比例铺满，无外框）。 */}
+      {selected && !readOnly && node.kind !== 'panorama' ? (
         <div
           className={cn(
             'generation-canvas-v2-node__composer',
@@ -1130,13 +1125,9 @@ function BaseGenerationNodeImpl({ node, selected, readOnly = false, focusFlash =
             'p-[10px]',
             'border border-nomi-line-soft rounded-nomi',
             'bg-nomi-paper overflow-auto',
-            isInlineComposer
-              // inline: flex child in article, no absolute positioning
-              ? 'relative flex-shrink-0 mt-[6px] min-h-[120px] max-h-[180px]'
-              // floating: absolute below node, shadow for separation
-              : 'absolute left-1/2 z-[8] shadow-nomi-lg -translate-x-1/2 min-h-[150px]',
+            'absolute left-1/2 z-[8] shadow-nomi-lg -translate-x-1/2 min-h-[150px]',
           )}
-          style={isInlineComposer ? undefined : {
+          style={{
             width: composerLayout.width,
             maxHeight: composerLayout.maxHeight,
             top: `calc(100% + ${composerLayout.gap}px)`,

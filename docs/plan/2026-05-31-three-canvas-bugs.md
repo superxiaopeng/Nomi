@@ -67,3 +67,25 @@
 - **#4 加固（用户选：加固）**：新增共享判定 `looksLikeImageUrlControl` —— `type==='image-url'` 或 free-text 且 key 名像图片 URL（imageurl/inputurls/referenceimage/firstframe…）。`buildImageUrlSlots`（顶部）和 `buildDynamicControls`（底部）共用它，保证一个参数只落一处，且不再完全依赖 onboarding 把类型标对。
 
 验收：electron tsc 0 错、前端我改文件 0 新错、`pnpm test` 339 全绿、已重建重启。待用户目视确认参数多的模型面板变宽、被错标成 text 的图片参数也跑到顶部。
+
+## 8. 复盘修正：图片外框 + 参数框常驻（用户截图反馈第二轮）
+
+用户反馈第 7 节的 `object-cover→object-contain` 没真正解决：图片外面仍有一层框（棋盘格底纹），且没按图片自身比例自适应；参数框一直常驻。
+
+**根因（git blame 定位）**：v0.6.1 commit `457eaf5` 把 shots 节点的 composer 从「选中浮出」改成「flex 内嵌常驻」（所谓 Mura 设计）。一个改动同时造成两个症状：
+
+- composer 作为 flex child 占走节点垂直空间 → 图像区 `flex-1` 比图片本身比例矮 → `object-contain` 上下留黑（letterbox）→ 棋盘格底纹露出来变成「外框」。
+- 参数框（composer）对 shots 分类常驻可见，不再是点选才出。
+
+**修复（回退到 v0.6.1 之前的浮层行为，对所有节点类型一致）**：
+
+- `BaseGenerationNode.tsx` 物理删除 `isInlineComposer` 及其所有分支（规则 1）：
+  - article 容器恒 `block` + `gridTemplateRows: previewHeight`（删 flex-column 分支）。
+  - 删 `data-inline-composer` 属性。
+  - preview div 恒 `h-full`（删 `flex-1` 分支）。
+  - composer 恒「`selected && !readOnly && !panorama` 才渲染」的 absolute 浮层（删 inline relative 分支）。
+- preview 棋盘格底纹改为只在 `!hasResult` 时出现 —— 生成后节点尺寸已贴合图片比例，不再露底纹，图片外不再有框。
+
+效果：未选中只看图、点中才弹 composer（含变宽逻辑仍生效）；图片按自身比例铺满整个节点框，无外框；棋盘格只在未生成态做占位提示。
+
+验收：前端 tsc 我改文件 0 新错、`pnpm test` 339 全绿、待重建重启后用户目视确认。
