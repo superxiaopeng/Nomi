@@ -100,7 +100,7 @@ export default function WorkbenchShell({ generation, generationAi, generationAiL
           创作 / 预览 step 不再显示左侧分类目录树（spec 决策：只有生成区需要分类切换）。 */}
       <main className={cn(
         'workbench-shell__body',
-        'relative min-w-0 min-h-0 overflow-hidden',
+        'relative min-w-0 min-h-0 overflow-hidden flex',
       )}>
         <ProjectExplorerSidebar projectId={projectId ?? null} workspaceMode={workspaceMode} />
         <div className="flex-1 min-w-0 min-h-0 relative">
