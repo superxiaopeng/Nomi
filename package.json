@@ -17,6 +17,7 @@
     "build": "pnpm run build:renderer && pnpm run build:electron",
     "build:renderer": "vite build --mode production",
     "build:electron": "tsc -p electron/tsconfig.json",
+    "build:site": "node -e \"const fs=require('fs'); for (const f of ['marketing/index.html','marketing/robots.txt','marketing/sitemap.xml']) { if (!fs.existsSync(f)) throw new Error(f+' is missing'); } console.log('marketing site ready');\"",
     "start": "node ./scripts/start-electron.mjs",
     "preview": "vite preview",
     "test": "vitest run",
