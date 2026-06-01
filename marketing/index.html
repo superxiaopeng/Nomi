@@ -32,7 +32,7 @@
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
   "url": "https://nomiaqm.com/",
   "image": "https://nomiaqm.com/assets/mascot.png",
-  "softwareVersion": "0.1"
+  "softwareVersion": "0.8"
 }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -863,7 +863,7 @@
     <div class="hero-grid">
       <div class="hero-left">
         <div class="hero-row hr-eyebrow">
-          <div class="eyebrow">v0.1 · 开源 · 本地优先 · 一站式</div>
+          <div class="eyebrow">v0.8 · 开源 · 本地优先 · 一站式</div>
         </div>
         <div class="hero-row hr-headline">
           <h1>
@@ -874,7 +874,7 @@
         </div>
         <div class="hero-row hr-sub">
           <p class="hero-sub">
-            <strong>Nomi</strong> 是一个开源、本地运行的 AI 视频一站式创作平台。从一句提示词到一条成片，所有数据在同一张画布里流动。
+            <strong>Nomi</strong> 是一个开源、本地优先的 AI 视频一站式创作工作区。工程与素材留在你自己的硬盘，AI 模型用你自己的 key 自由接入。从一句提示词到一条成片，都在同一张画布里流动。
           </p>
         </div>
         <div class="hero-row hr-actions">
@@ -900,7 +900,7 @@
           <!-- floating product readout overlay -->
           <div class="mascot-overlay">
             <div class="ov-row"><span class="ov-k">SCRIPT</span><span class="ov-v">折纸熊在白色背景前轻轻转身</span></div>
-            <div class="ov-row"><span class="ov-k">RENDER</span><span class="ov-v">→ 4 帧候选 · seed 8124</span><span class="ov-chip">LOCAL</span></div>
+            <div class="ov-row"><span class="ov-k">RENDER</span><span class="ov-v">→ 4 帧候选 · seed 8124</span><span class="ov-chip">API</span></div>
             <div class="ov-row"><span class="ov-k">EDIT</span><span class="ov-v">→ 图片轨 · 0:00 — 0:08</span></div>
             <div class="ov-progress"><span style="width:62%"></span></div>
           </div>
@@ -909,7 +909,7 @@
     </div>
 
     <div class="hero-foot">
-      <div>RUNTIME<span>本地运行 · 离线可用</span></div>
+      <div>WORKSPACE<span>工程 / 素材 本地存盘</span></div>
       <div>WORKFLOW<span>剧本 / 生成 / 剪辑 一体</span></div>
       <div>PROVIDERS<span>任意接入 · 文档驱动</span></div>
       <div>LICENSE<span>Apache-2.0 · 完全开源</span></div>
@@ -975,8 +975,8 @@
       <div>
         <h3 class="pillar-h">所有素材，<span class="em">留在</span><br>你自己的电脑里。</h3>
         <div class="pillar-body">
-          <p>Nomi 是纯开源的本地项目。模型可以在本地跑，素材可以全部留在本地硬盘——不会上传，不会被训练，不会消失。</p>
-          <p>创作的私密性，应该和写日记一样。</p>
+          <p>Nomi 是纯开源的本地优先工作区。工程文件、生成的图片视频、导入的素材，全部存进你选定的本地文件夹——成片归你，工程归你，不锁在某个云端后台。</p>
+          <p>换台电脑，把文件夹拷走就行。</p>
         </div>
       </div>
       <div class="pillar-visual">
@@ -988,7 +988,7 @@
           </div>
           <div class="local-bar">
             <span class="c">$</span> ls ~/nomi/projects<br>
-            <span class="c">→</span> 0 bytes uploaded.
+            <span class="c">→</span> 工程 / 素材 全在本地盘。
           </div>
         </div>
         <div class="label">LOCAL · 02</div>
@@ -1010,10 +1010,10 @@
       </div>
       <div class="pillar-visual">
         <div class="providers">
-          <div class="provider-chip"><strong>Local</strong>SD / Comfy</div>
+          <div class="provider-chip"><strong>Seedance</strong>即梦 · 视频</div>
           <div class="provider-chip"><strong>OpenAI</strong>GPT · DALL·E</div>
           <div class="provider-chip"><strong>Claude</strong>Anthropic</div>
-          <div class="provider-chip"><strong>Runway</strong>Gen-3</div>
+          <div class="provider-chip"><strong>Gemini</strong>Google</div>
           <div class="provider-chip"><strong>Kling</strong>可灵</div>
           <div class="provider-chip add">+ 粘贴文档<br>自动接入</div>
         </div>
@@ -1057,7 +1057,7 @@
 
     <div class="showcase-stack">
       <div class="showcase-shot">
-        <img src="assets/screen-canvas.png" alt="生成画布">
+        <img src="assets/screen-script.png" alt="剧本面板">
         <div class="showcase-caption">
           <div class="num">01</div>
           <div class="ttl">创作 / Script</div>
@@ -1065,7 +1065,7 @@
         </div>
       </div>
       <div class="showcase-shot">
-        <img src="assets/screen-script.png" alt="剧本面板">
+        <img src="assets/screen-canvas.png" alt="生成画布">
         <div class="showcase-caption">
           <div class="num">02</div>
           <div class="ttl">生成 / Canvas</div>
@@ -1099,7 +1099,7 @@
       <div class="philo-text">
         <p><strong>剧本、生成、剪辑，本来就该是一件事。</strong>把它们拆成三个软件，是工具的局限，不是创作的局限。Nomi 把它们压回同一张画布——剧本里的提示词直接长出图像和视频节点，节点的片段再直接落进剪辑轨。</p>
         <span class="pull">"数据丝滑流动，而不是在工具之间复制粘贴。"</span>
-        <p><strong>素材属于你，不属于云。</strong>整个工作流在本地跑：模型本地推理、文件本地存盘、不上传、不训练、不会某天因为"政策调整"消失。你的硬盘就是你的工作室。</p>
+        <p><strong>工程属于你，存在本地。</strong>剧本、生成的图片视频、导入的素材都落进你选定的本地文件夹，换台电脑拷走就走。AI 生成走你自己的供应商账户：用谁、花多少，你说了算。</p>
         <p><strong>Agent 是助理，不是替身。</strong>它会读上下文、补镜头、提建议，但 Nomi 不会替你做决定——所有的"选哪个"，留给你按下去。</p>
       </div>
     </div>
@@ -1154,14 +1154,14 @@
 <span class="k">$</span> pnpm install
 <span class="k">$</span> pnpm dev
 
-<span class="c"># 一切都在本地</span>
-<span class="k">→</span> <span class="s">"Nomi running at http://127.0.0.1:5173"</span>
-<span class="k">→</span> <span class="s">"Local-only · no telemetry"</span>
+<span class="c"># 桌面应用启动</span>
+<span class="k">→</span> <span class="s">"Nomi desktop 已启动"</span>
+<span class="k">→</span> <span class="s">"工程与素材 · 全在本地盘"</span>
 </pre>
         <div class="repo-stats">
           <div><strong>Apache</strong>License</div>
-          <div><strong>Local</strong>Runtime</div>
-          <div><strong>0</strong>Trackers</div>
+          <div><strong>本地</strong>工程区</div>
+          <div><strong>自带</strong>Key 接入</div>
         </div>
       </div>
     </div>
