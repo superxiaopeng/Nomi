@@ -156,32 +156,88 @@ describe("compileFfmpegFiltergraph", () => {
     }
   });
 
-  it.todo("contracts audio source preserve/mute, delay, fade, and amix for multi-track audio");
+  it("audioCodec none → 不产出音频输出", () => {
+    const plan = compileFfmpegFiltergraph({
+      manifest: manifest({
+        assets: { a1: { id: "a1", kind: "audio", absolutePath: "/media/a1.wav", durationSeconds: 10 } },
+        timeline: {
+          fps: 30, durationFrames: 150, range: { startFrame: 0, endFrame: 150 },
+          tracks: [{ id: "audio-1", kind: "audio", clips: [{ id: "a-clip-1", assetId: "a1", startFrame: 0, endFrame: 150 }] }],
+        },
+      }),
+    });
+    expect(plan.audioOutputLabel).toBeUndefined();
+    expect(plan.filterComplex).not.toContain("[aout]");
+  });
 
-  it("classifies multi-track audio as unsupported until audio mixer implementation lands", () => {
-    try {
-      compileFfmpegFiltergraph({
-        manifest: manifest({
-          profile: { ...profile, audioCodec: "aac", audioMode: "mixdown" },
-          assets: {
-            a1: { id: "a1", kind: "audio", absolutePath: "/media/a1.wav", durationSeconds: 10 },
-            a2: { id: "a2", kind: "audio", absolutePath: "/media/a2.wav", durationSeconds: 10 },
-          },
-          timeline: {
-            fps: 30,
-            durationFrames: 300,
-            range: { startFrame: 0, endFrame: 300 },
-            tracks: [
-              { id: "audio-1", kind: "audio", clips: [{ id: "a-clip-1", assetId: "a1", startFrame: 0, endFrame: 150 }] },
-              { id: "audio-2", kind: "audio", clips: [{ id: "a-clip-2", assetId: "a2", startFrame: 30, endFrame: 180 }] },
-            ],
-          },
-        }),
-      });
-      throw new Error("Expected unsupported_audio");
-    } catch (error) {
-      expect(error).toBeInstanceOf(FfmpegFiltergraphError);
-      expect((error as FfmpegFiltergraphError).code).toBe("unsupported_audio");
-    }
+  it("单个音频源 → atrim+asetpts+adelay 直出 [aout]，不用 amix", () => {
+    const plan = compileFfmpegFiltergraph({
+      manifest: manifest({
+        profile: { ...profile, audioCodec: "aac", audioMode: "mixdown" },
+        assets: { a1: { id: "a1", kind: "audio", absolutePath: "/media/a1.wav", durationSeconds: 10 } },
+        timeline: {
+          fps: 30, durationFrames: 300, range: { startFrame: 0, endFrame: 300 },
+          tracks: [{ id: "audio-1", kind: "audio", clips: [{ id: "a-clip-1", assetId: "a1", startFrame: 30, endFrame: 180 }] }],
+        },
+      }),
+    });
+    expect(plan.audioOutputLabel).toBe("[aout]");
+    expect(plan.filterComplex).toContain("[0:a]atrim=start=0:end=5,asetpts=PTS-STARTPTS,adelay=1000|1000[aout]");
+    expect(plan.filterComplex).not.toContain("amix");
+  });
+
+  it("多个音频源 → amix（normalize=0 防 1/N 衰减）", () => {
+    const plan = compileFfmpegFiltergraph({
+      manifest: manifest({
+        profile: { ...profile, audioCodec: "aac", audioMode: "mixdown" },
+        assets: {
+          a1: { id: "a1", kind: "audio", absolutePath: "/media/a1.wav", durationSeconds: 10 },
+          a2: { id: "a2", kind: "audio", absolutePath: "/media/a2.wav", durationSeconds: 10 },
+        },
+        timeline: {
+          fps: 30, durationFrames: 300, range: { startFrame: 0, endFrame: 300 },
+          tracks: [
+            { id: "audio-1", kind: "audio", clips: [{ id: "a-clip-1", assetId: "a1", startFrame: 0, endFrame: 150 }] },
+            { id: "audio-2", kind: "audio", clips: [{ id: "a-clip-2", assetId: "a2", startFrame: 30, endFrame: 180 }] },
+          ],
+        },
+      }),
+    });
+    expect(plan.audioOutputLabel).toBe("[aout]");
+    expect(plan.filterComplex).toContain("amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]");
+  });
+
+  it("从自带音轨的 video clip 提取源音轨（hasAudio）", () => {
+    const plan = compileFfmpegFiltergraph({
+      manifest: manifest({
+        profile: { ...profile, audioCodec: "aac", audioMode: "mixdown" },
+        assets: {
+          video1: { id: "video1", kind: "video", absolutePath: "/media/clip.mp4", durationSeconds: 30, hasAudio: true },
+        },
+        timeline: {
+          fps: 30, durationFrames: 60, range: { startFrame: 0, endFrame: 60 },
+          tracks: [{ id: "visual-1", kind: "visual", clips: [{ id: "clip-1", assetId: "video1", startFrame: 0, endFrame: 60, sourceStartFrame: 30, sourceEndFrame: 90 }] }],
+        },
+      }),
+    });
+    // 视频帧仍参与画面
+    expect(plan.filterComplex).toContain("[0:v]trim=start=1:end=3");
+    // 同一输入的音轨被提取到 [aout]
+    expect(plan.audioOutputLabel).toBe("[aout]");
+    expect(plan.filterComplex).toContain("[0:a]atrim=start=1:end=3,asetpts=PTS-STARTPTS,adelay=0|0[aout]");
+  });
+
+  it("video clip 无音轨（hasAudio 未设）→ 不产出音频", () => {
+    const plan = compileFfmpegFiltergraph({
+      manifest: manifest({
+        profile: { ...profile, audioCodec: "aac", audioMode: "mixdown" },
+        assets: { video1: { id: "video1", kind: "video", absolutePath: "/media/silent.mp4", durationSeconds: 30 } },
+        timeline: {
+          fps: 30, durationFrames: 60, range: { startFrame: 0, endFrame: 60 },
+          tracks: [{ id: "visual-1", kind: "visual", clips: [{ id: "clip-1", assetId: "video1", startFrame: 0, endFrame: 60 }] }],
+        },
+      }),
+    });
+    expect(plan.audioOutputLabel).toBeUndefined();
   });
 });

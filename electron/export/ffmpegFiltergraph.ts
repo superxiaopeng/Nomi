@@ -112,24 +112,47 @@ function buildInputs(resolvedClips: ResolvedClip[], fps: number): FfmpegFiltergr
   });
 }
 
-function assertSupportedAudio(
-  audioClips: ResolvedClip[],
+/**
+ * 构建音频滤镜。音频源 = 独立音频轨 clip + 自带音轨的 video clip（asset.hasAudio）。
+ * 每个源：按源内区间 atrim → asetpts 归零 → adelay 平移到时间轴位置。
+ * 多源用 amix 合并；normalize=0 避免默认按输入数 1/N 衰减（顺序不重叠的 clip 应保持原音量）。
+ * 返回滤镜行数组（空 = 无音频，输出无 [aout]）。
+ */
+function buildAudioGraph(
+  resolvedClips: ResolvedClip[],
   profileAudioCodec: NomiRenderManifestV1["profile"]["audioCodec"],
   fps: number,
-): string | undefined {
-  if (profileAudioCodec === "none" || audioClips.length === 0) return undefined;
+): string[] {
+  if (profileAudioCodec === "none") return [];
 
-  const audioTrackIds = new Set(audioClips.map(({ track }) => track.id));
-  if (audioTrackIds.size > 1 || audioClips.length > 1) {
-    throw new FfmpegFiltergraphError(
-      "unsupported_audio",
-      "Multi-track or multi-clip audio requires delay/fade/amix support and is not implemented yet",
+  const audioSources = resolvedClips.filter(
+    ({ track, asset }) =>
+      isAudioTrack(track) || asset.kind === "audio" || (asset.kind === "video" && asset.hasAudio === true),
+  );
+  if (audioSources.length === 0) return [];
+
+  const filters: string[] = [];
+  const sourceLabels: string[] = [];
+  audioSources.forEach(({ clip, inputIndex }, index) => {
+    const outLabel = audioSources.length === 1 ? "aout" : labelForClip(clip.id, `audio${index}`);
+    const startMs = Math.round(secondsFromFrames(clip.startFrame, fps) * 1000);
+    const clipDurationFrames = clip.endFrame - clip.startFrame;
+    const sourceStart = secondsFromFrames(clip.sourceStartFrame ?? 0, fps);
+    const sourceEnd = secondsFromFrames(clip.sourceEndFrame ?? (clip.sourceStartFrame ?? 0) + clipDurationFrames, fps);
+    filters.push(
+      `[${inputIndex}:a]atrim=start=${formatSeconds(sourceStart)}:end=${formatSeconds(sourceEnd)},` +
+        `asetpts=PTS-STARTPTS,adelay=${startMs}|${startMs}[${outLabel}]`,
+    );
+    sourceLabels.push(`[${outLabel}]`);
+  });
+
+  if (sourceLabels.length > 1) {
+    filters.push(
+      `${sourceLabels.join("")}amix=inputs=${sourceLabels.length}:duration=longest:dropout_transition=0:normalize=0[aout]`,
     );
   }
 
-  const [{ clip, inputIndex }] = audioClips;
-  const startMs = Math.round(secondsFromFrames(clip.startFrame, fps) * 1000);
-  return `[${inputIndex}:a]asetpts=PTS-STARTPTS,adelay=${startMs}|${startMs}[aout]`;
+  return filters;
 }
 
 function buildVisualGraph(manifest: NomiRenderManifestV1, visualClips: ResolvedClip[]): string[] {
@@ -201,17 +224,16 @@ export function compileFfmpegFiltergraph(input: FfmpegFiltergraphInput): FfmpegF
 
   const resolvedClips = collectReferencedClips(manifest);
   const visualClips = resolvedClips.filter(({ track, asset }) => isVisualTrack(track) || asset.kind === "image" || asset.kind === "video");
-  const audioClips = resolvedClips.filter(({ track, asset }) => isAudioTrack(track) || asset.kind === "audio");
 
-  const audioFilter = assertSupportedAudio(audioClips, manifest.profile.audioCodec, fps);
+  const audioFilters = buildAudioGraph(resolvedClips, manifest.profile.audioCodec, fps);
   const filters = buildVisualGraph(manifest, visualClips);
-  if (audioFilter) filters.push(audioFilter);
+  filters.push(...audioFilters);
 
   return {
     inputs: buildInputs(resolvedClips, fps),
     filterComplex: filters.join(";"),
     videoOutputLabel: "[vout]",
-    audioOutputLabel: audioFilter ? "[aout]" : undefined,
+    audioOutputLabel: audioFilters.length > 0 ? "[aout]" : undefined,
     warnings: [],
   };
 }
