@@ -57,11 +57,40 @@ function TextDocumentNodeImpl({ node }: Props): JSX.Element {
     [node.id, updateNode],
   )
 
-  const { editor } = useNomiRichTextEditor({
+  // 把最新选区文本存进 meta（persist:false），供「改写」生成时拼 prompt 用。去重避免抖动。
+  const handleSelectionChange = React.useCallback(
+    (text: string) => {
+      const store = useGenerationCanvasStore.getState()
+      const current = store.nodes.find((candidate) => candidate.id === node.id)
+      if ((current?.meta?.textGenSelection ?? '') === text) return
+      store.updateNode(node.id, { meta: { ...(current?.meta || {}), textGenSelection: text } }, { persist: false })
+    },
+    [node.id],
+  )
+
+  const { editor, tools } = useNomiRichTextEditor({
     content,
     placeholder: TEXT_NODE_PLACEHOLDER,
     onChange: handleChange,
+    onSelectionChange: handleSelectionChange,
   })
+
+  // 「改写」落地：textActions 拿不到 ProseMirror 选区位置，只打了 textPendingSelectionApply 标记；
+  // 这里在节点编辑器里 replaceSelection 替换当前选区。seed=挂载时已有 result.id，避免项目加载时重放。
+  const lastAppliedResultIdRef = React.useRef<string | null>(node.result?.id ?? null)
+  const resultId = node.result?.id
+  const pendingApplyId = node.meta?.textPendingSelectionApply
+  React.useEffect(() => {
+    if (!resultId || pendingApplyId !== resultId) return
+    if (lastAppliedResultIdRef.current === resultId) return
+    lastAppliedResultIdRef.current = resultId
+    const text = (node.result?.text || '').trim()
+    if (text) tools.replaceSelection(text)
+    // 清标记（persist:false）。
+    const store = useGenerationCanvasStore.getState()
+    const current = store.nodes.find((candidate) => candidate.id === node.id)
+    store.updateNode(node.id, { meta: { ...(current?.meta || {}), textPendingSelectionApply: null } }, { persist: false })
+  }, [resultId, pendingApplyId, node.id, node.result?.text, tools])
 
   const showPlaceholder = isDocEmpty(node.contentJson)
   const actions = buildRichTextActions(editor)

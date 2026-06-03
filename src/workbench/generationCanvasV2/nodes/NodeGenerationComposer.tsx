@@ -12,6 +12,19 @@ import {
   isImageLikeGenerationNodeKind,
   isVideoLikeGenerationNodeKind,
 } from '../model/generationNodeKinds'
+import { getTextGenMode, type TextGenMode } from '../runner/textActions'
+
+// C5 P2：文本节点的三种生成模式。
+const TEXT_GEN_MODES: { value: TextGenMode; label: string }[] = [
+  { value: 'append', label: '续写' },
+  { value: 'rewrite', label: '改写' },
+  { value: 'replace', label: '重写' },
+]
+const TEXT_MODE_PLACEHOLDER: Record<TextGenMode, string> = {
+  append: '续写要求…（留空＝直接接着往下写）',
+  rewrite: '改写要求…（先在正文里选中要改的文字）',
+  replace: '重写要求…（替换整篇）',
+}
 
 // 生成节点的浮动 composer：references + 提示词 + 参数 + 生成/重新生成按钮。
 // 从 BaseGenerationNode 抽出（A1.5 接缝）：只有「生成类」节点挂它，素材节点不挂。
@@ -68,6 +81,8 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   ) && !isGenerating
   const composerControlCount = useNodeParameterControlCount(node)
   const composerLayout = floatingComposerLayout(visualSize.width, visualSize.height, node.kind, composerControlCount)
+  const isTextKind = node.kind === 'text'
+  const textGenMode = getTextGenMode(node)
 
   const handleGenerate = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -104,6 +119,28 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
       {isImageLikeGenerationNodeKind(node.kind) || isVideoLikeGenerationNodeKind(node.kind) ? (
         <NodeParameterControls node={node} section="references" valueOnly />
       ) : null}
+      {isTextKind ? (
+        <div className={cn('flex items-center gap-1')} role="group" aria-label="生成模式">
+          {TEXT_GEN_MODES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              data-active={textGenMode === option.value ? 'true' : 'false'}
+              onClick={(event) => {
+                event.stopPropagation()
+                updateNode(node.id, { meta: { ...(node.meta || {}), textGenMode: option.value } })
+              }}
+              className={cn(
+                'h-[22px] rounded-full px-2.5 text-[11px] font-medium',
+                'text-nomi-ink-60 hover:bg-nomi-ink-05',
+                'data-[active=true]:bg-nomi-accent-soft data-[active=true]:text-nomi-accent',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <textarea
         className={cn(
           'generation-canvas-v2-node__prompt-input',
@@ -113,7 +150,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         )}
         value={node.prompt}
         rows={composerLayout.promptRows}
-        placeholder={getGenerationNodePromptPlaceholder(node.kind)}
+        placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
         onChange={(event) => updateNode(node.id, { prompt: event.currentTarget.value })}
         onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
       />
