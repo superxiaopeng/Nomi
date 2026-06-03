@@ -16,10 +16,12 @@
 import React from 'react'
 import { IconGripVertical } from '@tabler/icons-react'
 import { EditorContent, type JSONContent } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import { cn } from '../../../../utils/cn'
 import type { GenerationCanvasNode, TiptapDocJson } from '../../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
 import { useNomiRichTextEditor } from '../../../common/useNomiRichTextEditor'
+import { buildRichTextActions } from '../../../common/richTextActions'
 
 const EMPTY_DOC: JSONContent = { type: 'doc', content: [] }
 const TEXT_NODE_PLACEHOLDER = '在这里写文本……'
@@ -62,9 +64,43 @@ function TextDocumentNodeImpl({ node }: Props): JSX.Element {
   })
 
   const showPlaceholder = isDocEmpty(node.contentJson)
+  const actions = buildRichTextActions(editor)
 
   return (
     <div className={cn('w-full h-full flex flex-col bg-nomi-paper')}>
+      {/* 浮动格式条：选中文字时浮在选区上方（Tiptap 官方 BubbleMenu，Floating UI 自动定位、
+          自动翻向、portal escape overflow——不手搓定位）。与创作区共用 buildRichTextActions。 */}
+      {editor ? (
+        <BubbleMenu
+          editor={editor}
+          className={cn(
+            'flex items-center gap-0.5 rounded-full border border-nomi-line bg-nomi-paper px-1.5 py-1 shadow-nomi-lg',
+          )}
+        >
+          {actions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              title={action.label}
+              aria-label={action.label}
+              aria-pressed={action.active ? true : undefined}
+              disabled={action.disabled}
+              data-active={action.active ? 'true' : 'false'}
+              // 不让 mousedown 夺走选区/焦点（否则按一下就丢选中）。
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={action.onClick}
+              className={cn(
+                'inline-grid h-7 w-7 place-items-center rounded-nomi-sm',
+                'text-nomi-ink-60 hover:bg-nomi-ink-05 hover:text-nomi-ink',
+                'data-[active=true]:bg-nomi-accent-soft data-[active=true]:text-nomi-accent',
+                'disabled:cursor-not-allowed disabled:opacity-40',
+              )}
+            >
+              {action.icon}
+            </button>
+          ))}
+        </BubbleMenu>
+      ) : null}
       {/* 拖拽手柄：非 contenteditable，pointerdown 冒泡到 BaseGenerationNode 触发拖动。 */}
       <header
         className={cn(
