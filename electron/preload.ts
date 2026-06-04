@@ -12,6 +12,7 @@ function invokeSync<T>(channel: string, ...args: unknown[]): T {
 
 contextBridge.exposeInMainWorld("nomiDesktop", {
   platform: process.platform,
+  logRendererCrash: (message: unknown) => ipcRenderer.send("nomi:log:renderer-crash", message),
   workspace: {
     selectFolder: () => ipcRenderer.invoke("nomi:workspace:select-folder"),
     openFolder: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:open-folder", payload),

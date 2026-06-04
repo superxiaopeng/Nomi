@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import NomiRouterApp from './NomiRouterApp'
+import { RootErrorBoundary } from './ui/ErrorBoundary'
 import { MantineProvider, MantineThemeProvider } from '@mantine/core'
 import { ModalsProvider } from '@mantine/modals'
 import { Notifications } from '@mantine/notifications'
@@ -32,7 +33,9 @@ root?.render(
       <DynamicThemeProvider>
         <ModalsProvider>
           <Notifications position="top-right" zIndex={2000} />
-          <NomiRouterApp />
+          <RootErrorBoundary>
+            <NomiRouterApp />
+          </RootErrorBoundary>
         </ModalsProvider>
       </DynamicThemeProvider>
     </MantineProvider>

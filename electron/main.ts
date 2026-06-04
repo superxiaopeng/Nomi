@@ -48,6 +48,10 @@ import { runOnboardingTrial } from "./ai/onboarding/agent";
 import type { ProviderKind, ModelKind } from "./ai/onboarding/types";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
+import { installCrashHandlers, logCrash } from "./crashLog";
+
+// 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
+installCrashHandlers();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -182,6 +186,8 @@ function registerSyncIpc<TArgs extends unknown[], TResult>(
 
 function registerIpc(): void {
   const selectedWorkspaceRoots = new Set<string>();
+  // 渲染层崩溃（RootErrorBoundary）也落到同一崩溃日志（P0-8）。
+  ipcMain.on("nomi:log:renderer-crash", (_event, message: unknown) => logCrash("renderer", String(message)));
   registerSyncIpc("nomi:projects:list", listProjects);
   registerSyncIpc("nomi:projects:create", (record: unknown) => {
     if (record && typeof record === "object" && typeof (record as { rootPath?: unknown }).rootPath === "string") {
