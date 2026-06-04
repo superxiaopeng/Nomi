@@ -80,5 +80,9 @@ runtime.ts 最终退化为薄装配/re-export 层，main.ts 的 import 列表自
 |---|---|---|---|---|
 | 1 | jsonUtils（trim/firstString/isJsonRecord/readNestedRecord/nowIso + JsonRecord） | ✅ | `3fbd258` | 3150 → 3125 |
 | 2 | tasks/responseParsing（pathValues/collectAssetUrls/taskStatusFromResponse 等 8 个） | ✅ | `1cb9e28` | 3125 → 3030 |
-| 3 | assets/assetPaths（extensionFromMime/contentTypeFromPath/stableAssetId 等 7 个纯 helper） | ✅ | 见下 | 3030 → 2984 |
-| 4 | catalog/secrets（密钥加密，中风险自包含） | 下一步 | — | — |
+| 3 | assets/assetPaths（extensionFromMime/contentTypeFromPath/stableAssetId 等 7 个纯 helper） | ✅ | `d71c088` | 3030 → 2984 |
+| 4 | catalog/secrets（ApiKeyRecord + safeStorage 加密/解密） | ✅ | 见下 | 2984 → 2933 |
+
+**低风险自主批次（步 1-4）完成：runtime.ts 3150 → 2933（-217 行），新增 4 个有测试的模块。**
+后续步 5+（catalog store/repository、tasks/runner、export、agent）是中心/有副作用模块，
+按计划停下来与用户确认、必要时拉角色 agent（规则 9）。

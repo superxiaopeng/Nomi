@@ -1,4 +1,4 @@
-import { app, safeStorage } from "electron";
+import { app } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -64,6 +64,12 @@ import {
   localAssetUrl,
   stableAssetId,
 } from "./assets/assetPaths";
+import {
+  type ApiKeyRecord,
+  decryptApiKeyRecord,
+  isSafeStorageAvailable,
+  makeApiKeyRecordFromPlain,
+} from "./catalog/secrets";
 
 type ProjectRecord = {
   id: string;
@@ -188,17 +194,6 @@ type Mapping = {
   create: HttpOperation;
   query?: HttpOperation;
   statusMapping?: Record<string, string[]>;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ApiKeyRecord = {
-  vendorKey: string;
-  /** Key material. Encoding indicated by `enc`. Legacy v1 records have no `enc` and are plaintext. */
-  apiKey: string;
-  /** v2+: how the apiKey above is encoded. Absent = legacy plaintext (v1). */
-  enc?: "safeStorage" | "plain";
-  enabled: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -1216,52 +1211,6 @@ function migrateCatalogForward(state: CatalogState): CatalogState {
 function writeCatalog(state: CatalogState): CatalogState {
   writeJson(catalogPath(), state);
   return state;
-}
-
-// =================================================================
-// API key encryption (M5.2)
-//
-// safeStorage uses OS keychain (macOS Keychain, Windows DPAPI, libsecret on Linux).
-// When unavailable (e.g. rootless Linux without keyring), we fall back to plaintext
-// and tag the record so a future read can lazy-upgrade.
-// =================================================================
-
-let __safeStorageAvailableCached: boolean | null = null;
-function isSafeStorageAvailable(): boolean {
-  if (__safeStorageAvailableCached !== null) return __safeStorageAvailableCached;
-  try {
-    __safeStorageAvailableCached = safeStorage.isEncryptionAvailable();
-  } catch {
-    __safeStorageAvailableCached = false;
-  }
-  if (!__safeStorageAvailableCached) {
-    console.warn("[catalog] safeStorage unavailable; API keys will be stored as plaintext");
-  }
-  return __safeStorageAvailableCached;
-}
-
-/** Build a fresh ApiKeyRecord from plaintext, encrypting if safeStorage is available. */
-function makeApiKeyRecordFromPlain(plain: string, vendorKey: string, enabled: boolean, createdAt: string, updatedAt: string): ApiKeyRecord {
-  if (isSafeStorageAvailable()) {
-    const encrypted = safeStorage.encryptString(plain).toString("base64");
-    return { vendorKey, apiKey: encrypted, enc: "safeStorage", enabled, createdAt, updatedAt };
-  }
-  return { vendorKey, apiKey: plain, enc: "plain", enabled, createdAt, updatedAt };
-}
-
-/** Decode an ApiKeyRecord to plaintext. Throws if a safeStorage-encoded value can't be decrypted. */
-function decryptApiKeyRecord(rec: ApiKeyRecord | undefined): string {
-  if (!rec || !rec.apiKey) return "";
-  if (rec.enc === "safeStorage") {
-    try {
-      return safeStorage.decryptString(Buffer.from(rec.apiKey, "base64"));
-    } catch (e) {
-      console.error(`[catalog] failed to decrypt API key for vendor ${rec.vendorKey}: ${e instanceof Error ? e.message : e}`);
-      return "";
-    }
-  }
-  // enc === "plain" or absent (legacy v1)
-  return rec.apiKey;
 }
 
 function normalizeEnabled(value: unknown, fallback = true): boolean {
