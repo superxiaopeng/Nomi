@@ -107,6 +107,14 @@
   .pkUpload:hover{border-color:var(--nomi-accent);color:var(--nomi-accent)}
   .pkUpload svg{width:15px;height:15px}
   .pkFoot{font-size:11px;color:var(--nomi-ink-40);text-align:center}
+  /* 搜索框：素材一多，搜名字 2 个键定位 */
+  .pkSearch{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;border:1px solid var(--nomi-line);
+    border-radius:var(--r-sm);background:var(--nomi-ink-05);color:var(--nomi-ink-40);font-size:12px}
+  .pkSearch svg{width:13px;height:13px}
+  .pkHead{display:flex;align-items:baseline;justify-content:space-between}
+  .pkMore{font-size:11px;color:var(--nomi-accent);cursor:pointer}
+  /* 「最近」用可滚动网格，多了也不撑爆；想翻全部去素材面板 */
+  .pkGrid{display:grid;grid-template-columns:repeat(5,48px);gap:6px;max-height:108px;overflow:auto;padding-bottom:2px}
 </style>
 </head>
 <body>
@@ -178,8 +186,9 @@
         <div class="tile click"><span class="num">1</span><img src="https://picsum.photos/seed/g1/100"/></div>
         <div class="tile add" style="outline:2px solid var(--nomi-accent);outline-offset:1px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
       </div>
-      <!-- 选择器：紧贴「+」弹出 -->
+      <!-- 选择器：紧贴「+」弹出。定位 = 快速取（搜索 + 最近），不是全量浏览器 -->
       <div class="picker">
+        <div class="pkSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> 搜索素材名…</div>
         <div class="pkSec">
           <span class="pkLbl">画布</span>
           <div class="pkRow">
@@ -189,15 +198,23 @@
           </div>
         </div>
         <div class="pkSec">
-          <span class="pkLbl">项目素材</span>
-          <div class="pkRow">
+          <div class="pkHead"><span class="pkLbl">项目素材 · 最近</span><span class="pkMore">浏览全部 →</span></div>
+          <!-- 可滚动网格：素材几百张也只占这块、能滚；想翻全部点「浏览全部」去素材面板 -->
+          <div class="pkGrid">
             <div class="pkItem"><img src="https://picsum.photos/seed/a1/80"/></div>
             <div class="pkItem video"><img src="https://picsum.photos/seed/a2/80"/><span class="pkType"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div>
             <div class="pkItem audio"><span class="wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:8px"></i></span></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a4/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a5/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a6/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a7/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a8/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a9/80"/></div>
+            <div class="pkItem"><img src="https://picsum.photos/seed/a10/80"/></div>
           </div>
         </div>
         <button class="pkUpload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg> 上传本地文件</button>
-        <div class="pkFoot">或把文件拖进来 · 从卡片拉条线过来</div>
+        <div class="pkFoot">或把文件拖进来 · 从卡片拉条线 · 从素材面板拖到节点</div>
       </div>
     </div>
   </div>
