@@ -107,7 +107,6 @@ import type {
   AiSdkProviderKind,
   BillingModelKind,
   CatalogState,
-  CatalogVersion,
   HttpOperation,
   Mapping,
   Model,
