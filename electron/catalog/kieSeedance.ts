@@ -52,6 +52,7 @@ export const SEEDANCE_2_CREATE_OP: HttpOperation = {
       resolution: "{{request.params.resolution}}",
       aspect_ratio: "{{request.params.aspect_ratio}}",
       duration: "{{request.params.duration}}",
+      generate_audio: "{{request.params.generate_audio}}",
     },
   },
 };

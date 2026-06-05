@@ -14,7 +14,7 @@ describe("toCatalogModelOptions — 认得的模型注入内置档案控件", ()
   it("Seedance（仅靠 modelKey 身份命中、无 meta）→ 渲染出档案的 比例/清晰度/时长/音频", () => {
     const [opt] = toCatalogModelOptions([model({ modelKey: "bytedance/seedance-2" })]);
     const controls = parseModelParameterControls(opt.meta);
-    expect(controls.map((c) => c.key)).toEqual(["resolution", "aspect_ratio", "duration", "audio"]);
+    expect(controls.map((c) => c.key)).toEqual(["resolution", "aspect_ratio", "duration", "generate_audio"]);
     const resolution = controls.find((c) => c.key === "resolution");
     expect(resolution?.options.map((o) => o.value)).toEqual(["480p", "720p", "1080p"]);
     expect(resolution?.defaultValue).toBe("720p");
@@ -26,7 +26,7 @@ describe("toCatalogModelOptions — 认得的模型注入内置档案控件", ()
       "resolution",
       "aspect_ratio",
       "duration",
-      "audio",
+      "generate_audio",
     ]);
   });
 

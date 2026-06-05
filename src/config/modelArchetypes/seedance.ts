@@ -19,7 +19,8 @@ const FIRST_MODE_PARAMS: ModelParameterControl[] = [
     defaultValue: "16:9",
   },
   { key: "duration", label: "时长", type: "number", options: [], min: 4, max: 15, defaultValue: 5 },
-  { key: "audio", label: "生成音频", type: "boolean", options: [], defaultValue: true },
+  // key 对齐 kie input 键 generate_audio，让控件值直接流到请求体（avoid 键名漂移）。
+  { key: "generate_audio", label: "生成音频", type: "boolean", options: [], defaultValue: true },
 ];
 
 export const SEEDANCE_2_ARCHETYPE: ModelArchetype = {

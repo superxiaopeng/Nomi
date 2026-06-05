@@ -1,0 +1,105 @@
+// 完整端到端（规则 13）：用 Playwright 驱动**真实构建产物**，走 app 自己的运行时把一次
+// Seedance「首帧」生成跑通——UI/preload → IPC → runtime(taskTemplateParams) → 内置 mapping
+// → 真实 kie createTask → recordInfo 轮询 → resultJson 解析 → 视频 asset。
+//
+// **会花真实额度**，故用 KIE_API_KEY 环境变量门控：没设就跳过（CI 不跑、文件里无密钥）。
+// 用法：pnpm run build && KIE_API_KEY=xxxx node tests/ux/seedance.e2e.mjs
+//   可选 SEEDANCE_FIRST_FRAME=<图片URL> 指定首帧（默认用一张公开测试图）。720p + generate_audio:false 省额度。
+import { _electron as electron } from "playwright";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+const KEY = process.env.KIE_API_KEY;
+if (!KEY) {
+  console.log("SKIP seedance.e2e: 未设 KIE_API_KEY（这条会花额度，按需手动跑）。");
+  process.exit(0);
+}
+const FIRST_FRAME = process.env.SEEDANCE_FIRST_FRAME || "https://picsum.photos/seed/nomi-e2e/1280/720";
+
+let passed = 0;
+function assert(cond, label) {
+  if (!cond) throw new Error(`E2E FAIL: ${label}`);
+  passed += 1;
+  console.log(`  ✓ ${label}`);
+}
+
+const app = await electron.launch({
+  executablePath: require("electron"),
+  args: ["."],
+  cwd: repoRoot,
+  env: { ...process.env, NOMI_E2E_SMOKE: "1" },
+});
+
+try {
+  const win = await app.firstWindow();
+  await win.waitForLoadState("domcontentloaded");
+  await win.waitForTimeout(1500);
+
+  // 1) 启动即 seed 生效（内置 Seedance 在目录里）
+  const seeded = await win.evaluate(() => {
+    const mc = window.nomiDesktop?.modelCatalog;
+    const m = mc?.listModels({ kind: "video", enabled: true })?.find((x) => x.modelKey === "bytedance/seedance-2");
+    return Boolean(m) && m?.meta?.archetypeId === "seedance-2";
+  });
+  assert(seeded, "启动后 Seedance 在目录、带 archetypeId");
+
+  // 2) 把 kie API key 填进内置 vendor（safeStorage 加密存）
+  const keySet = await win.evaluate((key) => window.nomiDesktop.modelCatalog.upsertVendorApiKey("kie", { apiKey: key, enabled: true }), KEY);
+  assert(keySet?.hasApiKey, "kie API key 已设置");
+
+  // 3) 经 app runtime 发起一次 Seedance 首帧生成（真实 createTask + 内置 mapping）
+  const initial = await win.evaluate(async (args) => {
+    return await window.nomiDesktop.tasks.run({
+      vendor: "kie",
+      request: {
+        kind: "image_to_video",
+        prompt: args.prompt,
+        extras: {
+          modelKey: "bytedance/seedance-2",
+          firstFrameUrl: args.frame,
+          resolution: "720p",
+          aspect_ratio: "16:9",
+          duration: "5",
+          generate_audio: false,
+        },
+      },
+    });
+  }, { prompt: "a gentle slow cinematic zoom-in on the scene", frame: FIRST_FRAME });
+  assert(initial?.id, "app runtime 返回 taskId（createTask 经内置 mapping 成功）");
+  console.log(`    taskId=${initial.id} status=${initial.status}`);
+
+  // 4) 经 app runtime 轮询（真实 recordInfo + 状态归一 + resultJson 解析）
+  let final = initial;
+  const terminal = new Set(["succeeded", "failed"]);
+  for (let i = 0; i < 40 && !terminal.has(final.status); i++) {
+    await new Promise((r) => setTimeout(r, 15000));
+    const resp = await win.evaluate(async (args) => {
+      return await window.nomiDesktop.tasks.result({
+        taskId: args.id,
+        vendor: "kie",
+        taskKind: "image_to_video",
+        prompt: args.prompt,
+        modelKey: "bytedance/seedance-2",
+      });
+    }, { id: initial.id, prompt: "a gentle slow cinematic zoom-in on the scene" });
+    final = resp?.result ?? final;
+    console.log(`    poll ${i + 1}: ${final.status}`);
+  }
+
+  assert(final.status === "succeeded", `生成成功（status=${final.status}）`);
+  const video = (final.assets || []).find((a) => a.type === "video" && a.url);
+  assert(video, "返回视频 asset（resultJson.resultUrls 解析正确）");
+  console.log(`    video=${video.url}`);
+
+  console.log(`\nSEEDANCE E2E PASS: ${passed} assertions`);
+} catch (error) {
+  console.error(`\n${error?.message || error}`);
+  await app.close();
+  process.exit(1);
+} finally {
+  await app.close().catch(() => undefined);
+}

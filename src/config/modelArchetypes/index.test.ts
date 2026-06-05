@@ -40,7 +40,7 @@ describe("resolveArchetypeForModel — 供应商无关的识别桥", () => {
   it("首帧模式的标量参数复用 ModelParameterControl 形状（规则 1，非并行类型）", () => {
     const a = getArchetypeById("seedance-2");
     const first = a?.modes.find((m) => m.id === "first");
-    expect(first?.params.map((p) => p.key)).toEqual(["resolution", "aspect_ratio", "duration", "audio"]);
+    expect(first?.params.map((p) => p.key)).toEqual(["resolution", "aspect_ratio", "duration", "generate_audio"]);
     expect(first?.slots).toEqual([{ kind: "first_frame", label: "首帧", min: 1, max: 1 }]);
   });
 });

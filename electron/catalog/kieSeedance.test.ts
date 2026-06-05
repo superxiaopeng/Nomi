@@ -22,6 +22,7 @@ const context = buildTemplateContext({
     resolution: "720p",
     aspect_ratio: "16:9",
     duration: "5",
+    generate_audio: false,
   },
   model: { modelKey: SEEDANCE_2_MODEL_SEED.modelKey },
   modelKey: SEEDANCE_2_MODEL_SEED.modelKey,
@@ -52,6 +53,7 @@ describe("Seedance 2.0 · 首帧 — createTask 请求", () => {
         resolution: "720p",
         aspect_ratio: "16:9",
         duration: "5",
+        generate_audio: false,
       },
     });
   });
