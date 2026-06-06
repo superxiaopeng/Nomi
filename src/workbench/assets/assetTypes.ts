@@ -67,6 +67,17 @@ export function workspaceNodeToAssetRef(node: WorkspaceFileNode, projectId: stri
   }
 }
 
+/** 按种类 + 名字模糊搜索过滤素材（picker 用，纯函数便于单测）。 */
+export function filterAssets(assets: AssetRef[], opts: { query?: string; accept?: AssetKind[] } = {}): AssetRef[] {
+  const query = (opts.query || '').trim().toLowerCase()
+  const accept = opts.accept && opts.accept.length ? opts.accept : null
+  return assets.filter((asset) => {
+    if (accept && !accept.includes(asset.kind)) return false
+    if (query && !asset.name.toLowerCase().includes(query)) return false
+    return true
+  })
+}
+
 /** 把项目文件树（含目录 children）压平成节点列表，供 mapper 逐个解析。 */
 export function flattenWorkspaceFiles(nodes: WorkspaceFileNode[]): WorkspaceFileNode[] {
   const out: WorkspaceFileNode[] = []
