@@ -41,6 +41,9 @@ importers:
       '@tabler/icons-react':
         specifier: ^3.19.0
         version: 3.44.0(react@18.3.1)
+      '@tiptap/core':
+        specifier: 3.23.5
+        version: 3.23.5(@tiptap/pm@3.23.5)
       '@tiptap/extension-placeholder':
         specifier: ^3.22.5
         version: 3.23.5(@tiptap/extensions@3.23.5(@tiptap/core@3.23.5(@tiptap/pm@3.23.5))(@tiptap/pm@3.23.5))

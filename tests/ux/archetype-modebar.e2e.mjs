@@ -110,6 +110,18 @@ try {
   assert(afterUpload.badge1, "上传后角色图 chip 带 ① 数字徽标（character1）");
   assert(afterUpload.hasCue, "prompt 旁出现 character1.. 提示（U2）");
 
+  // @ 内联引用主路径：点已加的参考 tile → 描述框光标处插入 18px chip（规范 §4）
+  await win.locator(".generation-canvas-v2-node__prompt-input").last().click();
+  await win.keyboard.type("阳光下 ");
+  await win.waitForTimeout(200);
+  await win.locator('.generation-canvas-v2-node__composer [role="button"]:has(img)').first().click();
+  await win.waitForTimeout(400);
+  const mention = await win.evaluate(() => {
+    const editor = document.querySelector(".generation-canvas-v2-node__prompt-input");
+    return { chips: editor ? editor.querySelectorAll("[data-asset-mention]").length : 0, chipHasImg: Boolean(editor?.querySelector("[data-asset-mention] img")) };
+  });
+  assert(mention.chips >= 1 && mention.chipHasImg, "点参考 tile → 描述框插入 @ 引用 chip（18px 缩略图）");
+
   // ── C4：切到 HappyHorse → 4 模式合 1（各用模型自己的真名）+ i2v 无比例（U3）──
   await modelSelect.selectOption({ label: "HappyHorse 1.0" }).catch(async () => { await modelSelect.selectOption("happyhorse") });
   await win.waitForTimeout(1200);

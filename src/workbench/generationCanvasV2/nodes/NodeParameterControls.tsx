@@ -59,6 +59,8 @@ type NodeParameterControlsProps = {
   // section="parameters" 的设置芯片：开合状态由父级（composer）持有，便于把弹层渲染在卡底（不被裁剪）。
   settingsOpen?: boolean
   onToggleSettings?: () => void
+  /** 点参考 tile → 在描述框光标处插入 @ 引用 chip(主路径,由 composer 注入 editor 命令)。 */
+  onInsertMention?: (url: string) => void
 }
 
 function chooseDefaultModelOption(
@@ -110,6 +112,7 @@ export default function NodeParameterControls({
   section = 'all',
   settingsOpen = false,
   onToggleSettings,
+  onInsertMention,
 }: NodeParameterControlsProps): JSX.Element | null {
   const nodes = useGenerationCanvasStore((state) => state.nodes)
   const edges = useGenerationCanvasStore((state) => state.edges)
@@ -532,6 +535,7 @@ export default function NodeParameterControls({
           onPick={handleAssetPick}
           onUpload={(slot, file) => { void handleAssetUpload(slot, file) }}
           onRemove={handleAssetRemove}
+          onInsertMention={onInsertMention}
         />
       ) : null}
 

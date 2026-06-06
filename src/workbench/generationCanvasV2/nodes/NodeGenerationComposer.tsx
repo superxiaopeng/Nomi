@@ -1,5 +1,7 @@
 import React from 'react'
+import type { Editor } from '@tiptap/react'
 import { cn } from '../../../utils/cn'
+import PromptEditor from '../../assets/PromptEditor'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { canRunGenerationNode, rerunGenerationNodeAsNewNode, runGenerationNode } from '../runner/generationRunController'
@@ -38,7 +40,6 @@ type FloatingComposerLayout = {
   width: number
   maxHeight: number
   gap: number
-  promptRows: number
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -61,7 +62,6 @@ function floatingComposerLayout(width: number, height: number, kind: GenerationC
     width: panelWidth,
     maxHeight,
     gap,
-    promptRows: kind === 'video' ? 4 : width >= 420 ? 3 : 2,
   }
 }
 
@@ -80,6 +80,11 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   const textGenMode = getTextGenMode(node)
   // 设置弹层开合：放在 composer 这层，弹层渲染在卡底（参数卡内的最后一块），不被节点 overflow 裁剪。
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  // 持有 prompt 编辑器实例,供「点参考 tile → 在光标处插入 chip」(@ 内联引用主路径)。
+  const [promptEditor, setPromptEditor] = React.useState<Editor | null>(null)
+  const insertMention = React.useCallback((url: string) => {
+    if (promptEditor && !promptEditor.isDestroyed) promptEditor.commands.insertAssetMention(url)
+  }, [promptEditor])
 
   const handleGenerate = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -114,7 +119,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
       >
       {isImageLikeGenerationNodeKind(node.kind) || isVideoLikeGenerationNodeKind(node.kind) ? (
         <>
-          <NodeParameterControls node={node} section="references" />
+          <NodeParameterControls node={node} section="references" onInsertMention={insertMention} />
           {/* 样张 v4 .divider：参考区与描述之间一条极淡分隔线 */}
           <div className={cn('h-px bg-nomi-line-soft')} />
         </>
@@ -141,18 +146,13 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           ))}
         </div>
       ) : null}
-      <textarea
-        className={cn(
-          'generation-canvas-v2-node__prompt-input',
-          'flex-1 w-full min-h-[38px] p-0 border-0 outline-0 resize-none',
-          'bg-transparent text-nomi-ink text-body-sm leading-[1.7]',
-          'placeholder:text-nomi-ink-40',
-        )}
-        value={node.prompt}
-        rows={composerLayout.promptRows}
+      <PromptEditor
+        className={cn('flex-1 min-h-[38px]')}
+        value={node.prompt || ''}
         placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
-        onChange={(event) => updateNode(node.id, { prompt: event.currentTarget.value })}
+        onChange={(next) => updateNode(node.id, { prompt: next })}
         onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
+        onReady={setPromptEditor}
       />
       <div className={cn('flex items-center gap-2 mt-auto min-w-0 pt-1')}>
         <NodeParameterControls

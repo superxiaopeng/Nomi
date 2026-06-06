@@ -49,7 +49,7 @@ try {
     const segBtn = seg?.querySelector("button");
     const segLabel = comp.querySelector("span"); // 生成方式 label = 第一个 span
     const addTile = comp.querySelector('button[aria-label="加参考"]');
-    const prompt = comp.querySelector("textarea");
+    const prompt = comp.querySelector(".generation-canvas-v2-node__prompt-input");
     const send = comp.querySelector('button[aria-label="生成素材"],button[aria-label="重新生成"]');
     const settings = comp.querySelector('button[aria-label="生成设置"]');
     const modelSel = comp.querySelector('select[aria-label="模型"]');
