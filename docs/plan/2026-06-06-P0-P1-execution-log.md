@@ -1,0 +1,52 @@
+# 执行日志：P0+P1 通用素材系统(自主执行)
+
+> Rule 4 执行文档 + 边做边勾的进度账。背景见 `2026-06-06-composable-node-execution-plan.md`(主计划)、
+> `2026-06-06-reference-at-and-sources.md`(原语)、样张 `2026-06-06-reference-at-v4.html`。
+> 用户(2026-06-06)授权**自主执行 + 自测 + 自验收**,不逐步打断。本文记录实际步骤、关键决策、验证证据。
+
+## 范围(这一轮做什么)
+
+把"加素材/参考"从三套 bespoke 收成一套通用原语,并接进生成节点:
+- **P0** 通用素材原语:`src/workbench/assets/`(assetPool ✅ + AssetTile + AssetPicker + 节点级 onDrop)。
+- **P1** 参考槽归一:`AssetReference`(声明式 slot 驱动)替换三套加素材 UI;@ 内联引用(Tiptap);R1 传输契约。
+
+## 不动什么(本轮边界)
+
+- 3D(Scene3D)自成体系;结果操作(裁剪/旋转)非素材输入;接入页 OnboardingWizard 体验重做(独立轨)。
+- character1 的**模型契约不变**——只是从用户眼前藏起来,发送前才出现。
+- 单帧槽的 edge+meta 双写沿用;数组槽 meta-only 沿用(M6,数组**绝不**变持久边)。
+
+## 关键决策 / 发现(随做随记)
+
+- **D1 tile 尺寸以 v4 样张为准 = 56px(`w-14 h-14`)**。交接文档写的"48px"是旧 v3,已被 v4 覆盖。
+- **D2 界面组件不写渲染单测**:项目无 testing-library、vitest=node 环境。纯逻辑(assetPool/搜索过滤)单测;
+  视觉/体感**靠 Playwright 走查 + 样张并排对账**(规则 13/8 AFTER)。
+- **D3 AssetRef 渲染地址 vs 传输地址分离**(R1):renderUrl 界面用(nomi-local 不保证 vendor 可达),
+  传输地址不存储、发送时由 origin 现算。已落地于 P0.1。
+- **🔴 D4 R1 修法待调研(交接文档描述不准)**:"把本地素材推给 vendor 变成可达 URL"的能力**现在不存在**;
+  `hardenedFetch`/`importRemoteAsset` 是**往里搬**的、方向反了。需先查 KIE/vendor 支持哪种喂法
+  (上传接口拿临时 URL? base64 内联?),再实现发送侧转换。属 P1,不卡 P0。**真实生成花额度仍先问用户。**
+- **D5 巨壳约束(规则 12)**:节点级 onDrop 要接进 `BaseGenerationNode`(1406,白名单只减不增)——
+  drop 逻辑抽独立 hook,接线若净增就同步从该文件抽等量代码,确保基线不涨。
+
+## 验收门(每个 chunk)
+
+CI 五门(filesize/lint≤98/typecheck/vitest/build)全绿 + Rule 11 自 commit/push。
+用户可见(界面)→ 落地后 Playwright 走查 + 和样张 v4 并排对账(规则 8 AFTER)。
+
+## 回滚
+
+每步"先加新原语旁路 → 走查通过 → 切换 → 删旧";旧路保留到新路验证通过才删。
+
+## 进度清单
+
+- [x] **P0.1** assetPool 地基(AssetRef 契约 + useAssetPool 派生 selector + 7 单测) — e43608b
+- [ ] **P0.2** AssetTile(56px,图/视频缩略+播放三角/音频波形,编号/删除,token + Tabler)
+- [ ] **P0.3** AssetPicker(搜索 + 画布行 + 项目最近网格[可滚]+浏览全部 + 上传 + 拖入),消费 useAssetPool
+- [ ] **P0.4** 节点级 onDrop(独立 hook,守巨壳基线)
+- [ ] **P1.1** AssetReference(声明式 slot 描述符:cardinality/persistAsEdge/form,R5)
+- [ ] **P1.2** 接生成节点 + 删旧三套(inline frame 菜单 104 行 + 源视频 30 行 + ReferenceSlots),净删
+- [ ] **P1.3** 连线→参考管道(数组 meta-only 不画线)
+- [ ] **走查自验收**:Playwright 走查 + 样张 v4 并排对账
+- [ ] **R1 传输**:调研 KIE 喂法 → 实现发送侧 nomi-local→可达 URL 转换(零额度走查;真实生成先问)
+- [ ] **@ 内联引用**:Tiptap(规则 5 先查官方)替换 textarea,编号单源(R6)

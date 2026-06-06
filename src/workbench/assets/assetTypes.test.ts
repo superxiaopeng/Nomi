@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import type { GenerationCanvasNode } from '../generationCanvasV2/model/generationCanvasTypes'
 import type { WorkspaceFileNode } from '../../../electron/workspace/workspaceFileIndex'
-import { canvasNodeToAssetRef, workspaceNodeToAssetRef, flattenWorkspaceFiles } from './assetTypes'
+import { canvasNodeToAssetRef, workspaceNodeToAssetRef, flattenWorkspaceFiles, filterAssets } from './assetTypes'
+import type { AssetRef } from './assetTypes'
 
 const canvasNode = (overrides: Partial<GenerationCanvasNode>): GenerationCanvasNode =>
   ({ id: 'n1', title: '', ...overrides } as GenerationCanvasNode)
@@ -54,6 +55,34 @@ describe('workspaceNodeToAssetRef', () => {
   it('keeps audio and video', () => {
     expect(workspaceNodeToAssetRef(wsNode({ relativePath: 'a.mp3', kind: 'audio' }), 'p')?.kind).toBe('audio')
     expect(workspaceNodeToAssetRef(wsNode({ relativePath: 'a.mp4', kind: 'video' }), 'p')?.kind).toBe('video')
+  })
+})
+
+describe('filterAssets', () => {
+  const ref = (over: Partial<AssetRef>): AssetRef =>
+    ({ id: '', kind: 'image', name: '', renderUrl: '', source: 'project', origin: { source: 'project', projectId: 'p', relativePath: '' }, ...over } as AssetRef)
+  const pool = [
+    ref({ id: '1', name: '日落.png', kind: 'image' }),
+    ref({ id: '2', name: 'clip.mp4', kind: 'video' }),
+    ref({ id: '3', name: 'bgm.mp3', kind: 'audio' }),
+  ]
+
+  it('keeps everything when no opts', () => {
+    expect(filterAssets(pool).map((a) => a.id)).toEqual(['1', '2', '3'])
+  })
+
+  it('filters by accept kinds', () => {
+    expect(filterAssets(pool, { accept: ['image'] }).map((a) => a.id)).toEqual(['1'])
+    expect(filterAssets(pool, { accept: ['image', 'video'] }).map((a) => a.id)).toEqual(['1', '2'])
+  })
+
+  it('filters by case-insensitive name query', () => {
+    expect(filterAssets(pool, { query: 'CLIP' }).map((a) => a.id)).toEqual(['2'])
+    expect(filterAssets(pool, { query: '日落' }).map((a) => a.id)).toEqual(['1'])
+  })
+
+  it('combines accept + query', () => {
+    expect(filterAssets(pool, { accept: ['audio'], query: 'mp' }).map((a) => a.id)).toEqual(['3'])
   })
 })
 
