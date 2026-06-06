@@ -95,6 +95,16 @@
   （像 `docs/design/2026-06-06-reference-v4-implementation-spec.md`：精确 token + 结构 + 状态 + 数据绑定），HTML 只是「长相参照」；
   (b) 改完**必跑 `node tests/ux/design-fidelity.e2e.mjs`**——它把规范精确值写成 computed-style/DOM 结构断言，不一致即红（肉眼对不出的覆盖问题它能抓）；
   (c) 加自定义 Tailwind token（字号/色）务必同步进 `cn()` 的 `extendTailwindMerge`，否则会被 twMerge 静默吞掉。
+- **UI 有「打开/交互态」的，必须真机逐态视觉体验过才算完成——逐元素样式对了 ≠ 没遮挡（2026-06-06 根因）**：
+  picker 每个元素尺寸/颜色都对（design-fidelity 全绿），但整体被 composer 的 `overflow-auto` 裁掉一半、上传按钮看不见——
+  这种 bug **不在元素本身，在「它与上下文的合成」**（被祖先 overflow 裁剪 / 溢出视口 / 盖住别的元素），computed-style 逐元素核对**抓不到**。
+  **纪律**：任何有「打开态」的 UI（弹层 / 面板 / 菜单 / 下拉 / picker / modal），交付前必须——
+  (a) **真机逐个打开每一个交互态**（Playwright `_electron`）截图，以真实用户视角看「能不能看全 / 会不会被挡 / 够不够得到」；
+  (b) **几何实测**（不只肉眼）：弹层 `getBoundingClientRect` 对照「祖先 overflow 容器」+「视口」，确认不被裁、不溢出、不重叠；
+  含**节点在画布边缘**等极端位置；弹层默认放不裁剪层（BodyPortal / 外层锚，仿 `SettingsPopover`），带向上翻转 + 视口 clamp；
+  (c) 把 (a)(b) 落成**可复跑回归断言**（`tests/ux/design-fidelity.e2e.mjs` 已含 picker 遮挡断言，每加一个交互态就照样补一条）；
+  (d) 发现问题 → 迭代 → 直到 (a)(b) 全过才算「完成」。
+  **派真实用户 / 设计 agent 审 UI 时，brief 必写明：配 Playwright、开每一个交互态截图、最后做一轮完整视觉体验、几何实测遮挡/溢出、再迭代优化**——别让 agent 只看静态主态。
 
 ## 规则 1：加新必删旧（No Parallel Versions）
 
