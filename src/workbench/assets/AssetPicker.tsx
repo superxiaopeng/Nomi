@@ -49,7 +49,7 @@ export default function AssetPicker({ projectId, accept, onPick, onUpload, onBro
     .join(',')
 
   return (
-    <div className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-lg', className)}>
+    <div data-testid="asset-picker" className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-md', className)}>
       <label className={cn('flex items-center gap-[6px] h-[30px] px-[8px] rounded-nomi-sm border border-nomi-line bg-nomi-ink-05')}>
         <IconSearch size={13} stroke={2} className={cn('text-nomi-ink-40 shrink-0')} />
         <input

@@ -89,6 +89,12 @@
 - **词汇 = 模型真名，别替用户「翻译」**：模式/能力标签用**模型自己的叫法（vendor 原词，如「全能参考」）**为主——用户已熟悉这些词；
   改成自创意图词反而可能**把能力说窄**（「全能参考」是多模态，写成「角色参考」会让人以为只能放角色）。
   覆盖了旧的「统一意图词为主」写法（那条本身就是这次踩坑的源头）。
+- **设计落地 = 规范驱动 + 计算样式核对，别照静态 HTML 猜（2026-06-06 根因）**：反复出「一眼就不一致」（如徽标该嵌芯片内却独立夹中间、字号忽大忽小），
+  根因是 ① 只照样张 HTML（理想态快照，缺 token 精确值 / **DOM 结构分组** / 状态）猜代码；② 用肉眼/`expect(存在)` 验收，
+  漏掉**隐藏覆盖**（twMerge 吞自定义字号类、Mantine `WorkbenchButton` 吃 radius/bg）。**纪律**：(a) 改设计前先写/读**实现规范**
+  （像 `docs/design/2026-06-06-reference-v4-implementation-spec.md`：精确 token + 结构 + 状态 + 数据绑定），HTML 只是「长相参照」；
+  (b) 改完**必跑 `node tests/ux/design-fidelity.e2e.mjs`**——它把规范精确值写成 computed-style/DOM 结构断言，不一致即红（肉眼对不出的覆盖问题它能抓）；
+  (c) 加自定义 Tailwind token（字号/色）务必同步进 `cn()` 的 `extendTailwindMerge`，否则会被 twMerge 静默吞掉。
 
 ## 规则 1：加新必删旧（No Parallel Versions）
 

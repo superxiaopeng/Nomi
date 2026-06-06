@@ -462,39 +462,29 @@ export default function NodeParameterControls({
     }
     return (
       <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-1 flex-nowrap items-center gap-2 min-w-0')}>
-        <div className={cn('inline-flex items-center gap-1.5 min-w-0')}>
-          <div className={cn('relative inline-flex items-center')}>
-            <select
-              className={cn(
-                'appearance-none h-7 max-w-[164px] pl-3 pr-7 rounded-pill',
-                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 font-[inherit] text-caption',
-                'cursor-pointer outline-0 focus:border-nomi-accent truncate',
-              )}
-              style={{
-                backgroundImage:
-                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>\")",
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 10px center',
-              }}
-              aria-label="模型"
-              value={selectedModelOption?.value || ''}
-              onChange={(event) => handleModelChange(event.target.value)}
-            >
-              <option value="">选择模型</option>
-              {modelOptions.map((option) => (
-                <option key={option.value || 'auto'} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
+        {/* 模型芯片：一个 pill 内含 名称 + 模板/通用徽标 + 下拉箭头（样张 v4：徽标嵌在芯片内，不是独立 pill 夹在中间） */}
+        <div className={cn('inline-flex items-center gap-1 h-7 pl-3 pr-2.5 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
+          <select
+            className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 cursor-pointer truncate min-w-0 max-w-[150px]')}
+            aria-label="模型"
+            value={selectedModelOption?.value || ''}
+            onChange={(event) => handleModelChange(event.target.value)}
+          >
+            <option value="">选择模型</option>
+            {modelOptions.map((option) => (
+              <option key={option.value || 'auto'} value={option.value}>{option.label}</option>
+            ))}
+          </select>
           {selectedModelOption ? (
             <span
               className={cn(
-                'shrink-0 text-micro leading-none px-1.5 py-[3px] rounded-pill',
+                'shrink-0 text-micro leading-none px-1.5 py-[1px] rounded-pill',
                 archetype ? 'bg-nomi-accent-soft text-nomi-accent' : 'bg-nomi-ink-10 text-nomi-ink-60',
               )}
               title={archetype ? '认得这个模型 · 用内置模板' : '未识别 · 通用回退（按接入文档原样展示）'}
             >{archetype ? '模板' : '通用'}</span>
           ) : null}
+          <span className={cn('shrink-0 text-nomi-ink-40 text-micro leading-none pointer-events-none')} aria-hidden>▾</span>
         </div>
         {renderedControls.length > 0 && onToggleSettings ? (
           <button
@@ -502,7 +492,7 @@ export default function NodeParameterControls({
             data-open={settingsOpen ? 'true' : 'false'}
             aria-expanded={settingsOpen}
             className={cn(
-              'inline-flex items-center gap-1.5 h-7 px-3 rounded-pill min-w-0',
+              'inline-flex items-center gap-1.5 h-7 px-[10px] rounded-pill min-w-0',
               'border border-nomi-line bg-nomi-paper text-nomi-ink-80 font-[inherit] text-caption cursor-pointer',
               'hover:border-nomi-ink-20',
               'data-[open=true]:border-nomi-accent data-[open=true]:text-nomi-accent data-[open=true]:bg-nomi-accent-soft',

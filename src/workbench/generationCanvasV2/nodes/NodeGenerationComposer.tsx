@@ -3,7 +3,6 @@ import { cn } from '../../../utils/cn'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { canRunGenerationNode, rerunGenerationNodeAsNewNode, runGenerationNode } from '../runner/generationRunController'
-import { WorkbenchButton } from '../../../design'
 import NodeParameterControls from './NodeParameterControls'
 import { persistActiveWorkbenchProjectNow } from '../../project/workbenchProjectSession'
 import {
@@ -108,13 +107,17 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
       <div
         className={cn(
           'generation-canvas-v2-node__composer-card',
-          'flex flex-col gap-[6px] p-[10px] min-h-[150px]',
-          'border border-nomi-line-soft rounded-nomi bg-nomi-paper overflow-auto shadow-nomi-lg',
+          'flex flex-col gap-[11px] p-[12px] min-h-[150px]',
+          'border border-nomi-line rounded-nomi bg-nomi-paper overflow-auto shadow-nomi-md',
         )}
         style={{ maxHeight: composerLayout.maxHeight }}
       >
       {isImageLikeGenerationNodeKind(node.kind) || isVideoLikeGenerationNodeKind(node.kind) ? (
-        <NodeParameterControls node={node} section="references" />
+        <>
+          <NodeParameterControls node={node} section="references" />
+          {/* 样张 v4 .divider：参考区与描述之间一条极淡分隔线 */}
+          <div className={cn('h-px bg-nomi-line-soft')} />
+        </>
       ) : null}
       {isTextKind ? (
         <div className={cn('flex items-center gap-1')} role="group" aria-label="生成模式">
@@ -142,7 +145,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         className={cn(
           'generation-canvas-v2-node__prompt-input',
           'flex-1 w-full min-h-[38px] p-0 border-0 outline-0 resize-none',
-          'bg-transparent text-nomi-ink font-[inherit] text-[12.5px] leading-[1.5]',
+          'bg-transparent text-nomi-ink text-body-sm leading-[1.7]',
           'placeholder:text-nomi-ink-40',
         )}
         value={node.prompt}
@@ -169,12 +172,13 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           const title = disabledReason ?? (isGenerating ? '生成中…' : hasResult ? '重新生成' : '生成')
           return (
             <span title={title} style={{ display: 'contents' }}>
-              <WorkbenchButton
+              {/* 原生 button：避开 WorkbenchButton(Mantine)对 radius/bg 的覆盖,确保样张 v4 的深色圆形主行动钮 */}
+              <button
+                type="button"
                 className={cn(
                   'inline-flex items-center justify-center shrink-0 w-[30px] h-[30px] p-0',
-                  'border-0 rounded-full bg-nomi-ink text-nomi-paper',
-                  'font-[inherit] text-[14px] leading-none',
-                  'hover:enabled:bg-nomi-accent',
+                  'border-0 rounded-full bg-nomi-ink text-nomi-paper text-[14px] leading-none cursor-pointer',
+                  'transition-colors hover:enabled:bg-nomi-accent',
                   'disabled:bg-nomi-ink-20 disabled:text-nomi-ink-40 disabled:cursor-not-allowed',
                 )}
                 aria-label={hasResult ? '重新生成' : '生成素材'}
@@ -182,7 +186,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
                 onClick={handleGenerate}
               >
                 {isGenerating ? '···' : '↑'}
-              </WorkbenchButton>
+              </button>
             </span>
           )
         })()}
