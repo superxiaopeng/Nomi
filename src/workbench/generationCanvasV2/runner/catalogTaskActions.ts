@@ -24,7 +24,7 @@ import {
 } from '../model/generationNodeKinds'
 import type { ResolvedGenerationReferences } from './generationReferenceResolver'
 import { resolveArchetypeForModel } from '../../../config/modelArchetypes'
-import { buildArchetypeInputParams } from '../nodes/controls/archetypeMeta'
+import { buildArchetypeInputParams, currentArchetypeMode } from '../nodes/controls/archetypeMeta'
 import { projectPromptForSend } from '../../assets/promptMentions'
 
 export type CatalogTaskActionOptions = {
@@ -147,13 +147,15 @@ async function resolveExecutableNodeFromCatalog(
 
 function resolveTaskKind(node: GenerationCanvasNode, references: Partial<ResolvedGenerationReferences>): TaskKind {
   const executionKind = getGenerationNodeExecutionKind(node.kind)
-  if (executionKind === 'video') {
-    // 认得档案的模型：mapping 桶**显式**由档案声明（archetype.transportTaskKind），不靠参考启发式猜——
-    // 否则 Seedance omni（无首帧）会被误判成 text_to_video 而撞到 HappyHorse 的 mapping。同一档案所有模式
-    // 打同一 createTask 端点（供应商按 model enum 自分流）。
-    const meta = node.meta || {}
+  const meta = node.meta || {}
+  // 认得档案的模型（视频**或图像**）：mapping 桶**显式**由档案声明（当前模式 transportTaskKind 覆盖 > 档案级），
+  // 不靠参考启发式猜——否则 Seedance omni（无首帧）会被误判 text_to_video 撞到别的模型；图像档案的文生图/改图
+  // taskKind 也得各走各的桶。modelKey 精确路由（findTaskMapping）再保证打到本模型的 mapping。
+  if (executionKind === 'video' || executionKind === 'image') {
     const archetype = resolveArchetypeForModel({ modelKey: asTrimmedString(meta.modelKey), modelAlias: asTrimmedString(meta.modelAlias), meta })
-    if (archetype) return archetype.transportTaskKind
+    if (archetype) return currentArchetypeMode(archetype, meta).transportTaskKind ?? archetype.transportTaskKind
+  }
+  if (executionKind === 'video') {
     const hasFrame = Boolean(
       asTrimmedString(references.firstFrameUrl) ||
       asTrimmedString(references.lastFrameUrl) ||

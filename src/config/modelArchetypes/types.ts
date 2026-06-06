@@ -43,11 +43,12 @@ export type ArchetypeReferenceSlot = {
 export type ArchetypeIntent = "text" | "single" | "firstlast" | "character" | "edit";
 
 /**
- * 该档案的所有模式打到哪条 mapping（catalog mapping 按 (vendor, taskKind) 寻址）。**显式声明，不靠
+ * 该档案打到哪个 mapping 桶（catalog mapping 按 (vendor, taskKind[, modelKey]) 寻址）。**显式声明，不靠
  * 启发式猜**——避免「omni 无首帧 → 误判 text_to_video → 撞到别的模型的 mapping」这类 bug。
- * 同一档案的所有模式都打同一个 createTask 端点（供应商按 model enum 自分流），故只需一个值。
+ * 视频档案所有模式同一个值（供应商按 model enum 自分流）；图像档案的文生图/改图 taskKind 不同，
+ * 由各模式的 `ArchetypeMode.transportTaskKind` 覆盖档案级值。
  */
-export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video";
+export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video" | "text_to_image" | "image_edit";
 
 export type ArchetypeMode = {
   id: string;
@@ -65,16 +66,21 @@ export type ArchetypeMode = {
    * 缺省（如 Seedance 三模式同 model）→ 用 catalog 的 modelKey。
    */
   modelEnum?: string;
+  /**
+   * 覆盖档案级 transportTaskKind（图像档案专用）：文生图模式=`text_to_image`、改图模式=`image_edit`，
+   * 两者打不同 mapping 桶。视频档案各模式同 taskKind → 缺省即可，用档案级值。
+   */
+  transportTaskKind?: ArchetypeTransportTaskKind;
 };
 
 export type ModelArchetype = {
   id: string; // 'seedance-2'
   family: string; // 'seedance'
   label: string; // 'Seedance 2.0'
-  kind: "video";
+  kind: "video" | "image";
   modes: ArchetypeMode[];
   defaultModeId: string;
-  /** 该档案所有模式打到哪条 mapping（显式，不靠启发式）。见 ArchetypeTransportTaskKind。 */
+  /** 该档案默认打到哪个 mapping 桶（显式，不靠启发式）。图像档案可被 mode.transportTaskKind 覆盖。 */
   transportTaskKind: ArchetypeTransportTaskKind;
   /**
    * 识别用：模型身份（modelKey/别名）匹配这些 pattern 之一就套这套档案。
