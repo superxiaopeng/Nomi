@@ -42,7 +42,7 @@
 
 1. **「双面板」是给『顺序流程』装了『独立域』的壳。** 创作（写文本）→ 拆镜头 → 生成（画布）→ 时间轴，是同一个创作流的**先后阶段**，不是互相独立的领域。但 UI 把它切成两套面对用户的助手，于是同一件事要在两处分别长出控件、文案、模式、模型选择。
 2. **事件桥 = 脆弱路由。** creation→generation 用 `window` CustomEvent + `setTimeout(60)` 等面板挂载（`CreationAiPanel.tsx:145`）。时序耦合、跨 React 生命周期、难测、易漏（定妆就没接自然语言入口，拆镜头才有正则 `STORYBOARD_REQUEST_PATTERN`）。
-3. **同一能力两套实现（违反 P1）。** 例：定妆有两条路径——节点级 `applyFixationMakeup`（带参考图、对的）vs 剧本级 `launchFixationPlanning`（不带参考图、产出卡没生成钮）。用户撞上后者就「没参考我的图」。
+3. **定妆「双路径」是命名歧义，不是 P1 重复实现**（← 本条经 2026-06-07 复核修正，详见 §10）。两条路是**两个不同生产阶段的不同操作**，只是都叫「定妆」：节点级 `applyFixationMakeup`（`buildFixationNode.ts:30-70`，输入一张已有图 → i2i 衍生）vs 剧本级 `launchFixationPlanning`（`CreationAiPanel.tsx:151-168`，输入剧本文本、此刻无图 → 建 character/scene 概念卡，idle 等用户生成）。二者共用的提示词抽象 `buildFixationPrompt` 已抽出（`fixationPromptTemplates.ts:1-11`），无实质重叠。用户「没参考我的图」是因为点了同名的剧本级入口却期待节点级行为——**根因是命名/标签歧义，不是并行实现**。
 4. **控件不一致是「双壳」的必然产物。** 模型选择器只在生成区有、还会自我隐藏；模式选项两边语义不同（创作模式 vs Agent/chat/refine）。用户感知为「这个有那个没有」。
 5. **行话外露。** 「拆镜头」「定妆」是制片术语，被摆成一等按钮，用户看不懂（你已指出）。它们本质是「让这个助手去做的一类活」，该是**工具**不是**门面按钮**。
 
@@ -92,7 +92,7 @@
 
 1. **一个面板**：合并 `CreationAiPanel` 与 `CanvasAssistantPanel` 为单一助手组件，工具域随「当前活跃区」动态切换（在编辑器→文档工具；在画布→画布工具；在时间轴→时间轴工具）。后端已是单 runtime + 单 session，天然支持。
 2. **拆镜头/定妆/定景 → 工具**：从面板按钮降级为这个助手的 capability（skill/tool）。用户自然语言说「把这段拆成镜头」「给这个角色定妆」即触发；不再需要 window 事件桥。删掉桥与重复路径（P1）。
-3. **定妆只留一条对的路径**：统一走「带参考图的 i2i + 正常 composer/生成钮」，删掉剧本级不带图的并行实现（P1）。
+3. **定妆消除命名歧义（非删路径）**：保留两条本质不同的路径，但让用户清楚自己在做哪件事——节点级入口标「基于此图定妆/身份板衍生」（有图 i2i），剧本级入口标「剧本立角色/场景卡」（无图、建卡待生成）。共用的 `buildFixationPrompt` 不动。**不删剧本级**：它在「还没有图」阶段不可能走 i2i（无图源、tool 无 references 通道），删了等于砍掉剧本→立卡的主线（详见 §10）。
 4. **模型选择器常驻且一致**：助手模型选择并入统一控件，不再「时有时无」。
 5. **控件语言统一**：一套模式语义、一套底栏。
 
@@ -118,7 +118,7 @@
 > 每阶段都要：① 先出样张/或先评审（R8）② 加新同 commit 删旧（P1）③ 五门全过 ④ Playwright 真机走查（R13）。
 
 - **阶段 0（本文）**：审计 + 决策。✅
-- **阶段 1**：把「拆镜头/定妆」从 `CreationAiPanel` 按钮改造为统一助手的**工具**（自然语言触发），删 window 事件桥与重复 fixation 路径。验收：说人话能拆镜头/定妆，且定妆带参考图、产出卡有生成钮。
+- **阶段 1**：把「拆镜头/定妆」从 `CreationAiPanel` 按钮改造为统一助手的**工具**（自然语言触发），删 window 事件桥。**注意**：是「拆桥」不是「删定妆某条路径」——两条定妆路径都保留（§10），只把触发方式从 DOM 事件改成结构化工具调用，并消除命名歧义。复核已确认工具执行逻辑早在组件外的全局 store + `generationCanvasTools`（`generationCanvasTools.ts:52-98`），创作区助手可直接调用，后端/store 几乎不动。验收：说人话能拆镜头/能在剧本阶段立角色卡、在图节点上做 i2i 定妆，两种定妆的入口文案不再混淆。
 - **阶段 2**：合并两个面板为一个上下文感知助手；统一模式/模型选择器。验收：一个面板跨创作/生成连续工作，控件不再「时有时无」。
 - **阶段 3（可选）**：工具膨胀后引入 subagent-as-tools（对用户仍是一个面板）。
 
@@ -135,3 +135,28 @@
 1. 架构方向取 **B（单面板 + 工具化，推荐）**？还是先只做阶段 1（工具化拆镜头/定妆、拆桥）？
 2. 选择面板重设计与架构合并的**先后顺序**（建议先做选择面板）？
 3. 是否要我再正式跑一遍 **R7 子 agent 独立评审**（本文的六角色是我基于全量代码上下文写的；如需第二双眼睛可另起 subagent）？
+
+---
+
+## 10. 复核修正（2026-06-07，独立 subagent 二次核验）
+
+> 用独立 Explore subagent 逐条核了本文的事实 claim（带 file:line），并深挖两处「被低估的硬骨头」。结论：**§1 全部 7 条事实 claim 成立**；但**§2.3 / §5.3 的「定妆双路径=P1 重复实现」判错了**，已在上文修正。另确认 phase-1 比原文更可行。
+
+### 10.1 修正：定妆不是「重复实现」，是「两个阶段的不同操作 + 命名歧义」
+- 路径 A `applyFixationMakeup`（`buildFixationNode.ts:31`：`srcUrl = node.result?.url`，无图直接 no-op）：**输入一张已有图** → `references:[srcUrl]` + i2i 模型 `gpt-image-2-image-to-image`（`buildFixationNode.ts:19-27,55-56`），Tier1 通用模板。
+- 路径 B `launchFixationPlanning`（`CreationAiPanel.tsx:152`：`(selectedText||documentText)`）：**输入剧本文本、此刻无图** → agent 建 `kind:'character'|'scene'` 概念卡，只有 `title/prompt`，**无 references 通道**（`generationCanvasTools.ts:12-17`），idle 等用户生成（`skills/workbench-fixation-planner/SKILL.md:14-15` 明令「不要替用户生成图」），Tier2 剧本反推模板。
+- 二者**共用** `buildFixationPrompt`（`fixationPromptTemplates.ts:1-11,71-142`），这层已是正确抽象。**代码无可合并的实质重叠，重复的只有「定妆」这个名字。**
+- → 原 §5.3「统一 i2i、删剧本级」**技术不成立**（B 无图源、tool 无 references 通道，强行 i2i = 偷跑用户该自己点的生成，违反 SKILL 约束）。正解：**消除命名歧义，两条都留**。
+
+### 10.2 强化：phase-1「工具化」比原文判断更可行（后端/store 几乎零改动）
+- 画布状态是真·全局 Zustand store（`generationCanvasStore.ts:376`），可在任意组件外 `getState()` 访问。
+- 所有工具落地动作已走纯模块 `generationCanvasTools`（`generationCanvasTools.ts:52-98`，每个方法直接调 store action），含 `generate_image/video`（`runGenerationNode` 全 store 驱动，`generationRunController.ts:63-100`）与 `send_to_timeline`（`sendGenerationNodeToTimeline.ts:51`，双 store 端口化）。
+- **已存在一条不依赖面板挂载的自动执行路径** `defaultExecuteToolCall`（`generationCanvasAgentClient.ts:109-172`）。`CanvasAssistantPanel.tsx:155-212` 那份 `applyConfirmedToolCall` 只是「确认 UI + 队列」的翻译层，不是执行权所在。
+- → phase-1 主要工作 = 抽一个共享 `applyCanvasToolCall` 模块 + 决定创作区助手的确认 UX。**runtime/store/runner 几乎不动**，原文「后端低风险」成立且更乐观。
+
+### 10.3 措辞瑕疵修正
+- 原文多处「产出卡没生成钮」更准确应为「节点为 idle 状态、等用户点生成」（canvas-planner 提示词明示「节点默认 idle，用户自己点生成按钮」）。不是没有按钮，是没自动生成 + 无参考图。
+
+### 10.4 仍未补、进实现前必须补的两件事
+1. **合并面板（阶段 2）的 HTML 样张**（R8）——本文只决策方向，未给可视样张；「工具域随活跃区动态切换」会带来「工具可用性不可见」的新风险，需样张验证。
+2. **§4 的外部「顶尖实践佐证」缺出处**（违反 R6 的「给 file:line/源」要求）——微软 SRE / LangChain / 业界共识均无 URL，建议补真实出处或降级为「待证假设」，不作为决策硬依据（B 的真正论据是内部代码已统一，不需要这段）。
