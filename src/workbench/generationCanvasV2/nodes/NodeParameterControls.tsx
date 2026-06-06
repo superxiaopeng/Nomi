@@ -77,7 +77,16 @@ function chooseDefaultModelOption(
 ): ModelOption | undefined {
   void isImageLike
   void isVideoLike
-  return options[0]
+  // 优先选「认得的模型」（有内置档案 = 带真实模板参数，徽标「模板」）作默认，
+  // 而不是盲取 options[0]。否则目录里排第一的可能是用户自接入、未识别的「通用」模型
+  // （如 gemini-omni-video），图片节点一打开默认就是它、看不到 Seedream/nano-banana 等
+  //真正的图片模型，给人「选不到图片模型」的错觉（修①，根因：默认选择没挑「好」的）。
+  // 同时跳过「图生图/编辑」类（空节点默认它 = 没参考图就不能生成，生成钮一直灰）——
+  // 新建空节点该默认到「文生图/文生视频」这类无需参考就能直接生成的模型。
+  const needsReference = (option: ModelOption): boolean =>
+    /image-to-image|img2img|i2i|image2video|edit|inpaint/i.test(`${option.value} ${option.modelKey || ''} ${option.modelAlias || ''}`)
+  const recognized = options.filter((option) => Boolean(resolveArchetypeForOption(option)))
+  return recognized.find((option) => !needsReference(option)) || recognized[0] || options[0]
 }
 
 function resolveArchetypeForOption(option: ModelOption | null) {

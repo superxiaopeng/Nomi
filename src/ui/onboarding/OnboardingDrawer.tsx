@@ -2,7 +2,7 @@
  * 模型设置抽屉——抽屉打开后看到的内容。
  *
  * - 顶部：[+ 添加模型] 按钮（打开 Wizard Modal）
- * - 下方：按 kind 分组列出已配置的模型，每条显示：名字 · vendor · 参数数 · 状态
+ * - 下方：按 kind 分组列出已配置的模型，每条显示：名字 · vendor
  * - 每条右侧 🗑 删除（不再有"编辑"——v0.8 暂不支持编辑已 onboarded 模型，重新跑 Wizard 即可）
  *
  * 用户视角权重：
@@ -24,7 +24,6 @@ type ModelRow = {
   vendorKey: string
   labelZh: string
   kind: 'text' | 'image' | 'video' | 'audio'
-  fieldsCount: number
   vendorBaseUrl: string
 }
 
@@ -51,13 +50,11 @@ export function OnboardingDrawer(): JSX.Element {
       const vendorMap = new Map<string, string>()
       for (const v of vs) vendorMap.set(String(v.key), String(v.baseUrlHint || ''))
       const rows: ModelRow[] = ms.map((m) => {
-        const onboarding = m.onboarding as { fields?: unknown[] } | undefined
         return {
           modelKey: String(m.modelKey),
           vendorKey: String(m.vendorKey),
           labelZh: String(m.labelZh || m.modelKey),
           kind: m.kind as ModelRow['kind'],
-          fieldsCount: Array.isArray(onboarding?.fields) ? onboarding!.fields!.length : 0,
           vendorBaseUrl: vendorMap.get(String(m.vendorKey)) || '',
         }
       })
@@ -134,7 +131,7 @@ export function OnboardingDrawer(): JSX.Element {
                     <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                       <Text size="sm" c="var(--nomi-ink)" truncate>{row.labelZh}</Text>
                       <Text size="xs" c="var(--nomi-ink-60)" truncate>
-                        {row.vendorKey} · {row.fieldsCount > 0 ? `${row.fieldsCount} 参数` : '无参数'}
+                        {row.vendorKey}
                       </Text>
                     </Stack>
                     <ActionIcon

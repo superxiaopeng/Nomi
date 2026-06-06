@@ -43,15 +43,15 @@ type FloatingComposerLayout = {
   gap: number
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
-
-function floatingComposerLayout(width: number, height: number, kind: GenerationCanvasNode['kind']): FloatingComposerLayout {
+function floatingComposerLayout(width: number, _height: number, kind: GenerationCanvasNode['kind']): FloatingComposerLayout {
   // 宽度不再在这里算——它**内容驱动**（CSS `w-fit` + `min-w/max-w` 边界，见卡 className），
   // 跟着该模型实际的参数横排自然撑开，参数少则窄、多则宽、触上限在卡内换行（绝不绑节点比例、不钉死常数）。
-  // 这里只保留 maxHeight（长 prompt 在编辑器内滚）+ 与节点的间距 gap。
-  const maxHeight = clampNumber(Math.round(height * 0.72), 176, kind === 'video' ? 260 : 220)
+  //
+  // 高度同理**内容驱动**，不再绑节点高（旧 `height*0.72` 是 bug 根因：小节点 → 矮卡，
+  // 「参考区 + 3 行提示词 + 底栏」放不下，overflow-hidden 把底栏的生成钮裁到卡外，修③④）。
+  // 卡片在 flex-col 里自然按内容长高；只有一个可伸缩区（提示词 flex-1 overflow-auto），
+  // 底栏 shrink-0 永远贴底可见。这里给一个宽松上限：内容超过它时只有提示词内部滚动，底栏不动。
+  const maxHeight = kind === 'video' ? 460 : 400
   const gap = width >= 420 ? 14 : 10
   return { maxHeight, gap }
 }
@@ -106,7 +106,10 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+    // 依赖 node.meta：切模型 / 改参数会改变底栏「参数行」的 scrollWidth（内容宽），
+    // 但不改 footer 的 clientWidth（盒子宽），ResizeObserver 监听盒子不会触发 → 卡宽停在旧值、
+    // 生成钮被裁到卡外。把 node.meta 列入依赖，参数行内容一变就重新实测一行真实宽度（修④）。
+  }, [node.meta])
 
   return (
     // 外层只做定位锚（不裁剪），宽度跟随内层卡（w-fit 包住确定宽度的卡，便于 -translate-x-1/2 居中）。
@@ -157,9 +160,10 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         </div>
       ) : null}
       {/* 长 prompt 在编辑器内部滚动/换行；底栏永远贴底（卡宽确定，提示词在卡宽内自然换行，不撑爆）。 */}
-      <div className={cn('flex-1 min-h-0 overflow-auto')}>
+      {/* 提示词至少 3 行高（min-h-[72px]）——参考区/底栏再多也不把它挤成 1 行（修③）；超长时本区滚动。 */}
+      <div className={cn('flex-1 min-h-[72px] overflow-auto')}>
         <PromptEditor
-          className={cn('min-h-[38px]')}
+          className={cn('min-h-[72px]')}
           value={node.prompt || ''}
           placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
           onChange={(next) => updateNode(node.id, { prompt: next })}
