@@ -19,7 +19,7 @@
 | 1a | `generationCanvasV2/components/CanvasAssistantPanel.tsx`（抽执行层）、新增 `generationCanvasV2/agent/applyCanvasToolCall.ts` | 抽共享执行模块 |
 | 1b | `creation/CreationAiPanel.tsx`、`generationCanvasV2/agent/storyboardLauncher.ts`、`fixationLauncher.ts` | 拆 window 事件桥 → 工具调用 |
 | 1c | `nodes/NodeImageEditToolbar.tsx`、`creation/CreationAiPanel.tsx` 的定妆入口文案 | 消除定妆命名歧义 |
-| 2 | 合并 `CreationAiPanel` + `CanvasAssistantPanel` → 单一上下文助手组件；统一模式/模型选择器 | **可见大改，R8 样张门** |
+| 2 | 合并 `CreationAiPanel` + `CanvasAssistantPanel` → 单一上下文助手组件；统一模式/模型选择器；**空间行为**（折叠小入口 ↔ 右侧停靠 + 拖宽手柄，**不做自由浮窗**） | **可见大改，R8 样张已拍板** |
 | 3（可选） | 工具膨胀后 subagent-as-tools | 远期 |
 
 ## 2. 不动项（明确不碰，防止 scope 蔓延）
@@ -46,10 +46,13 @@
 - 节点级入口文案 → 「基于此图定妆」；剧本级入口文案 → 「剧本立角色/场景卡」。
 - **验收**：用户能分清两种定妆；不再出现「点定妆却没参考我的图」的错配。
 
-### 阶段 2 — 合并面板（R8 样张门）
-- **前置**：`docs/mockup/2026-06-07-unified-assistant-panel.html` 经用户拍板。
+### 阶段 2 — 合并面板 + 空间行为（R8 样张已拍板）
+- **前置**：`docs/mockups/unified-assistant-panel.html` 已经用户拍板（v4：三工作区停靠 + 折叠；砍掉 S/M/L 只留拖宽手柄）。
 - 合并两组件为单一上下文感知助手；工具域随活跃区（编辑器/画布/时间轴）切换；统一模式语义 + 模型选择器常驻。
-- **验收**：单面板跨创作/生成连续工作；控件不再「时有时无」；解决「工具可用性不可见」风险（样张里需给出可见的工具域指示）。
+- **可用工具默认折叠**成「N 个工具 ⌄」一行（不做常驻大条）；工具调用指示统一横排一行、超长省略。
+- **空间行为**：折叠态 = 右下角带 Nomi 标 + ✦ 的小入口；展开态 = 右侧停靠 + 左缘拖宽手柄（无级调宽）+ `»` 折回。**明确不做自由浮窗**（避免窗口管理税 / 盖节点 / 飘出屏）。
+- 图标统一用设计系统 tabler 细线（创作 Pencil / 生成 Sparkles / 时间轴 Movie），顶栏品牌 M 标（`identity.tsx`）。
+- **验收**：单面板跨创作/生成/时间轴连续工作；控件不再「时有时无」；折叠↔展开 + 拖宽顺畅；窄停靠时头部不换行。
 
 ## 4. 回滚策略
 
