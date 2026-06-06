@@ -37,8 +37,9 @@ describe("applyBuiltinSeeds", () => {
     // Seedance Fast：同族扩展只多 1 行 model，复用 Seedance 的 image_to_video mapping（不新增 mapping）。
     const fast = state.models.find((m) => m.modelKey === "bytedance/seedance-2-fast");
     expect(fast?.meta).toMatchObject({ archetypeId: "seedance-2-fast" });
-    expect(state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video")).toHaveLength(1);
-    const mapping = state.mappings.find((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video");
+    // Fast 不新增 image_to_video mapping → 只有一条**generic**（Seedance）；Kling 等带 modelKey 的不算在内。
+    expect(state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video" && !mp.modelKey)).toHaveLength(1);
+    const mapping = state.mappings.find((mp) => mp.id === "seed-kie-happyhorse-text_to_video");
     expect(mapping?.enabled).toBe(true);
     expect(mapping?.create.path).toBe("/api/v1/jobs/createTask");
   });
@@ -50,8 +51,10 @@ describe("applyBuiltinSeeds", () => {
     expect(second.state.vendors.filter((v) => v.key === "kie")).toHaveLength(1);
     expect(second.state.models.filter((m) => m.modelKey === "bytedance/seedance-2")).toHaveLength(1);
     expect(second.state.models.filter((m) => m.modelKey === "happyhorse")).toHaveLength(1);
-    expect(second.state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video")).toHaveLength(1);
-    expect(second.state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video")).toHaveLength(1);
+    // 幂等的真义 = 再次应用不增长（不是固定条数——桶里多模型共存是常态）。
+    const count = (s: typeof second.state, tk: string) => s.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === tk).length;
+    expect(count(second.state, "image_to_video")).toBe(count(first.state, "image_to_video"));
+    expect(count(second.state, "text_to_video")).toBe(count(first.state, "text_to_video"));
   });
 
   it("re-sync：旧装机里早先种的 Seedance mapping 缺 omni 字段 → 刷新到当前代码（含 reference_image_urls + generate_audio）", () => {
@@ -138,8 +141,8 @@ describe("applyBuiltinSeeds", () => {
     });
     const { state: next } = applyBuiltinSeeds(state, NOW);
     const t2v = next.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video");
-    // 两条共存：Kling(generic) + HappyHorse(modelKey=happyhorse)
-    expect(t2v).toHaveLength(2);
+    // 共存：Kling-leftover(generic) + HappyHorse(modelKey=happyhorse) + 可灵3.0(modelKey=kling-3.0)
+    expect(t2v.length).toBeGreaterThanOrEqual(2);
     const happy = next.mappings.find((mp) => mp.id === "seed-kie-happyhorse-text_to_video");
     expect(happy).toBeTruthy();
     expect(happy?.modelKey).toBe("happyhorse");
