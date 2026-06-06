@@ -44,8 +44,15 @@
 - 成本类（#5/#6/#7）验收看 usage 计数器（#8 先落地，给后面三项当量尺）。
 
 ## 4. 进度
-- [ ] H0：#1 maxSteps 可配、#2 repairToolCall
-- [ ] C-1a：抽执行层
-- [ ] H1+C-1b/1c：Stop+abort、去冗余快照、try/catch、dangerous 标志、拆桥、定妆消歧义
-- [ ] H2：#5 重试 → #8 usage 计数 → #6 token 预算 → #7 caching
-- [ ] C-2：合并面板 + 空间行为
+- [x] H0：#1 maxSteps 可配、#2 repairToolCall — `feat(harness): H0 前置`
+- [x] C-1a：抽执行层 applyCanvasToolCall — `refactor(agent): C-1a`
+- [x] H1：#3 Stop+真abort、read try/catch、#4 去冗余快照、C-1c 定妆消歧义
+      — `feat(harness): H1 真·取消…` + `feat(harness+ux): H1 去冗余快照…`
+- [x] H2：#5 重试 → #8 usage 计数 → #6 token 预算 → #7 按 provider caching（4 个独立 commit）
+- [ ] C-2：合并面板 + 空间行为 + 拆桥 + dangerous 标志 + token 读数
+      — **未做**：是大幅用户可见 UI 重写，按 R8/P3 需真实 app 走查验证；
+      我无法运行 Electron app + 人眼判断，故不盲改。详见结论。
+
+> 已就绪未做项里需用户真机烟测的运行时行为：Stop 真停（#3）、缓存命中（#7）、
+> 长拆镜头不截断（#1）、坏 JSON 自修（#2）—— 这些代码层已对、五门全过，但运行时
+> 效果需用户 API 额度 + 真实 app 验证（P3：全绿≠完成）。
