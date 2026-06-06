@@ -128,6 +128,16 @@ export function modeHasCharacterSlot(mode: ArchetypeMode): boolean {
   return mode.slots.some((slot) => Boolean(slot.characterIndexed))
 }
 
+/**
+ * 当前模式是否已放入任何数组参考（omni 角色图/视频/音频任一非空）。
+ * video 节点据此判断「可生成」——omni 不靠首/尾帧，靠参考数组；缺它会被误判为「需要首帧」而锁死生成。
+ * 接受任意非空字符串（含 nomi-local://，传输前 R1 会本地化），不做 http 过滤——这只是「有没有参考」的判断。
+ */
+export function hasArchetypeArrayReferences(meta: Record<string, unknown> | undefined, archetype: ModelArchetype): boolean {
+  const mode = currentArchetypeMode(archetype, meta)
+  return archetypeModeArraySlots(mode).some((slot) => readArchetypeArray(meta, slot.metaKey).length > 0)
+}
+
 /** 当前模式的「源视频」单槽（HappyHorse video-edit）。返回 meta 存储键 + 标签；无则 null。 */
 export function archetypeModeSourceVideoSlot(mode: ArchetypeMode): { metaKey: string; label: string } | null {
   const slot = mode.slots.find((s) => s.kind === 'source_video')

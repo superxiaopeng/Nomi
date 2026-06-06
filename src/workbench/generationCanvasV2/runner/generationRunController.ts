@@ -4,6 +4,7 @@ import { persistActiveWorkbenchProjectNow } from '../../project/workbenchProject
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { generationNodeExecutor, type GenerationNodeExecutor } from './generationNodeExecutor'
 import { resolveGenerationReferences } from './generationReferenceResolver'
+import { hasArchetypeArrayReferences, resolveArchetypeForModel } from '../nodes/controls/archetypeMeta'
 
 export type RunGenerationNodeOptions = {
   executor?: GenerationNodeExecutor
@@ -294,9 +295,18 @@ export function canRunGenerationNode(
   if (executionKind !== 'video') return false
   if (!('id' in node) || !node.id) return false
   const references = resolveGenerationReferences(node, context)
+  // omni（全能参考）不靠首/尾帧，靠参考数组——单看 resolveGenerationReferences 看不到 referenceImageUrls，
+  // 会把「已放参考的 omni 节点」误判为不可生成（锁死 ↑ 按钮、提示"需要首帧"）。补一条档案数组判断。
+  const meta = node.meta || {}
+  const archetype = resolveArchetypeForModel({
+    modelKey: typeof meta.modelKey === 'string' ? meta.modelKey : undefined,
+    modelAlias: typeof meta.modelAlias === 'string' ? meta.modelAlias : undefined,
+    meta,
+  })
   return Boolean(
     references.firstFrameUrl ||
     references.lastFrameUrl ||
-    references.referenceImages.length > 0,
+    references.referenceImages.length > 0 ||
+    (archetype && hasArchetypeArrayReferences(meta, archetype)),
   )
 }

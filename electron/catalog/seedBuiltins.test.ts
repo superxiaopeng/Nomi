@@ -53,6 +53,35 @@ describe("applyBuiltinSeeds", () => {
     expect(second.state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "text_to_video")).toHaveLength(1);
   });
 
+  it("re-sync：旧装机里早先种的 Seedance mapping 缺 omni 字段 → 刷新到当前代码（含 reference_image_urls + generate_audio）", () => {
+    // 模拟：老版本种下的 (kie, image_to_video) mapping，body 只有首帧字段（无 omni 参考数组）。
+    const stale = applyBuiltinSeeds(emptyCatalog(), NOW).state;
+    const idx = stale.mappings.findIndex((mp) => mp.id === "seed-kie-seedance2-image_to_video");
+    stale.mappings[idx] = {
+      ...stale.mappings[idx],
+      name: "我重命名过的首帧",
+      create: { method: "POST", path: "/api/v1/jobs/createTask", headers: {}, body: { model: "{{model.modelKey}}", input: { prompt: "{{request.prompt}}", first_frame_url: "{{request.params.first_frame_url}}", resolution: "{{request.params.resolution}}" } } },
+    };
+    const { state, changed } = applyBuiltinSeeds(stale, "2026-06-06T00:00:00.000Z");
+    expect(changed).toBe(true);
+    const m = state.mappings.find((mp) => mp.id === "seed-kie-seedance2-image_to_video");
+    const inputKeys = Object.keys((m?.create.body as { input: Record<string, unknown> }).input);
+    expect(inputKeys).toContain("reference_image_urls");
+    expect(inputKeys).toContain("generate_audio");
+    // 保留用户的 enabled/name（只刷传输塑形，不clobber 用户偏好）
+    expect(m?.name).toBe("我重命名过的首帧");
+    expect(m?.enabled).toBe(true);
+  });
+
+  it("re-sync：不碰用户自建的 mapping（非 seed id）", () => {
+    const state = applyBuiltinSeeds(emptyCatalog(), NOW).state;
+    const userMapping = { id: "user-custom-1", vendorKey: "kie", taskKind: "image_to_video" as const, name: "我的自定义", enabled: true, create: { method: "POST", path: "/custom", headers: {}, body: { foo: "bar" } }, createdAt: NOW, updatedAt: NOW };
+    state.mappings.push(userMapping);
+    const { state: next } = applyBuiltinSeeds(state, "2026-06-06T00:00:00.000Z");
+    const mine = next.mappings.find((mp) => mp.id === "user-custom-1");
+    expect(mine?.create.body).toEqual({ foo: "bar" }); // 原样不动
+  });
+
   it("存在即跳过：不覆盖用户已有的同 key 记录", () => {
     const state = emptyCatalog();
     state.vendors.push({

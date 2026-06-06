@@ -7,7 +7,7 @@
 //   - 反复调用安全（runtime 在 catalog 载入后调用一次，changed 才落盘）。
 // type-only 复用 runtime 的领域类型，避免第二份定义漂移（评审 P0-3/M1）。
 
-import type { CatalogState, Mapping, Model, Vendor } from "./types";
+import type { CatalogState, HttpOperation, Mapping, Model, Vendor } from "./types";
 import {
   KIE_VENDOR_SEED,
   SEEDANCE_2_CREATE_OP,
@@ -209,6 +209,27 @@ export function applyBuiltinSeeds(
       updatedAt: now,
     });
     changed = true;
+  }
+
+  // 刷新 curated 内置 mapping 的传输塑形（**代码单源**：create/query 住 kieSeedance/kieHappyhorse）。
+  // 「存在即跳过」只在缺失时插入——当代码定义演进（如 Seedance 加 omni 参考数组 reference_*_urls +
+  // generate_audio）时，旧装机里早先种下的旧 mapping 不会自动更新 → 真实生成**静默丢字段**
+  // （实测：omni 参考图上传了却没进 createTask body）。按**稳定 seed id**把 create/query 同步到当前代码，
+  // 只动我们自己种的记录（保留用户的 enabled/name/createdAt，不碰用户自建的 mapping）。
+  const CURATED_MAPPING_OPS: { id: string; create: HttpOperation; query: HttpOperation }[] = [
+    { id: SEEDANCE_MAPPING_ID, create: SEEDANCE_2_CREATE_OP, query: SEEDANCE_2_QUERY_OP },
+    { id: HAPPYHORSE_MAPPING_ID, create: HAPPYHORSE_CREATE_OP, query: HAPPYHORSE_QUERY_OP },
+  ];
+  for (let i = 0; i < mappings.length; i += 1) {
+    const curated = CURATED_MAPPING_OPS.find((c) => c.id === mappings[i].id);
+    if (!curated) continue;
+    const stale =
+      JSON.stringify(mappings[i].create) !== JSON.stringify(curated.create) ||
+      JSON.stringify(mappings[i].query) !== JSON.stringify(curated.query);
+    if (stale) {
+      mappings[i] = { ...mappings[i], create: curated.create, query: curated.query, updatedAt: now };
+      changed = true;
+    }
   }
 
   if (!changed) return { state, changed: false };

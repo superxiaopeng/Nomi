@@ -172,7 +172,9 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         {(() => {
           const disabledReason = !canGenerate && !isGenerating
             ? nodeExecutionKind === 'video'
-              ? '需要先连接一个图片节点作为首帧'
+              ? acceptsDrop
+                ? '需要先添加参考素材（拖入 / 连线 / 点 +）'
+                : '需要先连接一个图片节点作为首帧'
               : nodeExecutionKind === 'image'
                 ? undefined
                 : `「${node.kind}」类型暂不支持直接生成`

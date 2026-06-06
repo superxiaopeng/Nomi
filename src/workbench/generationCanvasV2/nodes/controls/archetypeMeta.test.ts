@@ -11,6 +11,7 @@ import {
   buildArchetypeInputParams,
   currentArchetypeMode,
   ensureArchetypeNodeMeta,
+  hasArchetypeArrayReferences,
   modeHasCharacterSlot,
 } from './archetypeMeta'
 
@@ -140,6 +141,18 @@ describe('C3 全能参考 — 数组槽声明', () => {
   it('modeHasCharacterSlot 只在 omni 为真', () => {
     expect(modeHasCharacterSlot(OMNI)).toBe(true)
     expect(modeHasCharacterSlot(SEEDANCE.modes.find((m) => m.id === 'first')!)).toBe(false)
+  })
+  it('hasArchetypeArrayReferences：omni 放了参考数组 → true（修复 omni 误判"需要首帧"锁死生成）', () => {
+    const empty = { archetype: { id: 'seedance-2', modeId: 'omni' } }
+    expect(hasArchetypeArrayReferences(empty, SEEDANCE)).toBe(false)
+    const withImg = { ...empty, referenceImageUrls: ['c1.png'] }
+    expect(hasArchetypeArrayReferences(withImg, SEEDANCE)).toBe(true)
+    // nomi-local:// 也算「有参考」（传输前 R1 本地化），不做 http 过滤
+    const withLocal = { ...empty, referenceVideoUrls: ['nomi-local://asset/p/v.mp4'] }
+    expect(hasArchetypeArrayReferences(withLocal, SEEDANCE)).toBe(true)
+    // 首帧模式无数组槽 → 即便 meta 残留 referenceImageUrls 也不算（互斥）
+    const firstMode = { archetype: { id: 'seedance-2', modeId: 'first' }, referenceImageUrls: ['c1.png'] }
+    expect(hasArchetypeArrayReferences(firstMode, SEEDANCE)).toBe(false)
   })
 })
 
