@@ -90,7 +90,7 @@ function ThumbnailMosaic({ urls, name }: { urls: string[]; name?: string }): JSX
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 bg-nomi-ink-05">
         <IconMovie size={26} stroke={1.2} className="text-nomi-ink-30" aria-hidden />
         {name ? (
-          <span className="max-w-full text-center text-[12.5px] font-medium leading-snug text-nomi-ink-60 line-clamp-2">{name}</span>
+          <span className="max-w-full text-center text-[13px] font-medium leading-snug text-nomi-ink-60 line-clamp-2">{name}</span>
         ) : null}
       </div>
     )
@@ -185,12 +185,12 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
         ) : null}
 
         {/* ── 主行动：新建空白 / 打开文件夹（始终渲染，不被示例 gate；从下方网格挪上来 → 不再两套并行入口）── */}
-        <section className="shrink-0 flex items-center gap-2.5 mb-1" aria-label="开始一个项目">
+        <section className="shrink-0 flex items-center gap-2 mb-1" aria-label="开始一个项目">
           <button
             type="button"
             onClick={() => onNewProject()}
             className={cn(
-              'inline-flex items-center gap-1.5 h-[34px] px-4 rounded-pill border-0 cursor-pointer font-inherit',
+              'inline-flex items-center gap-1.5 h-8 px-4 rounded-pill border-0 cursor-pointer font-inherit',
               'bg-nomi-ink text-nomi-paper text-[13px] font-medium transition-colors hover:bg-nomi-accent',
             )}
           >
@@ -202,8 +202,8 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
               type="button"
               onClick={onOpenFolder}
               className={cn(
-                'inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-pill cursor-pointer font-inherit',
-                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[12.5px] transition-colors hover:border-nomi-ink-20',
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-pill cursor-pointer font-inherit',
+                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[13px] transition-colors hover:border-nomi-ink-20',
               )}
             >
               <IconFolderOpen size={16} stroke={1.8} aria-hidden="true" />
