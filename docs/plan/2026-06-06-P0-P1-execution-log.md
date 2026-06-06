@@ -48,5 +48,9 @@ CI 五门(filesize/lint≤98/typecheck/vitest/build)全绿 + Rule 11 自 commit/
 - [ ] **P1.2** 接生成节点 + 删旧三套(inline frame 菜单 104 行 + 源视频 30 行 + ReferenceSlots),净删
 - [ ] **P1.3** 连线→参考管道(数组 meta-only 不画线)
 - [ ] **走查自验收**:Playwright 走查 + 样张 v4 并排对账
-- [ ] **R1 传输**:调研 KIE 喂法 → 实现发送侧 nomi-local→可达 URL 转换(零额度走查;真实生成先问)
+- [x] **R1 传输(通用方案)**:vendor 声明 `assetIngestion`(upload-url / inline-base64 / none)+ 通用解析器
+  `assetLocalization`(递归扫 nomi-local、按 strategy 解析、去重替换,全注入可单测)+ KIE 作首个 upload-url
+  实现(免费 base64 端点 → data.downloadUrl)+ 接进 `executeProfileOperation` 发送前。文件侧抽 `localAssetFile`,
+  runtime 净缩 2632→2623。13 单测。**通用第一:加新 vendor=多声明一份,通用层不改。**
+  ⚠️ 真实端到端仍需用户 KIE_API_KEY + 一次真实生成核验(花额度,先问)。
 - [ ] **@ 内联引用**:Tiptap(规则 5 先查官方)替换 textarea,编号单源(R6)

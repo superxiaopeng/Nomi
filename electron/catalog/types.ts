@@ -17,6 +17,37 @@ export type ProfileKind =
 
 export type AiSdkProviderKind = "openai-compatible" | "anthropic";
 
+/**
+ * 供应商「怎么吞本地素材」的声明(R1,通用第一)。本地素材(nomi-local://)只有 app 自己能读,
+ * vendor 服务器够不着;发送前必须按 vendor 声明的策略把它变成可达值。通用解析器据此分叉,
+ * 加新 vendor = 多声明一份,通用层不改。
+ *  - inline-base64：直接把 data:URI 塞进 body(无需上传)。
+ *  - upload-url   ：把字节传到 vendor 文件接口 → 拿回临时公网 URL → 填进 body。
+ *  - none         ：vendor 只收公网 URL 且无上传通道 → 明确报错(不静默失败)。
+ */
+export type AssetIngestion =
+  | { strategy: "inline-base64" }
+  | { strategy: "none" }
+  | {
+      strategy: "upload-url";
+      /** 上传端点(完整 URL)。 */
+      endpoint: string;
+      method?: string;
+      /** base64 字段名(如 kie 的 "base64Data")。 */
+      base64Field: string;
+      /** 是否带 data:URI 前缀(默认 true);false = 纯 base64。 */
+      dataUrlPrefix?: boolean;
+      /** 可选:目录字段名 + 值。 */
+      uploadPathField?: string;
+      uploadPath?: string;
+      /** 可选:文件名字段名。 */
+      fileNameField?: string;
+      /** 响应里公网 URL 的点路径(如 kie 的 "data.downloadUrl")。 */
+      urlPath: string;
+      /** 鉴权:复用 vendor 的 api key(默认 bearer)。 */
+      authType?: "bearer";
+    };
+
 export type Vendor = {
   key: string;
   name: string;
@@ -32,6 +63,8 @@ export type Vendor = {
    * so existing model-catalog.json files keep working without migration.
    */
   providerKind?: AiSdkProviderKind;
+  /** R1:本地素材吞入策略。curated vendor 也可由代码注册表兜底(见 assetLocalization.curatedAssetIngestion)。 */
+  assetIngestion?: AssetIngestion;
   meta?: unknown;
   createdAt: string;
   updatedAt: string;

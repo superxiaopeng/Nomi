@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { hardenedFetch, hardenedFetchText } from "./hardenedFetch";
+import { localizeAssetsForVendor, resolveAssetIngestion } from "./catalog/assetLocalization";
+import { absolutePathFromLocalAssetUrl, readNomiLocalAsset, postJsonForAssetUpload } from "./assets/localAssetFile";
 import { generateText, streamText, tool, type CoreMessage, type LanguageModelV1 } from "ai";
 import { z } from "zod";
 import { buildAiSdkModel } from "./ai/buildAiSdkModel";
@@ -394,30 +396,6 @@ function parseExportJobManifest(value: unknown): NomiRenderManifestV1 {
 // ── filtergraph 导出主路径（音频 + letterbox WYSIWYG）；失败回退 WebM 转码 ──────────
 // 按 jobId 暂存 renderer 原始 manifest；finishExportTempInput 里解析本地资产 + ffprobe + 编译 filtergraph。
 const rawExportManifests = new Map<string, unknown>();
-
-function absolutePathFromLocalAssetUrl(url: unknown, projectId: string): string | null {
-  if (typeof url !== "string") return null;
-  const prefix = "nomi-local://asset/";
-  if (!url.startsWith(prefix)) return null;
-  const rest = url.slice(prefix.length);
-  const slashIndex = rest.indexOf("/");
-  if (slashIndex < 0) return null;
-  let urlProjectId: string;
-  let relativePath: string;
-  try {
-    urlProjectId = decodeURIComponent(rest.slice(0, slashIndex));
-    relativePath = rest.slice(slashIndex + 1).split("/").map(decodeURIComponent).join("/");
-  } catch {
-    return null;
-  }
-  if (urlProjectId !== projectId || !relativePath) return null;
-  try {
-    const absolutePath = resolveProjectRelativePath(projectId, relativePath);
-    return fs.existsSync(absolutePath) && fs.statSync(absolutePath).isFile() ? absolutePath : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * renderer 原始 manifest → 可直接喂 ffmpeg 的 filtergraph 计划：
@@ -1993,8 +1971,21 @@ async function executeProfileOperation(input: {
   operation: HttpOperation;
   providerMeta?: JsonRecord;
 }): Promise<{ response: unknown; request: unknown }> {
-  const built = buildProfileHttpRequest(input);
-  const response = await requestJson(input.vendor, input.apiKey, built.method, built.url, built.headers, built.query, built.body);
+  // R1：发送前把 request 里的本地素材(nomi-local://)按当前 vendor 声明的策略变成可达值
+  // (上传换公网 URL / 内联 base64)。通用层与供应商无关;无本地素材时零开销原样通过。
+  const localized = await localizeAssetsForVendor(
+    input.request.extras,
+    resolveAssetIngestion(input.vendor),
+    input.apiKey,
+    readNomiLocalAsset,
+    postJsonForAssetUpload,
+  );
+  const effectiveInput =
+    localized.uploaded > 0
+      ? { ...input, request: { ...input.request, extras: localized.value as TaskRequest["extras"] } }
+      : input;
+  const built = buildProfileHttpRequest(effectiveInput);
+  const response = await requestJson(effectiveInput.vendor, effectiveInput.apiKey, built.method, built.url, built.headers, built.query, built.body);
   return {
     response,
     request: built.preview,
