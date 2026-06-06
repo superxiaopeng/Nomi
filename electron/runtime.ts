@@ -116,7 +116,7 @@ import type {
   Vendor,
 } from "./catalog/types";
 import { CURRENT_CATALOG_VERSION, selectTaskMapping } from "./catalog/types";
-import { referenceInputParams } from "./catalog/archetypeInput";
+import { firstReferenceImage, taskTemplateParams } from "./catalog/taskParams";
 import { applyBuiltinSeeds } from "./catalog/seedBuiltins";
 export type {
   AiSdkProviderKind,
@@ -1847,43 +1847,7 @@ function findTaskMapping(vendorKey: string, taskKind: ProfileKind, modelKey?: st
   return selectTaskMapping(readCatalog().mappings, vendorKey, taskKind, modelKey);
 }
 
-function firstReferenceImage(request: TaskRequest): string {
-  const extras = request.extras || {};
-  const referenceImages = Array.isArray(extras.referenceImages) ? extras.referenceImages : [];
-  return firstString(
-    extras.image_url,
-    extras.imageUrl,
-    extras.firstFrameUrl,
-    extras.lastFrameUrl,
-    referenceImages[0],
-  );
-}
-
-function taskTemplateParams(request: TaskRequest): JsonRecord {
-  const extras = request.extras || {};
-  const size = request.width && request.height ? `${request.width}x${request.height}` : firstString(extras.size, extras.aspectRatio);
-  // duration 可能是数字（节点「5s」标量参数存的就是 number 5）——firstString 只认字符串会把它吞成 ""，
-  // 导致 body 的 duration 为空（实测）。数字原样保留，字符串走 trim，缺省 ""。
-  const durationRaw = extras.duration ?? extras.durationSeconds ?? extras.videoDuration;
-  const duration = typeof durationRaw === "number" ? durationRaw : firstString(durationRaw);
-  return {
-    ...extras,
-    size,
-    n: extras.n ?? 1,
-    width: request.width,
-    height: request.height,
-    seed: request.seed,
-    steps: request.steps,
-    cfgScale: request.cfgScale,
-    cfg_scale: request.cfgScale,
-    negative_prompt: request.negativePrompt,
-    duration,
-    image_url: firstReferenceImage(request),
-    // 参考输入（单图首/尾帧 + 多参考数组）—— 构建逻辑在 electron/catalog/archetypeInput（M5）。
-    ...referenceInputParams(extras),
-    max_tokens: extras.maxTokens ?? extras.max_tokens,
-  };
-}
+// firstReferenceImage / taskTemplateParams 已抽到 electron/catalog/taskParams.ts（可测，见顶部 import）。
 
 // Adapter over the shared requestPipeline context builder. Production maps the
 // rich TaskRequest fields into normalized params via `taskTemplateParams`; the
