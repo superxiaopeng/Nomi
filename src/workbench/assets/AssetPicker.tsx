@@ -56,7 +56,19 @@ export default function AssetPicker({ projectId, accept, onPick, onUpload, onBro
     .join(',')
 
   return (
-    <div data-testid="asset-picker" className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] max-h-[70vh] overflow-y-auto p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-md', className)}>
+    <div
+      data-testid="asset-picker"
+      className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] max-h-[70vh] overflow-y-auto p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-md', className)}
+      // picker 自己接管拖入：否则 drop 冒泡到画布 stage → importImageFilesToGenerationCanvas 另建独立节点，
+      // 而不是填进当前节点的输入槽（提示语已写「或把文件拖进来」却无 onDrop = bug）。
+      onDragOver={(event) => { event.preventDefault(); event.stopPropagation() }}
+      onDrop={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const file = event.dataTransfer.files?.[0]
+        if (file) onUpload(file)
+      }}
+    >
       <label className={cn('flex items-center gap-[6px] h-[30px] px-[8px] rounded-nomi-sm border border-nomi-line bg-nomi-ink-05')}>
         <IconSearch size={13} stroke={2} className={cn('text-nomi-ink-40 shrink-0')} />
         <input
