@@ -54,6 +54,7 @@ import AssetReference, { type AssetSlot } from '../../assets/AssetReference'
 import type { AssetRef } from '../../assets/assetTypes'
 import { moveArrayItem } from '../../assets/assetTypes'
 import { removeMention } from '../../assets/promptMentions'
+import { showInfoToast } from '../../../utils/showInfoToast'
 
 type NodeParameterControlsProps = {
   node: GenerationCanvasNode
@@ -246,7 +247,8 @@ export default function NodeParameterControls({
     const trimmed = url.trim()
     if (!trimmed) return
     const current = readArchetypeArray(node.meta || {}, slot.metaKey)
-    if (current.includes(trimmed) || current.length >= slot.max) return
+    if (current.includes(trimmed)) return // 去重,静默
+    if (current.length >= slot.max) { showInfoToast(`最多 ${slot.max} 个${slot.label}`); return } // 到上限:明确告知(对抗评审:别静默丢)
     setArrayValue(slot.metaKey, [...current, trimmed])
     setOpenSlotKey('')
   }

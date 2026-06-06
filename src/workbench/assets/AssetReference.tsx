@@ -77,6 +77,10 @@ export default function AssetReference({
     return len < slot.max
   })
   const arrayUploading = arraySlots.some((slot) => uploadingSlotKey === slot.key)
+  // 已到上限的类型(该数组满)→ 在合并 picker 里灰显;点击仍走 onPick→handleArrayAdd 出「最多 N」toast。
+  const atLimitKinds = arraySlots
+    .filter((slot) => { const raw = valuesByKey[slot.key]; return (Array.isArray(raw) ? raw.filter(Boolean).length : 0) >= slot.max })
+    .map((slot) => slot.accept)
 
   const routeByKind = (kind: AssetKind): AssetSlot => arraySlots.find((s) => s.accept === kind) ?? arraySlots[0]
 
@@ -154,6 +158,7 @@ export default function AssetReference({
                 onPick={(asset) => onPick(routeByKind(asset.kind), asset)}
                 onUpload={(file) => onUpload(routeByKind(kindFromFile(file)), file)}
                 onBrowseAll={onBrowseAll}
+                atLimitKinds={atLimitKinds}
               />
             </AssetPickerPopover>
           ) : null}
