@@ -196,7 +196,15 @@ CSS 文件分工与「只可减不可增」规则详见 R1 最后一节。
 
 ### 工具栈
 
-- `tests/ux/walkthrough.mjs` — 探索式走查（逐步截图 + DOM dump，找问题用）
+- **`tests/ux/ui-driver.mjs` + `tests/ux/ui.mjs` — 常驻交互式驱动（交互探索/调 UI 首选，开一次·边看边点）**：
+  后台起 `node tests/ux/ui-driver.mjs`（Bash `run_in_background:true`；**app 启动一次保持开着，不再每步 launch→close 闪屏**），
+  就绪后逐步发命令 `node tests/ux/ui.mjs <action>`：
+  `snap`（列当前所有可点元素：标签/文字/aria/中心坐标——**据此决定点哪，不靠提前盲猜选择器**）｜
+  `shot [名]`（截图到 `tests/ux/shots/<名>.png`，再用 Read 看）｜`click "文字"`（也支持 `aria:` / `css:` / `text:` / `xy:x,y`）｜
+  `fill <css> <值>`｜`eval <js>`｜`wait <ms>`｜`quit`（关 app+停驱动）。
+  **循环 = snap/shot 看真实界面 → 判断 → click/fill 操作 → 再 shot 看结果**（感知→决策→行动→再感知）。
+  Electron 专用（Nomi 要主进程+IPC，普通浏览器预览工具附不上去）。用完务必 `quit`，别留后台进程/窗口。
+- `tests/ux/walkthrough.mjs` — 一次性探索式走查（逐步截图 + DOM dump）；**新工作优先用上面的常驻驱动**，盲脚本只在固定流程时用
 - `tests/ux/smoke.e2e.mjs`（`pnpm run test:e2e`）— 可断言冒烟，失败即非零退出，CI-ready
 
 能力边界：渲染层交互 + 感知判断（~90%）用 Playwright 完全覆盖；原生 OS 边界（系统文件对话框/Finder 拖拽）可经 `electronApp.evaluate` stub `dialog.*` 走通。
