@@ -51,7 +51,7 @@ try {
     const addTile = comp.querySelector('button[aria-label="加参考"]');
     const prompt = comp.querySelector(".generation-canvas-v2-node__prompt-input");
     const send = comp.querySelector('button[aria-label="生成素材"],button[aria-label="重新生成"]');
-    const settings = comp.querySelector('button[aria-label="生成设置"]');
+    const paramsRow = comp.querySelector('.generation-canvas-v2-node__params--parameters');
     const modelSel = comp.querySelector('select[aria-label="模型"]');
     const badge = Array.from(comp.querySelectorAll("span")).find((s) => s.textContent.trim() === "模板");
     const dividerEl = Array.from(card?.children || []).find((c) => (c.getAttribute("class") || "").includes("line-soft") && Math.round(c.getBoundingClientRect().height) <= 1);
@@ -71,7 +71,9 @@ try {
       cardBorder: g(card, "borderTopColor"),
       cardShadow: g(card, "boxShadow"),
       sendRadius: g(send, "borderTopLeftRadius"),
-      settingsPadL: g(settings, "paddingLeft"),
+      // v3：参数横排内联（取代旧的设置弹层）——统计底栏项数 + 行数（同 top = 一行），验证拉宽不换行、全可见。
+      paramItems: paramsRow ? paramsRow.children.length : 0,
+      paramRows: paramsRow ? new Set(Array.from(paramsRow.children).map((c) => Math.round(c.getBoundingClientRect().top))).size : 0,
       // 结构:模板徽标是否与 model select 同一个父(嵌在模型芯片内,而非独立夹在中间)
       badgeInModelChip: Boolean(badge && modelSel && badge.parentElement === modelSel.parentElement),
       dividerPresent: Boolean(dividerEl),
@@ -100,7 +102,8 @@ try {
   assert(m.dividerPresent, "参考区与描述之间有分隔线(h-px)", "MISSING");
   assert(m.badgeInModelChip, "模板徽标嵌在模型芯片内(非独立夹在中间)", `badgeInModelChip=${m.badgeInModelChip}`);
   assert(px(m.sendRadius) === "9999px" || parseFloat(m.sendRadius) >= 999, "send 按钮圆形(pill)", m.sendRadius);
-  assert(px(m.settingsPadL) === "10px", "设置芯片左内边距 10px", m.settingsPadL);
+  assert(m.paramItems >= 1, "参数横排内联（模型芯片 + 标量参数 pill）", `paramItems=${m.paramItems}`);
+  assert(m.paramRows === 1, "参数全在一行（拉宽不换行，不再藏进设置弹层）", `paramRows=${m.paramRows}`);
 
   // ── 捷径 A：拖文件到卡 → 加为参考（规范 §4 拖悬停态 + 落地写入数组）──
   // 合成 dragover（types 含 'Files'）→ 卡虚线 outline + 覆盖层「松手添加」；几何核对覆盖层覆盖卡面且在视口内。

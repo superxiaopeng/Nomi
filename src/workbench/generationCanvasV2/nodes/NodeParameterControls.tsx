@@ -3,6 +3,7 @@ import { cn } from '../../../utils/cn'
 import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import { deriveGenerationModelCatalogStatus, findModelOptionByIdentifier, useGenerationModelOptionsState } from '../adapters/modelOptionsAdapter'
 import {
+  formatVideoOptionLabel,
   parseModelParameterControls,
   type ModelParameterControl,
 } from '../../../config/modelCatalogMeta'
@@ -21,7 +22,9 @@ import {
   buildEffectiveVideoCatalogConfig,
   buildImageUrlSlots,
   buildModelControls,
-  buildSettingsSummary,
+  catalogControlInitialValue,
+  controlInitialValue,
+  controlValueToString,
   defaultPatchForCatalogControl,
   defaultPatchForControls,
   edgeModeForGroup,
@@ -29,6 +32,10 @@ import {
   getSlotNodeRef,
   getSlotThumbUrl,
   imageCatalogReferenceSlot,
+  isParameterControl,
+  optionKey,
+  optionLabel,
+  optionValue,
   parseControlInput,
   readMeta,
   removePreviousControlParams,
@@ -50,7 +57,6 @@ import {
   resolveArchetypeForModel,
 } from './controls/archetypeMeta'
 import ModeBar from './controls/ModeBar'
-import SettingsPopover from './controls/SettingsPopover'
 import AssetReference, { type AssetSlot } from '../../assets/AssetReference'
 import type { AssetRef } from '../../assets/assetTypes'
 import { moveArrayItem } from '../../assets/assetTypes'
@@ -59,10 +65,7 @@ import { showInfoToast } from '../../../utils/showInfoToast'
 
 type NodeParameterControlsProps = {
   node: GenerationCanvasNode
-  section?: 'all' | 'references' | 'parameters' | 'model' | 'controls' | 'settings'
-  // section="parameters" 的设置芯片：开合状态由父级（composer）持有，便于把弹层渲染在卡底（不被裁剪）。
-  settingsOpen?: boolean
-  onToggleSettings?: () => void
+  section?: 'all' | 'references' | 'parameters' | 'model' | 'controls'
   /** 点参考 tile → 在描述框光标处插入 @ 引用 chip(主路径,由 composer 注入 editor 命令)。 */
   onInsertMention?: (url: string) => void
 }
@@ -114,8 +117,6 @@ function resolveRenderedControls(
 export default function NodeParameterControls({
   node,
   section = 'all',
-  settingsOpen = false,
-  onToggleSettings,
   onInsertMention,
 }: NodeParameterControlsProps): JSX.Element | null {
   const nodes = useGenerationCanvasStore((state) => state.nodes)
@@ -457,21 +458,8 @@ export default function NodeParameterControls({
     updateMeta({ [slot.key]: null })
   }
 
-  // section="settings"：设置弹层内容（标量参数，带标签）。开合由 composer 控制，渲染在卡底（不被裁剪）。
-  if (section === 'settings') {
-    if (renderedControls.length === 0) return null
-    return (
-      <SettingsPopover
-        open
-        controls={renderedControls}
-        meta={meta}
-        onParameterChange={handleParameterControlChange}
-        onCatalogChange={handleCatalogControlChange}
-      />
-    )
-  }
-
-  // section="parameters"：底栏 = 模型芯片(带 模板/通用 徽标) + 设置芯片(摘要 + 开设置弹层)。标量参数不在这，进弹层。
+  // section="parameters"：底栏 = 模型芯片 + 该模型**所有参数横排内联**（每个带小标签的 pill）。
+  // 参数不再藏进弹层——一眼可见、点一下就调；卡宽内容驱动(w-fit)，参数多则卡变宽、触上限在卡内换行。
   if (section === 'parameters') {
     if (modelOptions.length === 0) {
       return (
@@ -491,9 +479,57 @@ export default function NodeParameterControls({
         </button>
       )
     }
+    // 内联参数 pill：和模型芯片同族（label + 无边框 select/input + ▾），横排在底栏。
+    // 不限宽、不截断：参数值要看全（卡宽内容驱动，select 多宽卡就多宽，仍一行）。
+    const inlineSelectClass = cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 cursor-pointer')
+    const renderInlineParam = (control: DynamicModelControl): JSX.Element => {
+      const pill = (children: React.ReactNode, withChevron = true) => (
+        <label key={control.key} className={cn('inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
+          <span className={cn('shrink-0 text-micro leading-none text-nomi-ink-40')}>{control.label}</span>
+          {children}
+          {withChevron ? <span className={cn('shrink-0 text-nomi-ink-40 text-micro leading-none pointer-events-none')} aria-hidden>▾</span> : null}
+        </label>
+      )
+      if (!isParameterControl(control)) {
+        return pill(
+          <select className={inlineSelectClass} aria-label={control.label} value={catalogControlInitialValue(control, meta)} onChange={(e) => handleCatalogControlChange(control, e.target.value)}>
+            {control.options.map((o) => <option key={optionKey(o)} value={optionValue(o)}>{optionLabel(o)}</option>)}
+          </select>,
+        )
+      }
+      if (control.type === 'boolean') {
+        return pill(
+          <select className={inlineSelectClass} aria-label={control.label} value={controlInitialValue(control, meta) || 'false'} onChange={(e) => handleParameterControlChange(control, e.target.value)}>
+            <option value="true">开</option>
+            <option value="false">关</option>
+          </select>,
+        )
+      }
+      if (control.options.length > 0) {
+        return pill(
+          <select className={inlineSelectClass} aria-label={control.label} value={controlInitialValue(control, meta)} onChange={(e) => handleParameterControlChange(control, e.target.value)}>
+            {control.options.map((o) => <option key={controlValueToString(o.value)} value={controlValueToString(o.value)}>{formatVideoOptionLabel(o.label, o.priceLabel)}</option>)}
+          </select>,
+        )
+      }
+      return pill(
+        <input
+          className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 min-w-0 w-[56px]')}
+          aria-label={control.label}
+          type={control.type === 'number' ? 'number' : 'text'}
+          value={controlInitialValue(control, meta)}
+          min={control.min}
+          max={control.max}
+          step={control.step}
+          placeholder={control.placeholder}
+          onChange={(e) => handleParameterControlChange(control, e.target.value)}
+        />,
+        false,
+      )
+    }
     return (
-      <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-1 flex-nowrap items-center gap-2 min-w-0')}>
-        {/* 模型芯片：一个 pill 内含 名称 + 模板/通用徽标 + 下拉箭头（样张 v4：徽标嵌在芯片内，不是独立 pill 夹在中间） */}
+      <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-nowrap items-center gap-2')}>
+        {/* 模型芯片：一个 pill 内含 名称 + 模板/通用徽标 + 下拉箭头（样张 v4：徽标嵌在芯片内） */}
         <div className={cn('inline-flex items-center gap-1 h-7 pl-3 pr-2.5 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
           <select
             className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 cursor-pointer truncate min-w-0 max-w-[150px]')}
@@ -517,24 +553,8 @@ export default function NodeParameterControls({
           ) : null}
           <span className={cn('shrink-0 text-nomi-ink-40 text-micro leading-none pointer-events-none')} aria-hidden>▾</span>
         </div>
-        {renderedControls.length > 0 && onToggleSettings ? (
-          <button
-            type="button"
-            data-open={settingsOpen ? 'true' : 'false'}
-            aria-expanded={settingsOpen}
-            className={cn(
-              'inline-flex items-center gap-1.5 h-7 px-[10px] rounded-pill min-w-0',
-              'border border-nomi-line bg-nomi-paper text-nomi-ink-80 font-[inherit] text-caption cursor-pointer',
-              'hover:border-nomi-ink-20',
-              'data-[open=true]:border-nomi-accent data-[open=true]:text-nomi-accent data-[open=true]:bg-nomi-accent-soft',
-            )}
-            aria-label="生成设置"
-            onClick={(event) => { event.stopPropagation(); onToggleSettings() }}
-          >
-            <span className="truncate">{buildSettingsSummary(renderedControls, meta) || '设置'}</span>
-            <span className={cn('shrink-0 text-nomi-ink-40 text-micro')}>▾</span>
-          </button>
-        ) : null}
+        {/* 该模型的标量参数：横排内联，每个带标签，全可见 */}
+        {renderedControls.map((control) => renderInlineParam(control))}
       </div>
     )
   }
