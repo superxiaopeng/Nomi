@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell, webContents as electronWebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell, webContents as electronWebContents } from "electron";
 import type { WebContents } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -50,6 +50,7 @@ import type { ProviderKind, ModelKind } from "./ai/onboarding/types";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
 import { installCrashHandlers, logCrash } from "./crashLog";
+import { applySystemProxy, describeNetworkError } from "./systemProxy";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
@@ -612,8 +613,7 @@ function registerOnboardingIpc(): void {
       const text = await res.text().catch(() => "");
       return { ok: false, status: res.status, error: text.slice(0, 300) || `HTTP ${res.status}` };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { ok: false, error: message };
+      return { ok: false, error: describeNetworkError(error) };
     } finally {
       clearTimeout(timeout);
     }
@@ -668,8 +668,7 @@ function registerOnboardingIpc(): void {
         : [];
       return { ok: true, models };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { ok: false, error: message };
+      return { ok: false, error: describeNetworkError(error) };
     } finally {
       clearTimeout(timeout);
     }
@@ -696,6 +695,9 @@ function registerLocalProtocol(): void {
 
 app.whenReady().then(async () => {
   registerLocalProtocol();
+  // 启动即探测系统/环境代理并应用到全局 fetch，让"测试连接/调 AI API/拉模型"能穿透代理。
+  // 失败只记日志、不抛——绝不拖垮启动。须在任何出站请求前完成。
+  await applySystemProxy(session.defaultSession);
   // 写入内置模型种子（Seedance 等主流模型档案）；幂等、存在即跳过，不覆盖用户已有记录。
   try {
     ensureBuiltinModelSeeds();
