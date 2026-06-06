@@ -118,7 +118,9 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         className={cn(
           'generation-canvas-v2-node__composer-card',
           'flex flex-col gap-[11px] p-[12px] min-h-[150px]',
-          'border border-nomi-line rounded-nomi bg-nomi-paper overflow-auto shadow-nomi-md',
+          // overflow 从卡移到 PromptEditor 外层包裹：否则长 prompt 用 flex-1 把空间吃光，
+          // 底栏(生成按钮)被滚出可视区（实测：force-click 点不到、得 JS 派发）。
+          'border border-nomi-line rounded-nomi bg-nomi-paper overflow-hidden shadow-nomi-md',
           'transition-[outline-color] duration-150',
           isDragOver && 'outline-2 outline-dashed outline-nomi-accent outline-offset-[-2px]',
         )}
@@ -153,16 +155,19 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           ))}
         </div>
       ) : null}
-      <PromptEditor
-        className={cn('flex-1 min-h-[38px]')}
-        value={node.prompt || ''}
-        placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
-        onChange={(next) => updateNode(node.id, { prompt: next })}
-        onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
-        onReady={setPromptEditor}
-        mentionCandidates={readArchetypeArray(node.meta || {}, 'referenceImageUrls')}
-      />
-      <div className={cn('flex items-center gap-2 mt-auto min-w-0 pt-1')}>
+      {/* 长 prompt 在编辑器内部滚动；底栏永远贴底（min-h-0 让 flex-1 子项可收缩）。 */}
+      <div className={cn('flex-1 min-h-0 overflow-auto')}>
+        <PromptEditor
+          className={cn('min-h-[38px]')}
+          value={node.prompt || ''}
+          placeholder={isTextKind ? TEXT_MODE_PLACEHOLDER[textGenMode] : getGenerationNodePromptPlaceholder(node.kind)}
+          onChange={(next) => updateNode(node.id, { prompt: next })}
+          onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
+          onReady={setPromptEditor}
+          mentionCandidates={readArchetypeArray(node.meta || {}, 'referenceImageUrls')}
+        />
+      </div>
+      <div className={cn('flex items-center gap-2 mt-auto min-w-0 pt-1 shrink-0')}>
         <NodeParameterControls
           node={node}
           section="parameters"
