@@ -92,23 +92,24 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     }
   }
 
-  // 卡宽 = 底栏「参数行」的真实一行宽度（实测）。确定宽度下 tile/提示词/参数都正常布局——
-  // 不用 CSS 内在尺寸（w-max 会把 AssetReference tile 压塌），也不写死常数（自检 0c：宽度由内容算出）。
+  // 卡宽 = 底栏「参数行」的真实一行宽度（实测）。确定宽度下 tile/提示词/参数都正常布局——不写死常数。
+  // ⚠ 关键：footerRef 必须是 `w-max`（width:max-content）的元素，盒子尺寸 = 内容宽、**与卡宽脱钩**。
+  // 否则 footer 作为 flex-col 子项会被拉伸到卡宽，scrollWidth 反读回卡宽 → 成环：任何一次过宽测量
+  // 都会变成稳定不动点、再也缩不回来（曾导致「2 个参数的卡却有大片右侧空白」）。w-max 只裹底栏的
+  // 参数 pill + 生成钮，不含 AssetReference tile（那在上方 references 区），所以不会压塌 tile。
   const footerRef = React.useRef<HTMLDivElement>(null)
   const [cardWidth, setCardWidth] = React.useState<number | undefined>(undefined)
   React.useLayoutEffect(() => {
     const el = footerRef.current
     if (!el) return
-    // scrollWidth = 底栏(模型芯片 + 参数 flex-nowrap + 生成钮)的真实一行宽度，与当前卡宽无关 → 不成环。
+    // w-max 下 scrollWidth = 底栏(模型芯片 + 参数 flex-nowrap + 生成钮)真实一行内容宽，不随卡宽变。
+    // 切模型/改参数 → 内容变 → w-max 盒子变 → ResizeObserver 触发重测（也靠 node.meta 依赖同步重跑）。
     // 要多宽给多宽（不设上限、不换行）；下限 360 保证提示词可写。+24 = 卡左右 padding。
     const measure = () => setCardWidth(Math.max(360, el.scrollWidth + 24))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-    // 依赖 node.meta：切模型 / 改参数会改变底栏「参数行」的 scrollWidth（内容宽），
-    // 但不改 footer 的 clientWidth（盒子宽），ResizeObserver 监听盒子不会触发 → 卡宽停在旧值、
-    // 生成钮被裁到卡外。把 node.meta 列入依赖，参数行内容一变就重新实测一行真实宽度（修④）。
   }, [node.meta])
 
   return (
@@ -172,7 +173,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           mentionCandidates={readArchetypeArray(node.meta || {}, 'referenceImageUrls')}
         />
       </div>
-      <div ref={footerRef} className={cn('flex items-center gap-2 mt-auto min-w-0 pt-1 shrink-0')}>
+      <div ref={footerRef} className={cn('flex items-center gap-2 mt-auto pt-1 shrink-0 w-max')}>
         <NodeParameterControls node={node} section="parameters" />
         {(() => {
           const disabledReason = !canGenerate && !isGenerating
