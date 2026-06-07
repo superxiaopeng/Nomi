@@ -71,11 +71,6 @@ function summarizeToolCall(toolName: string, args: unknown): string {
 type CanvasAssistantPanelProps = {
   defaultCollapsed?: boolean
   onCollapsedChange?: (collapsed: boolean) => void
-  /** Rendered inside the unified app-level dock (C-2): the dock owns collapse +
-   * positioning, so the panel never shows its own launcher and fills the dock. */
-  embedded?: boolean
-  /** When embedded, the header collapse button asks the dock to collapse. */
-  onCollapse?: () => void
 }
 
 function createMessageId(): string {
@@ -85,8 +80,6 @@ function createMessageId(): string {
 export default function CanvasAssistantPanel({
   defaultCollapsed = false,
   onCollapsedChange,
-  embedded = false,
-  onCollapse,
 }: CanvasAssistantPanelProps): JSX.Element {
   const nodes = useGenerationCanvasStore((state) => state.nodes)
   const edges = useGenerationCanvasStore((state) => state.edges)
@@ -298,7 +291,7 @@ export default function CanvasAssistantPanel({
     void clearWorkbenchAgentSession(workbenchSessionKey())
   }, [resetConversation])
 
-  if (collapsed && !embedded) {
+  if (collapsed) {
     return (
       <aside
         className={cn(
@@ -329,8 +322,7 @@ export default function CanvasAssistantPanel({
     <aside
       className={cn(
         'generation-canvas-v2-assistant',
-        'grid grid-rows-[auto_minmax(0,1fr)_auto] h-full',
-        embedded ? 'w-full' : 'w-[340px]',
+        'grid grid-rows-[auto_minmax(0,1fr)_auto] w-[340px] h-full',
         'max-h-none min-w-0 min-h-0 overflow-hidden',
         'border-0 rounded-none bg-nomi-paper shadow-none',
         'max-[900px]:w-[min(340px,calc(100vw-28px))]',
@@ -368,7 +360,7 @@ export default function CanvasAssistantPanel({
               'hover:bg-nomi-ink-05 hover:text-nomi-ink',
             )}
             label="收起 AI"
-            onClick={() => (embedded ? onCollapse?.() : setCollapsed(true))}
+            onClick={() => setCollapsed(true)}
             icon={<IconX size={14} />}
           />
         </div>

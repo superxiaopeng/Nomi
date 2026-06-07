@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ProjectLibraryPage from "./library/ProjectLibraryPage";
 import { ToastHost } from "../ui/toast";
 import { FilePreviewPanel } from "./explorer/FilePreviewPanel";
-import { WorkbenchAssistantDock } from "./ai/WorkbenchAssistantDock";
 import {
     createLocalProject,
     deleteLocalProject,
@@ -36,6 +35,10 @@ const OnboardingFloatingPanel = React.lazy(() =>
 const GenerationCanvas = React.lazy(
     () => import("./generationCanvasV2/components/GenerationCanvas"),
 );
+const CanvasAssistantPanel = React.lazy(
+    () => import("./generationCanvasV2/components/CanvasAssistantPanel"),
+);
+
 function GenerationCanvasLoading(): JSX.Element {
     return (
         <div
@@ -61,6 +64,8 @@ export default function NomiStudioApp(): JSX.Element {
     const { projects, refreshProjects } = useLocalProjects();
     const [activeProject, setActiveProject] =
         React.useState<LocalProjectSummary | null>(null);
+    const [generationAiCollapsed, setGenerationAiCollapsed] =
+        React.useState(true);
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
     const hydratingProjectRef = React.useRef(false);
     const activeProjectIdRef = React.useRef<string | null>(null);
@@ -435,6 +440,17 @@ export default function NomiStudioApp(): JSX.Element {
                         <GenerationCanvas />
                     </React.Suspense>
                 }
+                generationAiLayout={
+                    generationAiCollapsed ? "overlay" : "sidebar"
+                }
+                generationAi={
+                    <React.Suspense fallback={null}>
+                        <CanvasAssistantPanel
+                            defaultCollapsed
+                            onCollapsedChange={setGenerationAiCollapsed}
+                        />
+                    </React.Suspense>
+                }
                 projectId={activeProject?.id ?? null}
                 projectName={activeProject?.name}
                 onBackToLibrary={backToLibrary}
@@ -452,8 +468,6 @@ export default function NomiStudioApp(): JSX.Element {
             />
 
             <FilePreviewPanel />
-
-            <WorkbenchAssistantDock />
 
             <ToastHost />
         </div>

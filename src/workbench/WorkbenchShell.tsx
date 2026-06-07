@@ -116,11 +116,6 @@ export default function WorkbenchShell({
     const setWorkspaceMode = useWorkbenchStore(
         (state) => state.setWorkspaceMode,
     );
-    // C-2: the app-level assistant dock is flush-right + full-height; reserve
-    // that width here so workspace content reflows left instead of being covered.
-    const assistantCollapsed = useWorkbenchStore((state) => state.assistantCollapsed);
-    const assistantWidth = useWorkbenchStore((state) => state.assistantWidth);
-    const assistantReserve = !assistantCollapsed && workspaceMode !== "preview" ? assistantWidth : 0;
     const [mountedWorkspaceModes, setMountedWorkspaceModes] = React.useState<
         WorkspaceMode[]
     >(() => [workspaceMode]);
@@ -179,9 +174,7 @@ export default function WorkbenchShell({
                 className={cn(
                     "workbench-shell__body",
                     "relative min-w-0 min-h-0 overflow-hidden flex",
-                    "transition-[padding] duration-150 ease-out",
-                )}
-                style={{ paddingRight: assistantReserve }}>
+                )}>
                 {workspaceMode !== "creation" ? (
                     <ProjectExplorerSidebar projectId={projectId ?? null} />
                 ) : null}
