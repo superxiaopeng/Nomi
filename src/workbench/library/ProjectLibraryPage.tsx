@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn'
 import { NomiLogoMark } from '../../design'
 import type { LocalProjectSummary } from './localProjectStore'
 import { TRY_NOW_EXAMPLES, type TryNowExample } from './tryNowExamples'
-import { PROJECT_TEMPLATE_LIST, type ProjectTemplateId } from './projectTemplates'
+import type { ProjectTemplateId } from './projectTemplates'
 
 type Props = {
   onOpenProject: (projectId: string) => void
@@ -14,61 +14,6 @@ type Props = {
   onTryExample?: (example: TryNowExample) => void
   onOpenModelCatalog?: () => void
   projects: LocalProjectSummary[]
-}
-
-function TemplatePickerModal({
-  open,
-  onCancel,
-  onPick,
-}: {
-  open: boolean
-  onCancel: () => void
-  onPick: (id: ProjectTemplateId) => void
-}): JSX.Element | null {
-  if (!open) return null
-  return (
-    <div
-      className="fixed inset-0 z-[200] grid place-items-center bg-black/30 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="选择项目模板"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-[640px] bg-nomi-paper border border-nomi-line rounded-nomi-lg shadow-nomi-md p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[18px] font-medium text-nomi-ink m-0">选择项目模板</h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-nomi-ink-40 hover:text-nomi-ink text-[20px] leading-none"
-            aria-label="关闭"
-          >
-            ×
-          </button>
-        </div>
-        <div className="grid gap-3">
-          {PROJECT_TEMPLATE_LIST.map((tpl) => (
-            <button
-              type="button"
-              key={tpl.id}
-              onClick={() => onPick(tpl.id)}
-              className={cn(
-                'text-left px-4 py-3 border border-nomi-line rounded-nomi-md',
-                'bg-nomi-bg hover:bg-nomi-paper hover:border-nomi-accent/40 hover:shadow-nomi-sm',
-                'transition-colors duration-150',
-              )}
-            >
-              <div className="text-[14px] font-medium text-nomi-ink mb-1">{tpl.name}</div>
-              <div className="text-[12px] text-nomi-ink-40 leading-snug">{tpl.description}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function formatUpdatedAt(value: number): string {
