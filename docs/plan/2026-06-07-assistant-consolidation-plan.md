@@ -72,6 +72,12 @@
 - [x] R8 样张：`docs/mockups/unified-assistant-panel.html` v4 已用户拍板
 - [x] 阶段 1a：抽共享执行层 applyCanvasToolCall
 - [x] 阶段 1c：定妆命名消歧义（立角色卡 / 基于此图定妆）
-- [~] 阶段 1b 拆桥 → 并入阶段 2（桥与面板分离强耦合，合并时一并拆）
-- [ ] 阶段 2：合并面板 + 空间行为 + 拆桥 + dangerous 标志 + token 读数
-      — **未做**：大幅可见 UI 重写，按 R8/P3 需真实 app 走查；详见 harness 计划 §4。
+- [x] 阶段 2：单一 app 级助手 dock（WorkbenchAssistantDock）——跟随 workspaceMode 切
+      body、右侧整高停靠、占位不遮挡、左缘拖宽、统一折叠、token 读数。**真机 Playwright
+      走查验证**（tests/ux/assistant-merge.walk.mjs）：三模式、折叠/展开、拖宽反流均通过。
+- [~] 阶段 2 余项（刻意暂留，低价值/高风险，附理由）：
+      · 拆 window 事件桥 → 现已低价值：生成面板 mount-and-hide 常驻，setTimeout(60) 竞态已
+        失效、桥被收敛在一处；移除=纯风险无收益。
+      · dangerous 标志 → 审计 honorable-mention，确认 UX 现可用，属小重构。
+      · 统一 composer/控件 → 重写两套可用 composer，高风险低边际收益；两 body 已共享 dock
+        与 chrome 一致性。
