@@ -522,6 +522,19 @@
   line-height: 1.45 !important;
 }
 
+/* 对齐样张 .input：带边框圆角输入盒（border 1px line / radius 10 / padding）。仅创作面板。 */
+.workbench-creation-ai__input {
+  min-height: 56px;
+  padding: 8px 10px !important;
+  border: 1px solid var(--nomi-line) !important;
+  border-radius: 10px !important;
+  background: var(--nomi-paper) !important;
+}
+.workbench-creation-ai__input:focus-within,
+.workbench-creation-ai__input:focus {
+  border-color: var(--nomi-accent) !important;
+}
+
 .workbench-creation-ai__input::placeholder,
 .app-ai-chat-dialog.tc-ai-chat .tc-ai-chat__input .mantine-Textarea-input::placeholder {
   color: var(--workbench-muted-soft) !important;
@@ -604,8 +617,8 @@
 
 .workbench-creation-ai__send,
 .app-ai-chat-dialog.tc-ai-chat .tc-ai-chat__send {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 1px solid transparent !important;
   border-radius: 50% !important;
   background: var(--nomi-ink) !important;
