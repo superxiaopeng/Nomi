@@ -1,7 +1,9 @@
 import {
   type BillingModelKind,
   type ModelCatalogModelDto,
+  type ModelCatalogVendorDto,
   listWorkbenchModelCatalogModels,
+  listWorkbenchModelCatalogVendors,
 } from '../../api/modelCatalogApi'
 import {
   type TaskAssetDto,
@@ -26,11 +28,13 @@ import type { ResolvedGenerationReferences } from './generationReferenceResolver
 import { resolveArchetypeForModel } from '../../../config/modelArchetypes'
 import { buildArchetypeInputParams, currentArchetypeMode } from '../nodes/controls/archetypeMeta'
 import { projectPromptForSend } from '../../assets/promptMentions'
+import { loadUsableVendorKeys, remapArchetypeMode, resolveUsableModelForNode } from './usableVendorModel'
 
 export type CatalogTaskActionOptions = {
   references?: Partial<ResolvedGenerationReferences>
   runTask?: (vendor: string, request: TaskRequestDto) => Promise<TaskResultDto>
   listCatalogModels?: (params: { kind: BillingModelKind; enabled: true }) => Promise<ModelCatalogModelDto[]>
+  listCatalogVendors?: () => Promise<ModelCatalogVendorDto[]>
   fetchTaskResult?: (payload: {
     taskId: string
     vendor?: string
@@ -82,22 +86,8 @@ function selectedModelKey(node: GenerationCanvasNode): string {
   )
 }
 
-function normalizedModelIdentifier(value: string): string {
-  const trimmed = value.trim()
-  return trimmed.startsWith('models/') ? trimmed.slice(7) : trimmed
-}
-
 function catalogKindForNode(node: GenerationCanvasNode): BillingModelKind {
   return getGenerationNodeCatalogKind(node.kind)
-}
-
-function modelMatchesIdentifier(model: ModelCatalogModelDto, identifier: string): boolean {
-  const normalized = normalizedModelIdentifier(identifier)
-  const candidates = [
-    model.modelKey,
-    model.modelAlias || '',
-  ].map((value) => normalizedModelIdentifier(String(value || '').trim())).filter(Boolean)
-  return candidates.includes(normalized)
 }
 
 async function resolveExecutableNodeFromCatalog(
@@ -106,7 +96,27 @@ async function resolveExecutableNodeFromCatalog(
 ): Promise<GenerationCanvasNode> {
   const vendor = selectedVendor(node)
   const modelKey = selectedModelKey(node)
-  if (vendor || !modelKey) return node
+
+  // 没钉供应商也没 modelKey → 交给下游报「请先选择模型」（保持原行为）。
+  if (!vendor && !modelKey) return node
+
+  // 「可用供应商」需要 catalog runtime；非 Electron 上下文（单测/Web）拿不到 → 退回旧行为：信任钉死的
+  // 供应商（无法重解析，但也不该误抛）。能拿到时才进入「断开→自动迁移」新逻辑。
+  const listVendors = options.listCatalogVendors || listWorkbenchModelCatalogVendors
+  let usable: Set<string> | null = null
+  try {
+    usable = await loadUsableVendorKeys(listVendors)
+  } catch {
+    usable = null
+  }
+  if (!usable) return node
+
+  // Happy path：钉死的供应商现在仍可用 → 原样执行（绝大多数情况）。
+  if (vendor && usable.has(vendor)) return node
+  // 钉了供应商但它现在不可用、却又没有 modelKey 可据以重解析 → 直接报清晰错误。
+  if (!modelKey) {
+    throw new Error(`供应商「${vendor}」已断开，且该节点未记录模型。请重新连接，或在该节点上改选已连接供应商的模型。`)
+  }
 
   const listCatalogModels = options.listCatalogModels || listWorkbenchModelCatalogModels
   let models: ModelCatalogModelDto[]
@@ -117,27 +127,35 @@ async function resolveExecutableNodeFromCatalog(
     throw new Error(`模型目录解析失败：${message}`)
   }
 
-  const matches = models.filter((model) => model.enabled && modelMatchesIdentifier(model, modelKey))
-  if (matches.length !== 1) {
-    throw new Error(
-      matches.length === 0
-        ? `模型目录中找不到可执行模型：${modelKey}`
-        : `模型目录中存在多个同名模型，请重新选择模型：${modelKey}`,
-    )
+  const meta = node.meta || {}
+  const modelAlias = asTrimmedString(meta.modelAlias)
+  const match = resolveUsableModelForNode({ modelKey, modelAlias, vendor, meta, models, usable })
+  if (!match) {
+    const sourceArchetype = resolveArchetypeForModel({ modelKey, modelAlias, vendorKey: vendor, meta })
+    const brand = sourceArchetype?.label || asTrimmedString(meta.modelLabel) || modelKey
+    throw new Error(`当前没有已连接的供应商提供「${brand}」模型。请重新连接原供应商，或在该节点上改选一个已连接供应商的模型。`)
   }
 
-  const match = matches[0]
   const resolvedVendor = asTrimmedString(match.vendorKey)
   if (!resolvedVendor) throw new Error(`模型目录缺少 vendorKey：${modelKey}`)
+  // 跨档案迁移（family 兜底，如 Seedance kie↔apimart）时把 node.meta.archetype 重映射到目标档案；
+  // 同档案（同 id）保持原样（参数槽会按新 vendorKey 自动特化，无需动用户填的值）。
+  const sourceArchetype = resolveArchetypeForModel({ modelKey, modelAlias, vendorKey: vendor, meta })
+  const targetArchetype = resolveArchetypeForModel({ modelKey: match.modelKey, modelAlias: match.modelAlias, vendorKey: resolvedVendor, meta: match.meta })
+  const remappedArchetype = targetArchetype
+    ? remapArchetypeMode(sourceArchetype, asTrimmedString((meta.archetype as { modeId?: unknown } | undefined)?.modeId) || undefined, targetArchetype)
+    : null
+
   return {
     ...node,
     meta: {
-      ...(node.meta || {}),
+      ...meta,
       modelKey: asTrimmedString(match.modelKey) || modelKey,
       modelAlias: asTrimmedString(match.modelAlias) || modelKey,
       modelVendor: resolvedVendor,
       vendor: resolvedVendor,
       modelLabel: asTrimmedString(match.labelZh) || modelKey,
+      ...(remappedArchetype ? { archetype: remappedArchetype } : {}),
       ...(isVideoLikeGenerationNodeKind(node.kind)
         ? { videoModel: asTrimmedString(match.modelKey) || modelKey, videoModelVendor: resolvedVendor }
         : { imageModel: asTrimmedString(match.modelKey) || modelKey, imageModelVendor: resolvedVendor }),

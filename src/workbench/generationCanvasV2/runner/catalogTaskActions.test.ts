@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCatalogTaskRequest, normalizeCatalogTaskResult } from './catalogTaskActions'
+import { buildCatalogTaskRequest, normalizeCatalogTaskResult, runCatalogGenerationTask } from './catalogTaskActions'
 import { MODEL_ARCHETYPES } from '../../../config/modelArchetypes'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
-import type { TaskResultDto } from '../../api/taskApi'
+import type { TaskRequestDto, TaskResultDto } from '../../api/taskApi'
+import type { ModelCatalogModelDto, ModelCatalogVendorDto } from '../../api/modelCatalogApi'
 
 function textNode(): GenerationCanvasNode {
   return { id: 'n1', kind: 'text', title: '', position: { x: 0, y: 0 }, meta: { modelKey: 'gpt-x' } }
@@ -110,6 +111,47 @@ describe('buildCatalogTaskRequest — 档案 mapping 桶由 transportTaskKind �
   it('HappyHorse 任意模式 → text_to_video 桶', () => {
     expect(buildCatalogTaskRequest(videoNode('happyhorse', 't2v')).request.kind).toBe('text_to_video')
     expect(buildCatalogTaskRequest(videoNode('happyhorse', 'i2v', { firstFrameUrl: 'F' })).request.kind).toBe('text_to_video')
+  })
+})
+
+// 根因回归（2026-06-08）：断开 kie、连 apimart 后，钉死在 kie 的老节点运行时必须自动迁到
+// apimart 的同款模型，而不是抛 `API key missing: kie`。
+describe('runCatalogGenerationTask — 断开 kie 后老节点自动迁移到已连接供应商', () => {
+  const vendorDto = (key: string, hasApiKey: boolean): ModelCatalogVendorDto => ({ key, name: key, enabled: true, hasApiKey, createdAt: '', updatedAt: '' })
+  const apimartSeedream: ModelCatalogModelDto = { modelKey: 'doubao-seedream-4.5', vendorKey: 'apimart', labelZh: 'Seedream 4.5', kind: 'image', enabled: true, meta: { archetypeId: 'seedream' }, createdAt: '', updatedAt: '' }
+
+  const staleKieNode: GenerationCanvasNode = {
+    id: 'n1', kind: 'image', title: '', position: { x: 0, y: 0 }, prompt: '画只猫',
+    meta: { modelKey: 'seedream', modelVendor: 'kie', vendor: 'kie', archetype: { id: 'seedream', modeId: 't2i' } },
+  }
+
+  function harness() {
+    const calls: Array<{ vendor: string; request: TaskRequestDto }> = []
+    const options = {
+      listCatalogVendors: async () => [vendorDto('apimart', true), vendorDto('kie', false)],
+      listCatalogModels: async () => [apimartSeedream],
+      runTask: async (vendor: string, request: TaskRequestDto) => {
+        calls.push({ vendor, request })
+        return { id: 't1', kind: request.kind, status: 'succeeded' as const, assets: [{ type: 'image' as const, url: 'https://x/out.png' }], raw: {} }
+      },
+    }
+    return { calls, options }
+  }
+
+  it('请求打到 apimart，modelKey 改写成 doubao-seedream-4.5（不再要 kie 的 key）', async () => {
+    const { calls, options } = harness()
+    const result = await runCatalogGenerationTask(staleKieNode, options)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].vendor).toBe('apimart')
+    expect(calls[0].request.extras?.modelKey).toBe('doubao-seedream-4.5')
+    expect(result.url).toBe('https://x/out.png')
+  })
+
+  it('没有任何已连接供应商提供该款 → 抛清晰可行动错误，而非 cryptic key missing', async () => {
+    const { options } = harness()
+    await expect(
+      runCatalogGenerationTask(staleKieNode, { ...options, listCatalogVendors: async () => [vendorDto('kie', false)], listCatalogModels: async () => [] }),
+    ).rejects.toThrow(/没有已连接的供应商提供/)
   })
 })
 

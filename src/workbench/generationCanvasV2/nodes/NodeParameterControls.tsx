@@ -62,6 +62,7 @@ import type { AssetRef } from '../../assets/assetTypes'
 import { moveArrayItem } from '../../assets/assetTypes'
 import { removeMention } from '../../assets/promptMentions'
 import { showInfoToast } from '../../../utils/showInfoToast'
+import { remapArchetypeMode } from '../runner/usableVendorModel'
 
 type NodeParameterControlsProps = {
   node: GenerationCanvasNode
@@ -227,6 +228,44 @@ export default function NodeParameterControls({
       },
     })
   }, [isGenerationNode, isVideoLike, meta, node.id, node.meta, selectedModelOption, updateNode])
+
+  // 供应商断开后，节点钉死的旧模型已从下拉移除（selectedModelOption===null，但 selectedModelValue 仍在）。
+  // 按 archetype 在当前可用 options 里找同款，自动改选并写回 meta —— 否则节点会卡在选不中的死供应商上，
+  // 标签/参数全错。与运行时咽喉 resolveExecutableNodeFromCatalog 同策略（同 id 优先，family 兜底）。
+  React.useEffect(() => {
+    if (!isGenerationNode || !selectedModelValue || selectedModelOption) return
+    const sourceArchetype = resolveArchetypeForModel({
+      modelKey: selectedModelValue,
+      modelAlias: readMeta(meta, 'modelAlias'),
+      vendorKey: readMeta(meta, 'modelVendor') || readMeta(meta, 'vendor'),
+      meta,
+    })
+    if (!sourceArchetype) return
+    const target =
+      modelOptions.find((option) => resolveArchetypeForOption(option)?.id === sourceArchetype.id) ||
+      modelOptions.find((option) => resolveArchetypeForOption(option)?.family === sourceArchetype.family)
+    const optionVendor = typeof target?.vendor === 'string' ? target.vendor.trim() : ''
+    if (!target?.value || !optionVendor) return
+    const targetArchetype = resolveArchetypeForOption(target)
+    const remapped = targetArchetype
+      ? remapArchetypeMode(sourceArchetype, (meta.archetype as { modeId?: string } | undefined)?.modeId, targetArchetype)
+      : null
+    updateNode(node.id, {
+      meta: {
+        ...(node.meta || {}),
+        modelKey: target.modelKey || target.value,
+        modelAlias: target.modelAlias || target.value,
+        modelVendor: optionVendor,
+        vendor: optionVendor,
+        modelLabel: target.label,
+        ...(remapped ? { archetype: remapped } : {}),
+        ...(isVideoLike
+          ? { videoModel: target.value, videoModelVendor: optionVendor }
+          : { imageModel: target.value, imageModelVendor: optionVendor }),
+      },
+    })
+    showInfoToast(`原供应商已断开，已自动切换到「${target.label}」`)
+  }, [isGenerationNode, isVideoLike, meta, modelOptions, node.id, node.meta, selectedModelOption, selectedModelValue, updateNode])
 
   // 选到一个有内置档案的模型、还没有命名空间 meta 时，初始化 node.meta.archetype（落到默认模式）。
   // 幂等：已是该档案则 no-op，不会循环。
