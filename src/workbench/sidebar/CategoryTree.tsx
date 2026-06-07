@@ -280,12 +280,12 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
 
   const renderContextMenu = () => {
     if (!menu) return null
-    const buttonClass = 'w-full px-3 py-1.5 text-left text-[12px] text-nomi-ink-70 hover:bg-nomi-ink-05'
-    const dangerClass = 'w-full px-3 py-1.5 text-left text-[12px] text-red-600 hover:bg-red-50'
+    const buttonClass = 'w-full px-2.5 py-1 text-left text-[12px] text-nomi-ink-70 hover:bg-nomi-ink-05'
+    const dangerClass = 'w-full px-2.5 py-1 text-left text-[12px] text-red-600 hover:bg-red-50'
     return (
       <div
         role="menu"
-        className="fixed z-50 min-w-[168px] overflow-hidden rounded-lg border border-nomi-line bg-white py-1 shadow-xl"
+        className="fixed z-50 min-w-[120px] overflow-hidden rounded-md border border-nomi-line bg-white py-1 shadow-lg"
         style={{ left: menu.x, top: menu.y }}
         onClick={(event) => event.stopPropagation()}
         onContextMenu={(event) => event.preventDefault()}
@@ -300,7 +300,7 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCopyNode(menu.nodeId)}>复制</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameNode(menu.nodeId)}>重命名</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRegenerateDerivedNode(menu.nodeId)}>派生重新生成</button>
-            <div className="my-1 h-px bg-nomi-line" />
+            <div className="my-0.5 h-px bg-nomi-line" />
             <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteNode(menu.nodeId)}>删除</button>
           </>
         ) : null}
@@ -309,7 +309,7 @@ export default function CategoryTree({ categories, createGroupNonce = 0 }: Props
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameGroup(menu.groupId)}>重命名</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleSetGroupColor(menu.groupId)}>改颜色</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleUngroup(menu.groupId)}>解组（保留节点）</button>
-            <div className="my-1 h-px bg-nomi-line" />
+            <div className="my-0.5 h-px bg-nomi-line" />
             <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteGroup(menu.groupId)}>删除（连节点）</button>
           </>
         ) : null}

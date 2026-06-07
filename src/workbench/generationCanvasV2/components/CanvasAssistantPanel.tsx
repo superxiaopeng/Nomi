@@ -418,7 +418,7 @@ export default function CanvasAssistantPanel({
               className={cn(
                 'relative max-w-[90%] py-[10px] px-[14px] rounded-nomi',
                 'bg-nomi-ink-05 text-nomi-ink text-[13.5px] leading-[1.55] whitespace-pre-wrap',
-                message.role === 'user' && 'self-end rounded-br-[4px] bg-nomi-ink text-nomi-paper',
+                message.role === 'user' && 'self-end rounded-br-[4px]',
                 message.role === 'assistant' && 'self-start rounded-bl-[4px]',
                 message.role === 'tool' && 'self-start bg-nomi-accent-soft text-nomi-accent',
               )}

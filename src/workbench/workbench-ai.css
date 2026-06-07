@@ -371,8 +371,6 @@
   margin-left: auto;
   border-color: transparent !important;
   border-bottom-right-radius: 4px !important;
-  background: var(--nomi-ink) !important;
-  color: var(--nomi-paper) !important;
 }
 
 .workbench-creation-ai__message-content {
