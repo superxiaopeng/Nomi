@@ -448,7 +448,7 @@ export default function CanvasAssistantPanel({
                     >
                       <div className={cn('text-nomi-ink text-[13px] font-medium')}>{call.toolName}</div>
                       <div className={cn('text-nomi-ink-80 text-[12.5px]')}>{summarizeToolCall(call.toolName, call.args)}</div>
-                      <details className={cn('text-nomi-ink-60 text-[11.5px]')}>
+                      <details className={cn('text-nomi-ink-60 text-caption')}>
                         <summary className={cn('cursor-pointer select-none')}>查看参数</summary>
                         <pre className={cn('mt-1 max-h-[160px] overflow-auto p-2 rounded-nomi-sm bg-nomi-ink-05 text-[11px] leading-[1.4] whitespace-pre-wrap break-all')}>
                           {JSON.stringify(call.args, null, 2)}
@@ -490,7 +490,7 @@ export default function CanvasAssistantPanel({
         <textarea
           className={cn(
             // 对齐样张 .input：带边框圆角输入盒。
-            'w-full min-h-[56px] px-2.5 py-2 resize-none rounded-[10px]',
+            'w-full min-h-14 px-2 py-2 resize-none rounded-nomi',
             'border border-nomi-line outline-0 focus:border-nomi-accent',
             'bg-nomi-paper text-nomi-ink font-[inherit] text-[13.5px] leading-[1.45]',
             'placeholder:text-nomi-ink-40',
@@ -505,13 +505,12 @@ export default function CanvasAssistantPanel({
           })}
           disabled={busy}
         />
-        <div className={cn('flex items-center justify-between gap-1.5')}>
-          <div className={cn('flex items-center gap-1.5 min-w-0')}>
+        <div className={cn('flex items-center justify-between gap-2')}>
+          <div className={cn('flex items-center gap-2 min-w-0')}>
             <NomiSelect
               ariaLabel="AI 模式"
               leadingLabel="模式"
-              size="xs"
-              className="h-[26px]"
+              size="sm"
               value={mode}
               options={[
                 { value: 'agent', label: 'Agent' },
@@ -520,14 +519,14 @@ export default function CanvasAssistantPanel({
               ]}
               onChange={(value) => setMode(value as 'agent' | 'chat' | 'refine')}
             />
-            <AssistantModelPicker className="h-[26px]" />
+            <AssistantModelPicker className="h-7" />
           </div>
           {busy ? (
             <WorkbenchIconButton
               type="button"
               onClick={() => cancelRef.current?.()}
               className={cn(
-                'w-[28px] h-[28px] grid place-items-center',
+                'size-7 grid place-items-center',
                 'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
                 'hover:enabled:bg-nomi-accent',
               )}
@@ -539,7 +538,7 @@ export default function CanvasAssistantPanel({
             <WorkbenchIconButton
               type="submit"
               className={cn(
-                'w-[28px] h-[28px] grid place-items-center',
+                'size-7 grid place-items-center',
                 'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
                 'hover:enabled:bg-nomi-accent',
                 'disabled:bg-nomi-ink-20 disabled:text-nomi-ink-40 disabled:cursor-not-allowed',

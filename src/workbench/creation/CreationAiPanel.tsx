@@ -405,7 +405,7 @@ export default function CreationAiPanel(): JSX.Element {
         <textarea
           className={cn(
             'workbench-creation-ai__input',
-            'w-full min-h-[78px] resize-none',
+            'w-full min-h-14 resize-none',
             'border-0 rounded-none bg-transparent',
             'font-inherit outline-none',
             'focus:shadow-none',
@@ -415,12 +415,11 @@ export default function CreationAiPanel(): JSX.Element {
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => void send())}
         />
-        <div className={cn('workbench-creation-ai__actions', 'flex items-center justify-between gap-1.5')}>
+        <div className={cn('workbench-creation-ai__actions', 'flex items-center justify-between gap-2')}>
           <NomiSelect
             ariaLabel="创作模式"
             leadingLabel="模式"
-            size="xs"
-            className="h-[26px]"
+            size="sm"
             title={activeMode.description}
             value={activeMode.id}
             options={CREATION_AI_MODES.map((mode) => ({ value: mode.id, label: mode.shortLabel }))}
@@ -431,7 +430,7 @@ export default function CreationAiPanel(): JSX.Element {
               // 纯 button + NomiSelect trigger 同款 chrome（WorkbenchButton 会强加自己的
               // 圆角/字重，导致 chip 变圆角矩形而非全圆 pill，故不用它）。
               'workbench-creation-ai__storyboard-chip',
-              'shrink-0 h-[26px] inline-flex items-center gap-1 pl-2.5 pr-2',
+              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
               'border border-nomi-line rounded-pill bg-nomi-paper',
               'text-caption text-nomi-ink-80 cursor-pointer',
               'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
@@ -448,7 +447,7 @@ export default function CreationAiPanel(): JSX.Element {
           <button
             className={cn(
               'workbench-creation-ai__fixation-chip',
-              'shrink-0 h-[26px] inline-flex items-center gap-1 pl-2.5 pr-2',
+              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
               'border border-nomi-line rounded-pill bg-nomi-paper',
               'text-caption text-nomi-ink-80 cursor-pointer',
               'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
@@ -466,7 +465,7 @@ export default function CreationAiPanel(): JSX.Element {
             <WorkbenchIconButton
               className={cn(
                 'workbench-creation-ai__send',
-                'shrink-0 w-[28px] inline-flex items-center justify-center cursor-pointer',
+                'shrink-0 size-7 inline-flex items-center justify-center cursor-pointer',
                 'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
               )}
               label="停止"
@@ -478,7 +477,7 @@ export default function CreationAiPanel(): JSX.Element {
             <WorkbenchIconButton
               className={cn(
                 'workbench-creation-ai__send',
-                'shrink-0 w-[28px] inline-flex items-center justify-center cursor-pointer',
+                'shrink-0 size-7 inline-flex items-center justify-center cursor-pointer',
                 'disabled:cursor-not-allowed disabled:opacity-[0.48]',
                 'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
               )}
