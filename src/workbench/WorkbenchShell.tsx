@@ -175,7 +175,8 @@ export default function WorkbenchShell({
                     "workbench-shell__body",
                     "relative min-w-0 min-h-0 overflow-hidden flex",
                 )}>
-                {workspaceMode !== "creation" ? (
+                {/* 文件树只在生成区显示：创作是纯文稿、预览/剪辑是回看时间轴，都不需要左侧资源树。 */}
+                {workspaceMode === "generation" ? (
                     <ProjectExplorerSidebar projectId={projectId ?? null} />
                 ) : null}
                 <div className='flex-1 min-w-0 min-h-0 relative'>

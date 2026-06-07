@@ -30,6 +30,8 @@ type GraphViewport = { zoom: number; offset: { x: number; y: number } }
 type WorkbenchState = {
   persistRevision: number
   workspaceMode: WorkspaceMode
+  /** 生成/预览区右侧助手侧栏宽度（px，可拖宽）。 */
+  assistantWidth: number
   /** Phase E: which directory-tree category is currently selected */
   activeCategoryId: string
   /** Phase E: collapsed (icon-only) vs expanded sidebar */
@@ -55,6 +57,7 @@ type WorkbenchState = {
   /** 拖动中临时吸附辅助线（非持久化，停手即清） */
   timelineSnapGuide: TimelineSnapGuide | null
   setWorkspaceMode: (mode: unknown) => void
+  setAssistantWidth: (width: number) => void
   setWorkbenchDocument: (document: WorkbenchDocument) => void
   setCreationDocumentTools: (tools: CreationDocumentTools | null) => void
   setCreationSelectionText: (text: string) => void
@@ -93,6 +96,7 @@ export function isWorkspaceMode(value: unknown): value is WorkspaceMode {
 export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector((set) => ({
   persistRevision: 0,
   workspaceMode: 'generation',
+  assistantWidth: 340,
   activeCategoryId: 'shots',
   sidebarCollapsed: true,
   categoryViewports: {},
@@ -131,6 +135,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
     if (!isWorkspaceMode(mode)) return
     set({ workspaceMode: mode })
   },
+  setAssistantWidth: (width) => set({ assistantWidth: Math.max(300, Math.min(600, Math.round(width))) }),
   setWorkbenchDocument: (workbenchDocument) => {
     set((state) => ({
       workbenchDocument: normalizeWorkbenchDocument(workbenchDocument),
