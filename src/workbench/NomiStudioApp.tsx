@@ -32,6 +32,11 @@ const OnboardingFloatingPanel = React.lazy(() =>
         default: module.OnboardingFloatingPanel,
     })),
 );
+const AssetLibraryPanel = React.lazy(() =>
+    import("./assets/AssetLibraryPanel").then((module) => ({
+        default: module.AssetLibraryPanel,
+    })),
+);
 const GenerationCanvas = React.lazy(
     () => import("./generationCanvasV2/components/GenerationCanvas"),
 );
@@ -67,6 +72,7 @@ export default function NomiStudioApp(): JSX.Element {
     const [generationAiCollapsed, setGenerationAiCollapsed] =
         React.useState(true);
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
+    const [assetLibraryOpened, setAssetLibraryOpened] = React.useState(false);
     const hydratingProjectRef = React.useRef(false);
     const activeProjectIdRef = React.useRef<string | null>(null);
     const initialHydrationAttemptedRef = React.useRef(false);
@@ -100,6 +106,19 @@ export default function NomiStudioApp(): JSX.Element {
             window.removeEventListener(
                 "nomi-open-model-catalog",
                 handleOpenModelCatalog,
+            );
+    }, []);
+
+    React.useEffect(() => {
+        const handleOpenAssetLibrary = () => setAssetLibraryOpened(true);
+        window.addEventListener(
+            "nomi-open-asset-library",
+            handleOpenAssetLibrary,
+        );
+        return () =>
+            window.removeEventListener(
+                "nomi-open-asset-library",
+                handleOpenAssetLibrary,
             );
     }, []);
 
@@ -466,6 +485,14 @@ export default function NomiStudioApp(): JSX.Element {
                 // zIndex={4000}
                 // withinPortal
             />
+
+            <React.Suspense fallback={null}>
+                <AssetLibraryPanel
+                    opened={assetLibraryOpened}
+                    onClose={() => setAssetLibraryOpened(false)}
+                    projectId={activeProject?.id ?? null}
+                />
+            </React.Suspense>
 
             <FilePreviewPanel />
 
