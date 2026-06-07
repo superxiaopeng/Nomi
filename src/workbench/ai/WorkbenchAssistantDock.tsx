@@ -9,13 +9,31 @@ import CanvasAssistantPanel from '../generationCanvasV2/components/CanvasAssista
  * Single app-level assistant (C-2). One persistent dock whose body follows the
  * active workspace — creation → 文本工具, generation → 画布工具 — instead of two
  * separate per-workspace panels. Collapses to one launcher; preview has none.
- * Backend runtime/session is already shared (workbenchSessionKey), so this is a
- * front-of-house unification: predictable position, consistent collapse.
+ * Bottom-right anchored (doesn't cover the generation timeline), capped height,
+ * left-edge drag handle to resize width. No free-floating window (R3 decision).
  */
 export function WorkbenchAssistantDock(): JSX.Element | null {
   const workspaceMode = useWorkbenchStore((s) => s.workspaceMode)
   const collapsed = useWorkbenchStore((s) => s.assistantCollapsed)
   const setCollapsed = useWorkbenchStore((s) => s.setAssistantCollapsed)
+  const width = useWorkbenchStore((s) => s.assistantWidth)
+  const setWidth = useWorkbenchStore((s) => s.setAssistantWidth)
+
+  const dragRef = React.useRef<{ startX: number; startW: number } | null>(null)
+  const onPointerDown = React.useCallback((e: React.PointerEvent) => {
+    dragRef.current = { startX: e.clientX, startW: width }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }, [width])
+  const onPointerMove = React.useCallback((e: React.PointerEvent) => {
+    const st = dragRef.current
+    if (!st) return
+    // Right-anchored: dragging left (smaller clientX) widens the dock.
+    setWidth(st.startW + (st.startX - e.clientX))
+  }, [setWidth])
+  const endDrag = React.useCallback((e: React.PointerEvent) => {
+    dragRef.current = null
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* noop */ }
+  }, [])
 
   // Preview/timeline has no assistant tools yet.
   if (workspaceMode === 'preview') return null
@@ -44,16 +62,34 @@ export function WorkbenchAssistantDock(): JSX.Element | null {
   return (
     <div
       className={cn(
-        'fixed right-4 z-[80] w-[344px]',
-        'top-[calc(var(--workbench-topbar-height)+16px)] bottom-4',
-        'overflow-hidden border border-nomi-line rounded-nomi bg-nomi-paper shadow-nomi-lg',
+        'fixed top-14 right-0 bottom-0 z-[80] flex',
+        'overflow-hidden border-l border-nomi-line bg-nomi-paper shadow-nomi-lg',
       )}
+      style={{ width }}
+      aria-label="助手"
     >
-      {workspaceMode === 'creation' ? (
-        <CreationAiPanel embedded onCollapse={() => setCollapsed(true)} />
-      ) : (
-        <CanvasAssistantPanel embedded onCollapse={() => setCollapsed(true)} />
-      )}
+      <div
+        className={cn(
+          'group absolute left-0 top-0 bottom-0 z-10 flex w-2 -translate-x-1/2',
+          'cursor-col-resize items-center justify-center touch-none',
+        )}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        role="separator"
+        aria-label="拖动调整助手宽度"
+        aria-orientation="vertical"
+      >
+        <span className={cn('h-9 w-[3px] rounded-full bg-nomi-ink-30 group-hover:bg-nomi-accent')} />
+      </div>
+      <div className={cn('h-full min-w-0 flex-1')}>
+        {workspaceMode === 'creation' ? (
+          <CreationAiPanel embedded onCollapse={() => setCollapsed(true)} />
+        ) : (
+          <CanvasAssistantPanel embedded onCollapse={() => setCollapsed(true)} />
+        )}
+      </div>
     </div>
   )
 }
