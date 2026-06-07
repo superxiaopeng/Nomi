@@ -9,6 +9,7 @@ import { AiReplyActionButton } from '../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { openWorkbenchModelIntegration, WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
+import { AssistantToolsFold } from '../ai/AssistantToolsFold'
 import { useWorkbenchStore } from '../workbenchStore'
 import { requestStoryboardPlanning } from '../generationCanvasV2/agent/storyboardLauncher'
 import { requestFixationPlanning } from '../generationCanvasV2/agent/fixationLauncher'
@@ -264,8 +265,8 @@ export default function CreationAiPanel(): JSX.Element {
     <aside
       className={cn(
         'workbench-creation-ai',
-        'grid grid-rows-[44px_minmax(0,1fr)_auto_auto]',
-        '[grid-template-areas:"header"_"messages"_"error"_"composer"]',
+        'grid grid-rows-[44px_auto_minmax(0,1fr)_auto_auto]',
+        '[grid-template-areas:"header"_"tools"_"messages"_"error"_"composer"]',
         'min-w-0 min-h-0 overflow-hidden',
       )}
       aria-label="AI 创作区"
@@ -298,6 +299,10 @@ export default function CreationAiPanel(): JSX.Element {
           />
         </div>
       </header>
+
+      <div className={cn('[grid-area:tools]')}>
+        <AssistantToolsFold tools={['读全文', '读选区', '插入到光标', '替换选区', '追加到文末']} />
+      </div>
 
       <div
         ref={messagesScrollRef}
