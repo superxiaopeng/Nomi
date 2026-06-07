@@ -83,15 +83,12 @@ function formatUpdatedAt(value: number): string {
   return new Date(value).toLocaleDateString('zh-CN')
 }
 
-function ThumbnailMosaic({ urls, name }: { urls: string[]; name?: string }): JSX.Element {
+function ThumbnailMosaic({ urls }: { urls: string[] }): JSX.Element {
   if (urls.length === 0) {
-    // 未生成的项目没有封面图 → 显示项目名占位（而非纯图标白屏），一眼认得出是哪个项目。
+    // 未生成的项目无封面 → 只放中性占位图标；名称由卡片下方统一显示，缩略图里不再重复（去重）。
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 bg-nomi-ink-05">
+      <div className="absolute inset-0 grid place-items-center bg-nomi-ink-05">
         <IconMovie size={26} stroke={1.2} className="text-nomi-ink-30" aria-hidden />
-        {name ? (
-          <span className="max-w-full text-center text-[13px] font-medium leading-snug text-nomi-ink-60 line-clamp-2">{name}</span>
-        ) : null}
       </div>
     )
   }
@@ -259,7 +256,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   className="aspect-video relative overflow-hidden bg-nomi-ink-05"
                   style={urls.length === 0 && project.thumbStyle ? { background: project.thumbStyle } : undefined}
                 >
-                  <ThumbnailMosaic urls={urls} name={project.name} />
+                  <ThumbnailMosaic urls={urls} />
                   <div className={cn(
                     'absolute inset-0 bg-[oklch(0.12_0.01_80/0.3)] opacity-0 transition-opacity duration-150',
                     'flex items-center justify-center z-[2]',

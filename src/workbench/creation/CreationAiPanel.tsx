@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCursorText, IconFilePlus, IconMovie, IconPencil, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles } from '@tabler/icons-react'
+import { IconCursorText, IconFilePlus, IconMovie, IconPencil, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles, IconX } from '@tabler/icons-react'
 import { NomiLoadingMark, NomiLogoMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
@@ -68,7 +68,7 @@ function readWorkbenchAiReplyText(response: unknown): string {
   return ''
 }
 
-export default function CreationAiPanel(): JSX.Element {
+export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => void } = {}): JSX.Element {
   const [sending, setSending] = React.useState(false)
   // Cancel handle for the in-flight agent turn (user "Stop").
   const cancelRef = React.useRef<(() => void) | null>(null)
@@ -297,6 +297,20 @@ export default function CreationAiPanel(): JSX.Element {
             )}
             onNewConversation={handleNewConversation}
           />
+          {onCollapse ? (
+            <WorkbenchIconButton
+              className={cn(
+                'size-6 inline-grid place-items-center shrink-0',
+                'p-0 border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
+                'hover:bg-nomi-ink-05 hover:text-nomi-ink',
+                'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+              )}
+              label="收起助手"
+              aria-label="收起创作助手"
+              onClick={onCollapse}
+              icon={<IconX size={15} />}
+            />
+          ) : null}
         </div>
       </header>
 
