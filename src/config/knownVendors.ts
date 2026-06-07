@@ -39,8 +39,8 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
     glyph: 'A',
     tagline: '一个 key，解锁全部预置模型',
     promo: {
-      text: '通过我们的链接注册，享前 3 次充值 10% 返现。',
-      ctaLabel: '注册',
+      text: '如果你愿意，可以用我们的链接注册；不愿意也可以直接去官方注册。',
+      ctaLabel: '用我们的链接',
       url: 'https://apimart.ai/zh', // TODO: 替换为专属 ?ref 链接
     },
   },
@@ -49,8 +49,8 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
     glyph: 'K',
     tagline: '一个 key，解锁内置模型',
     promo: {
-      text: '通过我们的链接注册，享专属优惠。',
-      ctaLabel: '注册',
+      text: '如果你愿意，可以用我们的链接注册；不愿意也可以直接去官方注册。',
+      ctaLabel: '用我们的链接',
       url: 'https://kie.ai', // TODO: 替换为专属 ?ref 链接
     },
   },

@@ -10,7 +10,7 @@
  */
 import React from 'react'
 import { Stack, Group, Text, PasswordInput } from '@mantine/core'
-import { IconBolt } from '@tabler/icons-react'
+import { IconKey, IconCircle, IconCircleCheck, IconExternalLink } from '@tabler/icons-react'
 import { DesignButton } from '../../design'
 import { getDesktopBridge } from '../../desktop/bridge'
 import type { KnownVendor } from '../../config/knownVendors'
@@ -128,10 +128,10 @@ export function VendorOnboardCard({
         <div
           style={{
             width: 30, height: 30, flexShrink: 0,
-            borderRadius: 8,
+            borderRadius: 'var(--nomi-radius-sm)',
             background: 'var(--nomi-ink)', color: 'var(--nomi-paper)',
             display: 'grid', placeItems: 'center',
-            fontWeight: 700, fontSize: 14,
+            fontFamily: 'var(--nomi-font-display)', fontWeight: 600, fontSize: 15,
           }}
           aria-hidden
         >
@@ -143,19 +143,23 @@ export function VendorOnboardCard({
             {hasApiKey ? `已连通 · ${total} 个模型可用` : directory.tagline}
           </Text>
         </Stack>
-        <Text
-          size="xs"
-          fw={600}
+        <Group
+          gap={4}
+          wrap="nowrap"
           style={{
             flexShrink: 0,
             padding: '3px 9px',
             borderRadius: 999,
             background: hasApiKey ? 'var(--workbench-success-soft)' : 'var(--nomi-ink-10)',
-            color: hasApiKey ? 'var(--workbench-success-ink)' : 'var(--nomi-ink-60)',
           }}
         >
-          {hasApiKey ? '● 已连通' : '○ 待接入'}
-        </Text>
+          {hasApiKey
+            ? <IconCircleCheck size={13} stroke={1.8} color="var(--workbench-success-ink)" />
+            : <IconCircle size={13} stroke={1.8} color="var(--nomi-ink-40)" />}
+          <Text size="xs" fw={600} c={hasApiKey ? 'var(--workbench-success-ink)' : 'var(--nomi-ink-60)'}>
+            {hasApiKey ? '已连通' : '待接入'}
+          </Text>
+        </Group>
       </Group>
 
       <Stack gap={11} px="sm" pb="sm">
@@ -174,7 +178,7 @@ export function VendorOnboardCard({
               />
               <DesignButton
                 size="xs"
-                leftSection={<IconBolt size={14} />}
+                leftSection={<IconKey size={14} stroke={1.6} />}
                 onClick={handleUnlock}
                 loading={busy}
               >
@@ -272,22 +276,25 @@ export function VendorOnboardCard({
       {/* 推广位（不弹窗、不强制，可见即可） */}
       {directory.promo ? (
         <Group
-          gap={10}
+          gap={8}
           align="center"
           wrap="nowrap"
           px="sm"
-          py={11}
-          style={{
-            borderTop: '1px dashed var(--nomi-line)',
-            background: 'color-mix(in oklch, var(--nomi-accent) 4%, var(--nomi-paper))',
-          }}
+          py={10}
+          style={{ borderTop: '1px dashed var(--nomi-line)' }}
         >
-          <span style={{ fontSize: 16, flexShrink: 0 }} aria-hidden>🎁</span>
-          <Text size="xs" c="var(--nomi-ink-80)" style={{ flex: 1, minWidth: 0, lineHeight: 1.45 }}>
+          <Text size="xs" c="var(--nomi-ink-40)" style={{ flex: 1, minWidth: 0, lineHeight: 1.5 }}>
             {directory.promo.text}
           </Text>
-          <DesignButton size="xs" variant="light" onClick={openPromo} style={{ flexShrink: 0 }}>
-            {directory.promo.ctaLabel} →
+          <DesignButton
+            size="xs"
+            variant="subtle"
+            color="gray"
+            rightSection={<IconExternalLink size={13} stroke={1.6} />}
+            onClick={openPromo}
+            style={{ flexShrink: 0 }}
+          >
+            {directory.promo.ctaLabel}
           </DesignButton>
         </Group>
       ) : null}
