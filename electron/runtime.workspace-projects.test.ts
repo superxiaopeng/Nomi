@@ -170,4 +170,23 @@ describe("runtime workspace project APIs", () => {
     expect(() => saveProject("missing-id", { name: "Missing", payload: {} })).toThrow(/workspace project/i);
     expect(listProjects()).toEqual([]);
   });
+
+  it("listProjects derives source: native for default-root projects, folder for external ones", () => {
+    // 「新建项目」→ 落默认根 → native；「打开文件夹」绑外部目录 → folder。
+    // 靠目录位置派生，无需 schema 迁移（项目卡来源徽标 #B 的数据来源）。
+    const defaultRoot = path.join(mockedDocumentsRoot, "Nomi Projects");
+    const externalRoot = makeTempDir("nomi-runtime-external-");
+
+    const nativeProject = createProject({ name: "Native One", payload: { scenes: [] } });
+    const folderProject = createProject({ rootPath: externalRoot, name: "Folder One", payload: { scenes: [] } });
+
+    expect(externalRoot.startsWith(defaultRoot)).toBe(false);
+
+    const projects = listProjects();
+    const native = projects.find((item) => item.id === nativeProject.id);
+    const folder = projects.find((item) => item.id === folderProject.id);
+
+    expect(native).toMatchObject({ id: nativeProject.id, source: "native" });
+    expect(folder).toMatchObject({ id: folderProject.id, source: "folder" });
+  });
 });

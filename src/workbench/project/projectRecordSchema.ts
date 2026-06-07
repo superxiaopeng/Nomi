@@ -65,6 +65,9 @@ export const workbenchProjectRecordSchema = workbenchProjectSummarySchema.extend
   payload: workbenchProjectPayloadSchema,
 })
 
+/** 项目来源：原生（默认根新建）/ 外部文件夹（「打开文件夹」绑定）。桌面端由后端按目录位置派生。 */
+export type WorkbenchProjectSource = 'native' | 'folder'
+
 export type WorkbenchProjectSummary = {
   id: string
   name: string
@@ -75,6 +78,8 @@ export type WorkbenchProjectSummary = {
   thumbStyle?: string
   thumbnail?: string
   thumbnailUrls?: string[]
+  /** 仅桌面端有；Web 端无文件夹概念，缺省按 native 处理。 */
+  source?: WorkbenchProjectSource
 }
 
 export type WorkbenchProjectPayload = {

@@ -257,6 +257,18 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   style={urls.length === 0 && project.thumbStyle ? { background: project.thumbStyle } : undefined}
                 >
                   <ThumbnailMosaic urls={urls} />
+                  {project.source === 'folder' ? (
+                    <span
+                      className={cn(
+                        'absolute top-1.5 left-1.5 z-[3] inline-flex items-center gap-1 h-5 px-2 rounded-full',
+                        'bg-[oklch(0.2_0.01_80/0.55)] text-nomi-paper text-micro backdrop-blur-sm',
+                      )}
+                      title="绑定到外部文件夹的项目"
+                    >
+                      <IconFolderOpen size={11} stroke={1.8} aria-hidden="true" />
+                      文件夹
+                    </span>
+                  ) : null}
                   <div className={cn(
                     'absolute inset-0 bg-[oklch(0.12_0.01_80/0.3)] opacity-0 transition-opacity duration-150',
                     'flex items-center justify-center z-[2]',
