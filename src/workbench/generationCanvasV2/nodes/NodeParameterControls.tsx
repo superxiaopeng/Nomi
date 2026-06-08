@@ -1,31 +1,19 @@
 import React from 'react'
 import { cn } from '../../../utils/cn'
-import { NomiSelect } from '../../../design'
 import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import { deriveGenerationModelCatalogStatus, findModelOptionByIdentifier, useGenerationModelOptionsState } from '../adapters/modelOptionsAdapter'
-import {
-  formatVideoOptionLabel,
-  parseModelParameterControls,
-  type ModelParameterControl,
-} from '../../../config/modelCatalogMeta'
-import type { ModelOption } from '../../../config/models'
+import { type ModelParameterControl } from '../../../config/modelCatalogMeta'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind, isVideoLikeGenerationNodeKind } from '../model/generationNodeKinds'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { importWorkbenchLocalAssetFile } from '../../api/assetUploadApi'
 import {
   type DynamicCatalogControl,
-  type DynamicModelControl,
   type ImageUrlSlot,
   assetUrl,
-  buildDynamicControls,
   buildEffectiveImageCatalogConfig,
-  buildEffectiveVideoCatalogConfig,
   buildImageUrlSlots,
   buildModelControls,
-  catalogControlInitialValue,
-  controlInitialValue,
-  controlValueToString,
   defaultPatchForCatalogControl,
   defaultPatchForControls,
   edgeModeForGroup,
@@ -33,9 +21,6 @@ import {
   getSlotNodeRef,
   getSlotThumbUrl,
   imageCatalogReferenceSlot,
-  isParameterControl,
-  optionLabel,
-  optionValue,
   parseControlInput,
   readMeta,
   removePreviousControlParams,
@@ -47,13 +32,10 @@ import {
   applyArchetypeModeSwitch,
   archetypeModeArraySlots,
   archetypeModeChoices,
-  archetypeModeParams,
   archetypeModeSlots,
   archetypeModeSourceVideoSlot,
   currentArchetypeMode,
-  ensureArchetypeNodeMeta,
   readArchetypeArray,
-  resolveArchetypeForModel,
 } from './controls/archetypeMeta'
 import ModeBar from './controls/ModeBar'
 import AssetReference, { type AssetSlot } from '../../assets/AssetReference'
@@ -61,7 +43,9 @@ import type { AssetRef } from '../../assets/assetTypes'
 import { moveArrayItem } from '../../assets/assetTypes'
 import { removeMention } from '../../assets/promptMentions'
 import { showInfoToast } from '../../../utils/showInfoToast'
-import { remapArchetypeMode } from '../runner/usableVendorModel'
+import InlineParameterBar from './InlineParameterBar'
+import { useNodeModelAutoSelect } from './useNodeModelAutoSelect'
+import { resolveArchetypeForOption, resolveRenderedControls } from './nodeModelArchetype'
 
 type NodeParameterControlsProps = {
   node: GenerationCanvasNode
@@ -70,58 +54,6 @@ type NodeParameterControlsProps = {
   onInsertMention?: (url: string) => void
 }
 
-function chooseDefaultModelOption(
-  options: readonly ModelOption[],
-  isImageLike: boolean,
-  isVideoLike: boolean,
-): ModelOption | undefined {
-  void isImageLike
-  void isVideoLike
-  // 优先选「认得的模型」（有内置档案 = 带真实模板参数，徽标「模板」）作默认，
-  // 而不是盲取 options[0]。否则目录里排第一的可能是用户自接入、未识别的「通用」模型
-  // （如 gemini-omni-video），图片节点一打开默认就是它、看不到 Seedream/nano-banana 等
-  //真正的图片模型，给人「选不到图片模型」的错觉（修①，根因：默认选择没挑「好」的）。
-  // 同时跳过「图生图/编辑」类（空节点默认它 = 没参考图就不能生成，生成钮一直灰）——
-  // 新建空节点该默认到「文生图/文生视频」这类无需参考就能直接生成的模型。
-  const needsReference = (option: ModelOption): boolean =>
-    /image-to-image|img2img|i2i|image2video|edit|inpaint/i.test(`${option.value} ${option.modelKey || ''} ${option.modelAlias || ''}`)
-  const recognized = options.filter((option) => Boolean(resolveArchetypeForOption(option)))
-  return recognized.find((option) => !needsReference(option)) || recognized[0] || options[0]
-}
-
-function resolveArchetypeForOption(option: ModelOption | null) {
-  return resolveArchetypeForModel({ modelKey: option?.modelKey, modelAlias: option?.modelAlias, vendorKey: option?.vendor, meta: option?.meta })
-}
-
-/**
- * 底部参数行要渲染的控件 —— 认得档案的模型用**当前模式**的标量参数（随模式变，如 HappyHorse
- * i2v 无比例）；认不出的走现有 flat catalog 解析。hook 与组件共用此函数，保证「算宽度」与「实际渲染」
- * 一致（单一来源）。
- */
-function resolveRenderedControls(
-  option: ModelOption | null,
-  meta: Record<string, unknown>,
-  isImageLike: boolean,
-  isVideoLike: boolean,
-): DynamicModelControl[] {
-  const archetype = resolveArchetypeForOption(option)
-  if (archetype) {
-    return buildDynamicControls({
-      parameterControls: archetypeModeParams(currentArchetypeMode(archetype, meta)),
-      imageCatalogConfig: null,
-      videoCatalogConfig: null,
-      isImageLike,
-      isVideoLike,
-    })
-  }
-  return buildDynamicControls({
-    parameterControls: parseModelParameterControls(option?.meta),
-    imageCatalogConfig: buildEffectiveImageCatalogConfig(option?.meta),
-    videoCatalogConfig: buildEffectiveVideoCatalogConfig(option?.meta),
-    isImageLike,
-    isVideoLike,
-  })
-}
 
 export default function NodeParameterControls({
   node,
@@ -183,96 +115,18 @@ export default function NodeParameterControls({
     })
   }
 
-  React.useEffect(() => {
-    if (!isGenerationNode) return
-    if (selectedModelValue) return
-    const firstOption = chooseDefaultModelOption(modelOptions, isImageLike, isVideoLike)
-    if (!firstOption?.value) return
-    const defaultPatch = defaultPatchForControls(buildModelControls(firstOption.meta, isImageLike, isVideoLike))
-    updateNode(node.id, {
-      meta: {
-        ...(node.meta || {}),
-        modelKey: firstOption.modelKey || firstOption.value,
-        modelAlias: firstOption.modelAlias || firstOption.value,
-        modelVendor: firstOption.vendor || null,
-        vendor: firstOption.vendor || null,
-        modelLabel: firstOption.label,
-        ...defaultPatch,
-        ...(isVideoLike
-          ? { videoModel: firstOption.value, videoModelVendor: firstOption.vendor || null }
-          : { imageModel: firstOption.value, imageModelVendor: firstOption.vendor || null }),
-      },
-    })
-  }, [isGenerationNode, isVideoLike, modelOptions, node.id, node.meta, selectedModelValue, updateNode])
-
-  React.useEffect(() => {
-    if (!isGenerationNode || !selectedModelOption) return
-    const optionVendor = typeof selectedModelOption.vendor === 'string' ? selectedModelOption.vendor.trim() : ''
-    const currentVendor =
-      readMeta(meta, 'modelVendor') ||
-      readMeta(meta, 'vendor') ||
-      readMeta(meta, isVideoLike ? 'videoModelVendor' : 'imageModelVendor')
-    if (!optionVendor || currentVendor === optionVendor) return
-    updateNode(node.id, {
-      meta: {
-        ...(node.meta || {}),
-        modelKey: selectedModelOption.modelKey || selectedModelOption.value,
-        modelAlias: selectedModelOption.modelAlias || selectedModelOption.value,
-        modelVendor: optionVendor,
-        vendor: optionVendor,
-        modelLabel: selectedModelOption.label,
-        ...(isVideoLike
-          ? { videoModel: selectedModelOption.value, videoModelVendor: optionVendor }
-          : { imageModel: selectedModelOption.value, imageModelVendor: optionVendor }),
-      },
-    })
-  }, [isGenerationNode, isVideoLike, meta, node.id, node.meta, selectedModelOption, updateNode])
-
-  // 供应商断开后，节点钉死的旧模型已从下拉移除（selectedModelOption===null，但 selectedModelValue 仍在）。
-  // 按 archetype 在当前可用 options 里找同款，自动改选并写回 meta —— 否则节点会卡在选不中的死供应商上，
-  // 标签/参数全错。与运行时咽喉 resolveExecutableNodeFromCatalog 同策略（同 id 优先，family 兜底）。
-  React.useEffect(() => {
-    if (!isGenerationNode || !selectedModelValue || selectedModelOption) return
-    const sourceArchetype = resolveArchetypeForModel({
-      modelKey: selectedModelValue,
-      modelAlias: readMeta(meta, 'modelAlias'),
-      vendorKey: readMeta(meta, 'modelVendor') || readMeta(meta, 'vendor'),
-      meta,
-    })
-    if (!sourceArchetype) return
-    const target =
-      modelOptions.find((option) => resolveArchetypeForOption(option)?.id === sourceArchetype.id) ||
-      modelOptions.find((option) => resolveArchetypeForOption(option)?.family === sourceArchetype.family)
-    const optionVendor = typeof target?.vendor === 'string' ? target.vendor.trim() : ''
-    if (!target?.value || !optionVendor) return
-    const targetArchetype = resolveArchetypeForOption(target)
-    const remapped = targetArchetype
-      ? remapArchetypeMode(sourceArchetype, (meta.archetype as { modeId?: string } | undefined)?.modeId, targetArchetype)
-      : null
-    updateNode(node.id, {
-      meta: {
-        ...(node.meta || {}),
-        modelKey: target.modelKey || target.value,
-        modelAlias: target.modelAlias || target.value,
-        modelVendor: optionVendor,
-        vendor: optionVendor,
-        modelLabel: target.label,
-        ...(remapped ? { archetype: remapped } : {}),
-        ...(isVideoLike
-          ? { videoModel: target.value, videoModelVendor: optionVendor }
-          : { imageModel: target.value, imageModelVendor: optionVendor }),
-      },
-    })
-    showInfoToast(`原供应商已断开，已自动切换到「${target.label}」`)
-  }, [isGenerationNode, isVideoLike, meta, modelOptions, node.id, node.meta, selectedModelOption, selectedModelValue, updateNode])
-
-  // 选到一个有内置档案的模型、还没有命名空间 meta 时，初始化 node.meta.archetype（落到默认模式）。
-  // 幂等：已是该档案则 no-op，不会循环。
-  React.useEffect(() => {
-    if (!isGenerationNode || !archetype) return
-    const patch = ensureArchetypeNodeMeta(node.meta || {}, archetype)
-    if (patch) updateNode(node.id, { meta: patch })
-  }, [isGenerationNode, archetype, node.id, node.meta, updateNode])
+  useNodeModelAutoSelect({
+    node,
+    meta,
+    modelOptions,
+    selectedModelValue,
+    selectedModelOption,
+    archetype,
+    isGenerationNode,
+    isImageLike,
+    isVideoLike,
+    updateNode,
+  })
 
   if (!isGenerationNode) return null
   const handleParameterControlChange = (control: ModelParameterControl, value: string) => {
@@ -503,101 +357,20 @@ export default function NodeParameterControls({
     updateMeta({ [slot.key]: null })
   }
 
-  // section="parameters"：底栏 = 模型芯片 + 该模型**所有参数横排内联**（每个带小标签的 pill）。
-  // 参数不再藏进弹层——一眼可见、点一下就调；卡宽内容驱动(w-fit)，参数多则卡变宽、触上限在卡内换行。
+  // section="parameters"：底栏 = 模型芯片 + 该模型所有参数横排内联（实现见 InlineParameterBar）。
   if (section === 'parameters') {
-    if (modelOptions.length === 0) {
-      return (
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center gap-1.5 h-7 px-3 rounded-pill border border-nomi-accent/30',
-            'bg-nomi-accent-soft text-nomi-accent font-medium text-caption',
-            'hover:bg-nomi-accent hover:text-nomi-paper transition-colors cursor-pointer',
-          )}
-          aria-label="去配置模型"
-          title="点击打开模型接入页"
-          onClick={(event) => { event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('nomi-open-model-catalog')) }}
-        >
-          <span className="truncate">{modelCatalogStatus.message}</span>
-          <span className="shrink-0">去配置 →</span>
-        </button>
-      )
-    }
-    // 内联参数：统一用 NomiSelect（设计语言一致、对勾在右）；自由数值/文本无候选项的才保留输入 pill。
-    const renderInlineParam = (control: DynamicModelControl): JSX.Element => {
-      if (!isParameterControl(control)) {
-        return (
-          <NomiSelect
-            key={control.key}
-            ariaLabel={control.label}
-            leadingLabel={control.label}
-            value={catalogControlInitialValue(control, meta)}
-            options={control.options.map((o) => ({ value: optionValue(o), label: optionLabel(o) }))}
-            onChange={(v) => handleCatalogControlChange(control, v)}
-          />
-        )
-      }
-      if (control.type === 'boolean') {
-        return (
-          <NomiSelect
-            key={control.key}
-            ariaLabel={control.label}
-            leadingLabel={control.label}
-            value={controlInitialValue(control, meta) || 'false'}
-            options={[{ value: 'true', label: '开' }, { value: 'false', label: '关' }]}
-            onChange={(v) => handleParameterControlChange(control, v)}
-          />
-        )
-      }
-      if (control.options.length > 0) {
-        return (
-          <NomiSelect
-            key={control.key}
-            ariaLabel={control.label}
-            leadingLabel={control.label}
-            value={controlInitialValue(control, meta)}
-            options={control.options.map((o) => ({ value: controlValueToString(o.value), label: formatVideoOptionLabel(o.label, o.priceLabel) }))}
-            onChange={(v) => handleParameterControlChange(control, v)}
-          />
-        )
-      }
-      // 自由数值/文本（无候选项，如步数/seed）：保留小输入 pill（非下拉）。
-      return (
-        <label key={control.key} className={cn('inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
-          <span className={cn('shrink-0 text-micro leading-none text-nomi-ink-40')}>{control.label}</span>
-          <input
-            className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 min-w-0 w-[56px]')}
-            aria-label={control.label}
-            type={control.type === 'number' ? 'number' : 'text'}
-            value={controlInitialValue(control, meta)}
-            min={control.min}
-            max={control.max}
-            step={control.step}
-            placeholder={control.placeholder}
-            onChange={(e) => handleParameterControlChange(control, e.target.value)}
-          />
-        </label>
-      )
-    }
     return (
-      <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-nowrap items-center gap-2')}>
-        {/* 模型芯片：NomiSelect——值右侧嵌「模板/通用」徽标，选项里每个模型也标注。 */}
-        <NomiSelect
-          ariaLabel="模型"
-          placeholder="选择模型"
-          triggerMaxWidth={150}
-          value={selectedModelOption?.value || ''}
-          triggerBadge={selectedModelOption ? { text: archetype ? '模板' : '通用', tone: archetype ? 'accent' : 'muted' } : undefined}
-          options={modelOptions.map((option) => {
-            const hasArchetype = Boolean(resolveArchetypeForOption(option))
-            return { value: option.value, label: option.label, trailing: hasArchetype ? '模板' : '通用', trailingTone: hasArchetype ? 'accent' as const : 'muted' as const }
-          })}
-          onChange={(v) => handleModelChange(v)}
-        />
-        {/* 该模型的标量参数：横排内联，每个带标签，全可见 */}
-        {renderedControls.map((control) => renderInlineParam(control))}
-      </div>
+      <InlineParameterBar
+        modelOptions={modelOptions}
+        modelCatalogStatus={modelCatalogStatus}
+        renderedControls={renderedControls}
+        selectedModelOption={selectedModelOption}
+        archetype={archetype}
+        meta={meta}
+        onModelChange={handleModelChange}
+        onCatalogControlChange={handleCatalogControlChange}
+        onParameterControlChange={handleParameterControlChange}
+      />
     )
   }
 

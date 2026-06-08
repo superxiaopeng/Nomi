@@ -24,13 +24,16 @@
 
 ## A. NodeParameterControls.tsx（639 行）
 
-### 范围
-1. **`InlineParameterBar.tsx` 子组件** ← `section === 'parameters'` 整个分支 + `renderInlineParam`（原 508-602）。约 -95 行。
-2. **`useNodeModelAutoSelect.ts` hook** ← 4 个模型自动选/vendor 同步/供应商断开自愈 useEffect（原 186-275）。约 -90 行。
-3. **`useNodeAssetSlots.ts` hook** ← slot/array/upload handler + AssetSlot 适配（原 294-504）。约 -210 行。
+### 本轮做（已完成，639 → 412，落到 500 软目标内）
+1. **`nodeModelArchetype.ts`(68)** ← 共享纯函数 chooseDefaultModelOption / resolveArchetypeForOption / resolveRenderedControls（原 73-124），供组件/子组件/hook 共用，破接线循环。
+2. **`InlineParameterBar.tsx`(136)** ← `section === 'parameters'` 整个分支 + `renderInlineParam`（原 508-602），改 props 驱动。
+3. **`useNodeModelAutoSelect.ts`(132)** ← 4 个 useEffect（原 186-275），effect 体 + 依赖数组逐字节保留（含 effect1 故意省略 isImageLike，保行为）。
 
-### 预期
-639 → 约 245 行。落到软目标内。
+### 本轮**不做**（提级到独立 follow-up，含 R13 实机走查）
+- **`useNodeAssetSlots.ts`（asset-slot god-hook，约 -210）暂缓**。原因：① `openSlotKey/uploadError/uploadingSlotKey/uploadingArrayKey` 四个 state 与上传/数组/单帧/handleModeSwitch 多处强耦合，hook 返回面宽（~15 项），idiom 上更像「巨 hook」而非干净拆分（P5 想清楚再动手）；② 该组件**零渲染/handler 测试**，asset 上传/连边行为只有真机能验，纯结构搬运虽 typecheck 安全，但 P3「全绿≠完成」要求配 R13 走查才算证完；③ 拆它需要先想清更好的边界（按上传 / 按派生 拆，还是整块）。→ 独立一轮：先设计边界 → 搬 → 五门 + 多 agent 验 + R13 节点参数面板走查（开节点→选模型→挂参考→上传→改参数）。
+
+### 实际结果
+639 → 412 行（500 软目标内）；新增 3 文件均 < 800。asset-slot 进一步拆解见 follow-up。
 
 ## 不动什么
 
