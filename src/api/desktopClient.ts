@@ -1,4 +1,5 @@
 import { getDesktopBridge, type DesktopBridge } from '../desktop/bridge'
+import type { ProviderKind } from '../desktop/providerKind'
 
 export type BillingModelKind = 'text' | 'image' | 'video' | 'audio'
 
@@ -14,7 +15,7 @@ export type ProfileKind =
   | 'image_to_audio'
 
 export type ModelCatalogVendorAuthType = 'none' | 'bearer' | 'x-api-key' | 'query'
-export type ModelCatalogVendorProviderKind = 'openai-compatible' | 'anthropic'
+export type ModelCatalogVendorProviderKind = ProviderKind
 
 export type ModelCatalogIntegrationChannelKind =
   | 'official_provider'
@@ -36,12 +37,35 @@ export type AgentsChatRequestDto = {
   systemPrompt?: string
 }
 
+export type AgentUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export type AgentsChatResponseDto = {
   id?: string
   text: string
   raw?: unknown
   toolCalls?: unknown[]
   artifacts?: unknown[]
+  /** Token usage for this turn (was previously buried in `raw` and dropped). */
+  usage?: AgentUsage
+}
+
+/** Coerce the SDK's loosely-typed usage object into AgentUsage (0-filled). */
+export function coerceAgentUsage(raw: unknown): AgentUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const usage: AgentUsage = {
+    promptTokens: num(r.promptTokens ?? r.inputTokens),
+    completionTokens: num(r.completionTokens ?? r.outputTokens),
+    totalTokens: num(r.totalTokens),
+  }
+  if (!usage.totalTokens) usage.totalTokens = usage.promptTokens + usage.completionTokens
+  if (!usage.promptTokens && !usage.completionTokens && !usage.totalTokens) return undefined
+  return usage
 }
 
 export type AgentsChatToolStreamPayload = Record<string, unknown>
@@ -225,16 +249,6 @@ function requireDesktopRuntime(feature: string): DesktopBridge {
   return desktop
 }
 
-function createDesktopAgentResponse(raw: unknown): AgentsChatResponseDto {
-  const record = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
-  return {
-    id: typeof record.id === 'string' ? record.id : `agent-${Date.now()}`,
-    text: typeof record.text === 'string' ? record.text : '',
-    raw: record.raw ?? raw,
-    toolCalls: Array.isArray(record.toolCalls) ? record.toolCalls : [],
-    artifacts: Array.isArray(record.artifacts) ? record.artifacts : [],
-  }
-}
 
 /**
  * Real IPC-stream consumer. Subscribes to `nomi:agents:chatV2:event` and
@@ -331,13 +345,14 @@ async function openDesktopAgentsChatStream(
           return
         }
         case 'result': {
-          const inner = (evt.result as { id?: string; text?: string }) || {}
+          const inner = (evt.result as { id?: string; text?: string; usage?: unknown }) || {}
           const response: AgentsChatResponseDto = {
             id: typeof inner.id === 'string' ? inner.id : `agent-${Date.now()}`,
             text: typeof inner.text === 'string' ? inner.text : streamedText,
             raw: evt.result,
             toolCalls: [],
             artifacts: [],
+            usage: coerceAgentUsage(inner.usage),
           }
           handlers.onEvent({ event: 'result', data: { response } })
           return
@@ -387,13 +402,6 @@ export type AgentsChatStreamHandlers = {
   onSession?: (session: AgentChatV2Session) => void
 }
 
-export async function agentsChatStream(
-  payload: AgentsChatRequestDto,
-  handlers: AgentsChatStreamHandlers,
-): Promise<() => void> {
-  return openDesktopAgentsChatStream(payload, handlers)
-}
-
 export async function workbenchAgentsChatStream(
   payload: AgentsChatRequestDto,
   handlers: AgentsChatStreamHandlers,
@@ -401,13 +409,6 @@ export async function workbenchAgentsChatStream(
   return openDesktopAgentsChatStream(payload, handlers)
 }
 
-export async function agentsChat(payload: AgentsChatRequestDto): Promise<AgentsChatResponseDto> {
-  return createDesktopAgentResponse(await requireDesktopRuntime('agents chat').agents.chat(payload))
-}
-
-export async function workbenchAgentsChat(payload: AgentsChatRequestDto): Promise<AgentsChatResponseDto> {
-  return createDesktopAgentResponse(await requireDesktopRuntime('workbench agents chat').agents.chat(payload))
-}
 
 /** Wipe the shared backend conversation memory for a sessionKey ("新对话"). */
 export async function clearWorkbenchAgentSession(sessionKey: string): Promise<void> {

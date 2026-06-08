@@ -14,6 +14,7 @@ import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { readAudioMeta, AUDIO_KIND_LABELS } from '../../model/nodeMetaFields'
 import { useNodeUsageCount } from '../../hooks/useNodeRelationships'
 import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { persistNodeImageFile } from '../../adapters/persistNodeImage'
 import { UsageDot } from './CardCommon'
 import { getDisplayTitle } from '../../model/titleHeuristics'
 
@@ -67,16 +68,24 @@ function AudioStripNodeImpl({ node }: Props): JSX.Element {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file) return
+    const createdAt = Date.now()
+    // 即时 base64 预览（短命），随后落盘换 nomi-local 替换掉——音频文件同样不该把整段 base64 永久驻留。
     const reader = new FileReader()
     reader.onload = (loadEvent) => {
       const dataUrl = loadEvent.target?.result
       if (typeof dataUrl !== 'string') return
       updateNode(node.id, {
-        result: { id: `upload-audio-${Date.now()}`, type: 'image', url: dataUrl, createdAt: Date.now() },
+        result: { id: `upload-audio-${createdAt}`, type: 'image', url: dataUrl, createdAt },
         meta: { ...(node.meta || {}), audioFilename: file.name, audioMime: file.type },
       })
     }
     reader.readAsDataURL(file)
+    void persistNodeImageFile(file, node.id).then((localUrl) => {
+      if (!localUrl) return
+      updateNode(node.id, {
+        result: { id: `upload-audio-asset-${createdAt}`, type: 'image', url: localUrl, createdAt },
+      })
+    })
   }, [node.id, node.meta, updateNode])
 
   const handleTogglePlay = React.useCallback((event: React.MouseEvent) => {

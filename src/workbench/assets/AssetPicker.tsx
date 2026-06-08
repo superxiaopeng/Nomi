@@ -17,26 +17,33 @@ type AssetPickerProps = {
   onUpload: (file: File) => void
   /** 传了才显示「浏览全部 →」(去素材面板)。 */
   onBrowseAll?: () => void
+  /** 已到上限的类型:这些类型的项灰显(点击仍由 onPick→handleArrayAdd 出「最多 N 个」toast)。 */
+  atLimitKinds?: AssetKind[]
   uploading?: boolean
   className?: string
 }
 
 const ACCEPT_ATTR: Record<AssetKind, string> = { image: 'image/*', video: 'video/*', audio: 'audio/*' }
 
-function PickerItem({ asset, onPick }: { asset: AssetRef; onPick: (asset: AssetRef) => void }): JSX.Element {
+function PickerItem({ asset, onPick, dimmed }: { asset: AssetRef; onPick: (asset: AssetRef) => void; dimmed?: boolean }): JSX.Element {
   return (
     <button
       type="button"
       aria-label={asset.name}
       onClick={() => onPick(asset)}
-      className={cn('relative w-12 h-12 rounded-nomi-sm overflow-hidden border border-nomi-line bg-nomi-ink-05 flex items-center justify-center cursor-pointer hover:outline hover:outline-2 hover:outline-offset-1 hover:outline-nomi-accent')}
+      title={dimmed ? '已到该类型上限' : undefined}
+      className={cn(
+        'relative w-12 h-12 rounded-nomi-sm overflow-hidden border border-nomi-line bg-nomi-ink-05 flex items-center justify-center cursor-pointer hover:outline hover:outline-2 hover:outline-offset-1 hover:outline-nomi-accent',
+        dimmed && 'opacity-40',
+      )}
     >
       <AssetThumb asset={asset} playSize={18} />
     </button>
   )
 }
 
-export default function AssetPicker({ projectId, accept, onPick, onUpload, onBrowseAll, uploading, className }: AssetPickerProps): JSX.Element {
+export default function AssetPicker({ projectId, accept, onPick, onUpload, onBrowseAll, atLimitKinds, uploading, className }: AssetPickerProps): JSX.Element {
+  const isDimmed = (kind: AssetKind) => Boolean(atLimitKinds?.includes(kind))
   const { assets } = useAssetPool(projectId)
   const [query, setQuery] = React.useState('')
 
@@ -49,7 +56,19 @@ export default function AssetPicker({ projectId, accept, onPick, onUpload, onBro
     .join(',')
 
   return (
-    <div className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-lg', className)}>
+    <div
+      data-testid="asset-picker"
+      className={cn('flex flex-col gap-[10px] w-[300px] max-w-[300px] max-h-[70vh] overflow-y-auto p-[10px] rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-md', className)}
+      // picker 自己接管拖入：否则 drop 冒泡到画布 stage → importImageFilesToGenerationCanvas 另建独立节点，
+      // 而不是填进当前节点的输入槽（提示语已写「或把文件拖进来」却无 onDrop = bug）。
+      onDragOver={(event) => { event.preventDefault(); event.stopPropagation() }}
+      onDrop={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const file = event.dataTransfer.files?.[0]
+        if (file) onUpload(file)
+      }}
+    >
       <label className={cn('flex items-center gap-[6px] h-[30px] px-[8px] rounded-nomi-sm border border-nomi-line bg-nomi-ink-05')}>
         <IconSearch size={13} stroke={2} className={cn('text-nomi-ink-40 shrink-0')} />
         <input
@@ -65,8 +84,9 @@ export default function AssetPicker({ projectId, accept, onPick, onUpload, onBro
       {canvasAssets.length ? (
         <div className={cn('flex flex-col gap-[6px]')}>
           <span className={cn('text-nomi-ink-40 text-micro')}>画布</span>
-          <div className={cn('flex gap-[6px] flex-wrap')}>
-            {canvasAssets.map((asset) => <PickerItem key={asset.id} asset={asset} onPick={onPick} />)}
+          {/* 画布:单行横滚(样张 .pkRow),不换行——否则几十张图堆叠把 picker 撑到溢出视口 */}
+          <div className={cn('flex gap-[6px] overflow-x-auto pb-[2px]')}>
+            {canvasAssets.map((asset) => <div key={asset.id} className={cn('shrink-0')}><PickerItem asset={asset} onPick={onPick} dimmed={isDimmed(asset.kind)} /></div>)}
           </div>
         </div>
       ) : null}
@@ -80,7 +100,7 @@ export default function AssetPicker({ projectId, accept, onPick, onUpload, onBro
             ) : null}
           </div>
           <div className={cn('grid grid-cols-[repeat(5,48px)] gap-[6px] max-h-[108px] overflow-auto pb-[2px]')}>
-            {projectAssets.map((asset) => <PickerItem key={asset.id} asset={asset} onPick={onPick} />)}
+            {projectAssets.map((asset) => <PickerItem key={asset.id} asset={asset} onPick={onPick} dimmed={isDimmed(asset.kind)} />)}
           </div>
         </div>
       ) : null}

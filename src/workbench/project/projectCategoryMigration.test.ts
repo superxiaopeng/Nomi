@@ -64,7 +64,12 @@ describe('migrateNodeToCategoryId', () => {
     expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'style' }), [])).toBeNull()
     expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'inbox' }), [])).toBeNull()
     expect(migrateNodeToCategoryId(makeNode({ kind: 'output', categoryId: 'exports' }), [])).toBeNull()
-    expect(migrateNodeToCategoryId(makeNode({ kind: 'text', categoryId: 'unknown' }), [])).toBeNull()
+  })
+
+  it('preserves custom (non-legacy, non-builtin) category ids so user-created categories survive migration', () => {
+    // 自定义顶层分类启用后，未知 id 不再一律丢弃——只有显式 legacy-removed id 才删。
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'text', categoryId: 'cat-6' }), [])).toBe('cat-6')
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'my-custom' }), [])).toBe('my-custom')
   })
 
   it('maps uncategorized legacy node kinds only into surviving v0.6 categories', () => {

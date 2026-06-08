@@ -25,10 +25,10 @@ const SCAN_DIRS = ["src", "electron"];
 // 现存巨壳的基线行数（棘轮上限）。清空此表 = 巨壳债还清。
 // 改小某个数 = 你成功瘦身后锁定的新上限。新增条目应经人工评审。
 const ALLOWLIST = {
-  "src/workbench/generationCanvasV2/nodes/scene3d/Scene3DFullscreen.tsx": 4598,
-  "electron/runtime.ts": 2632,
-  "src/workbench/generationCanvasV2/nodes/BaseGenerationNode.tsx": 1406,
-  "src/workbench/generationCanvasV2/components/GenerationCanvas.tsx": 1186,
+  "src/workbench/generationCanvasV2/nodes/scene3d/Scene3DFullscreen.tsx": 4588,
+  "electron/runtime.ts": 2516,
+  "src/workbench/generationCanvasV2/nodes/BaseGenerationNode.tsx": 1399,
+  "src/workbench/generationCanvasV2/components/GenerationCanvas.tsx": 1119,
   "src/workbench/generationCanvasV2/store/generationCanvasStore.ts": 1122,
   // NodeParameterControls.tsx 曾 1097 行（巨壳）；C2b 抽出 controls/parameterControlModel.ts +
   // archetypeMeta.ts + ModeBar.tsx 后缩到 605 < 800 硬上限，已出白名单（Rule 12：逐步清空白名单）。

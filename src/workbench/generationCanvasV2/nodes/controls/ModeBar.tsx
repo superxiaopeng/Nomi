@@ -34,7 +34,7 @@ export default function ModeBar({ choices, activeId, onSelect }: ModeBarProps): 
               aria-pressed={isActive}
               data-active={isActive ? 'true' : 'false'}
               className={cn(
-                'rounded-nomi-sm px-[10px] py-[4px] text-micro leading-none font-[inherit]',
+                'rounded-nomi-sm px-[12px] py-[5px] text-body-sm leading-none',
                 'text-nomi-ink-60 cursor-pointer transition-colors',
                 'data-[active=true]:bg-nomi-paper data-[active=true]:text-nomi-ink',
                 'data-[active=true]:font-semibold data-[active=true]:shadow-nomi-sm',

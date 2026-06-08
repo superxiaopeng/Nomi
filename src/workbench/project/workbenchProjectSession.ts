@@ -9,12 +9,14 @@ export function readCurrentWorkbenchProjectPayload(): WorkbenchProjectPayload {
     workbenchDocument: workbench.workbenchDocument,
     timeline: workbench.timeline,
     generationCanvas: generation.readSnapshot(),
+    categories: workbench.categories,
   }
 }
 
 export function restoreWorkbenchProjectPayload(payload: WorkbenchProjectPayload): void {
   useWorkbenchStore.getState().setWorkbenchDocument(payload.workbenchDocument)
   useWorkbenchStore.getState().setTimeline(payload.timeline)
+  useWorkbenchStore.getState().setCategories(payload.categories)
   useGenerationCanvasStore.getState().restoreSnapshot(payload.generationCanvas)
 }
 

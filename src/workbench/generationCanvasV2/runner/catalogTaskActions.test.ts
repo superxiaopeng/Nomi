@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildCatalogTaskRequest, normalizeCatalogTaskResult } from './catalogTaskActions'
+import { buildCatalogTaskRequest, normalizeCatalogTaskResult, runCatalogGenerationTask } from './catalogTaskActions'
+import { MODEL_ARCHETYPES } from '../../../config/modelArchetypes'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
-import type { TaskResultDto } from '../../api/taskApi'
+import type { TaskRequestDto, TaskResultDto } from '../../api/taskApi'
+import type { ModelCatalogModelDto, ModelCatalogVendorDto } from '../../api/modelCatalogApi'
 
 function textNode(): GenerationCanvasNode {
   return { id: 'n1', kind: 'text', title: '', position: { x: 0, y: 0 }, meta: { modelKey: 'gpt-x' } }
@@ -112,6 +114,47 @@ describe('buildCatalogTaskRequest — 档案 mapping 桶由 transportTaskKind �
   })
 })
 
+// 根因回归（2026-06-08）：断开 kie、连 apimart 后，钉死在 kie 的老节点运行时必须自动迁到
+// apimart 的同款模型，而不是抛 `API key missing: kie`。
+describe('runCatalogGenerationTask — 断开 kie 后老节点自动迁移到已连接供应商', () => {
+  const vendorDto = (key: string, hasApiKey: boolean): ModelCatalogVendorDto => ({ key, name: key, enabled: true, hasApiKey, createdAt: '', updatedAt: '' })
+  const apimartSeedream: ModelCatalogModelDto = { modelKey: 'doubao-seedream-4.5', vendorKey: 'apimart', labelZh: 'Seedream 4.5', kind: 'image', enabled: true, meta: { archetypeId: 'seedream' }, createdAt: '', updatedAt: '' }
+
+  const staleKieNode: GenerationCanvasNode = {
+    id: 'n1', kind: 'image', title: '', position: { x: 0, y: 0 }, prompt: '画只猫',
+    meta: { modelKey: 'seedream', modelVendor: 'kie', vendor: 'kie', archetype: { id: 'seedream', modeId: 't2i' } },
+  }
+
+  function harness() {
+    const calls: Array<{ vendor: string; request: TaskRequestDto }> = []
+    const options = {
+      listCatalogVendors: async () => [vendorDto('apimart', true), vendorDto('kie', false)],
+      listCatalogModels: async () => [apimartSeedream],
+      runTask: async (vendor: string, request: TaskRequestDto) => {
+        calls.push({ vendor, request })
+        return { id: 't1', kind: request.kind, status: 'succeeded' as const, assets: [{ type: 'image' as const, url: 'https://x/out.png' }], raw: {} }
+      },
+    }
+    return { calls, options }
+  }
+
+  it('请求打到 apimart，modelKey 改写成 doubao-seedream-4.5（不再要 kie 的 key）', async () => {
+    const { calls, options } = harness()
+    const result = await runCatalogGenerationTask(staleKieNode, options)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].vendor).toBe('apimart')
+    expect(calls[0].request.extras?.modelKey).toBe('doubao-seedream-4.5')
+    expect(result.url).toBe('https://x/out.png')
+  })
+
+  it('没有任何已连接供应商提供该款 → 抛清晰可行动错误，而非 cryptic key missing', async () => {
+    const { options } = harness()
+    await expect(
+      runCatalogGenerationTask(staleKieNode, { ...options, listCatalogVendors: async () => [vendorDto('kie', false)], listCatalogModels: async () => [] }),
+    ).rejects.toThrow(/没有已连接的供应商提供/)
+  })
+})
+
 describe('normalizeCatalogTaskResult — image path unaffected', () => {
   it('still returns an image result from an asset', () => {
     const result = normalizeCatalogTaskResult(
@@ -121,4 +164,89 @@ describe('normalizeCatalogTaskResult — image path unaffected', () => {
     expect(result.type).toBe('image')
     expect(result.url).toBe('https://x/y.png')
   })
+})
+
+describe('GPT Image 2 档案（图像，2 模式打不同 taskKind 桶 + input_urls）', () => {
+  const gptNode = (modeId: string, extra: Record<string, unknown> = {}): GenerationCanvasNode => ({
+    id: 'g1', kind: 'image', title: '', position: { x: 0, y: 0 }, prompt: '画只猫',
+    meta: { modelKey: 'gpt-image-2-image-to-image', modelVendor: 'kie', vendor: 'kie', archetype: { id: 'gpt-image-2', modeId }, ...extra },
+  })
+  it('文生图模式：taskKind=text_to_image，model=t2i enum，无 input_urls', () => {
+    const built = buildCatalogTaskRequest(gptNode('t2i'))
+    expect(built.request.kind).toBe('text_to_image')
+    const ai = built.request.extras?.archetypeInput as Record<string, unknown>
+    expect(ai.model).toBe('gpt-image-2-text-to-image')
+    expect(ai).not.toHaveProperty('input_urls')
+  })
+  it('图生图模式：taskKind=image_edit，model=i2i enum，输入图进 input_urls（不是 reference_image_urls）', () => {
+    const built = buildCatalogTaskRequest(gptNode('i2i', { referenceImageUrls: ['https://x/a.png', 'https://x/b.png'] }))
+    expect(built.request.kind).toBe('image_edit')
+    const ai = built.request.extras?.archetypeInput as Record<string, unknown>
+    expect(ai.model).toBe('gpt-image-2-image-to-image')
+    expect(ai.input_urls).toEqual(['https://x/a.png', 'https://x/b.png'])
+    expect(ai).not.toHaveProperty('reference_image_urls')
+  })
+})
+
+describe('Seedream 档案（图像，改图输入图走 image_urls，与 GPT 同桶不同键）', () => {
+  const sdNode = (modeId: string, extra: Record<string, unknown> = {}): GenerationCanvasNode => ({
+    id: 's1', kind: 'image', title: '', position: { x: 0, y: 0 }, prompt: '改图',
+    meta: { modelKey: 'seedream', modelVendor: 'kie', vendor: 'kie', archetype: { id: 'seedream', modeId }, ...extra },
+  })
+  it('文生图：taskKind=text_to_image，model=4.5 t2i enum', () => {
+    const built = buildCatalogTaskRequest(sdNode('t2i'))
+    expect(built.request.kind).toBe('text_to_image')
+    expect((built.request.extras?.archetypeInput as Record<string, unknown>).model).toBe('seedream/4.5-text-to-image')
+  })
+  it('改图：taskKind=image_edit，输入图进 image_urls（不是 input_urls / reference_image_urls）', () => {
+    const built = buildCatalogTaskRequest(sdNode('edit', { referenceImageUrls: ['https://x/1.png', 'https://x/2.png'] }))
+    expect(built.request.kind).toBe('image_edit')
+    const ai = built.request.extras?.archetypeInput as Record<string, unknown>
+    expect(ai.model).toBe('bytedance/seedream-v4-edit')
+    expect(ai.image_urls).toEqual(['https://x/1.png', 'https://x/2.png'])
+    expect(ai).not.toHaveProperty('input_urls')
+    expect(ai).not.toHaveProperty('reference_image_urls')
+  })
+})
+
+// ───────── 「接入即验证」零额度结构闸门 ─────────
+// 遍历**每个内置档案 × 每个模式**：把该模式声明的参考槽都填上 → 构建请求 → 断言每个填进去的参考值
+// 都真的到达了请求（extras.archetypeInput）。这正是 omni 参考图丢失那类 bug 的结构防线：以后任何模型/
+// 模式若"声明了槽但参考没进请求"，这条直接红。动态遍历 MODEL_ARCHETYPES → 新增档案自动纳入，漏不掉。
+describe('接入即验证（零额度）：每个档案/模式声明的参考槽，值都进得了请求', () => {
+  // 槽 kind → 渲染层存它的 meta 键 + 一个 dummy 值（数组槽给数组）。
+  const SLOT_FILL: Record<string, { key: string; value: unknown; flat: string[] }> = {
+    first_frame: { key: 'firstFrameUrl', value: 'https://x/ff.png', flat: ['https://x/ff.png'] },
+    last_frame: { key: 'lastFrameUrl', value: 'https://x/lf.png', flat: ['https://x/lf.png'] },
+    image_ref: { key: 'referenceImageUrls', value: ['https://x/ir.png'], flat: ['https://x/ir.png'] },
+    video_ref: { key: 'referenceVideoUrls', value: ['https://x/vr.mp4'], flat: ['https://x/vr.mp4'] },
+    audio_ref: { key: 'referenceAudioUrls', value: ['https://x/ar.mp3'], flat: ['https://x/ar.mp3'] },
+    source_video: { key: 'sourceVideoUrl', value: 'https://x/sv.mp4', flat: ['https://x/sv.mp4'] },
+  }
+  const flattenValues = (obj: Record<string, unknown>): string[] =>
+    Object.values(obj).flatMap((v) => (Array.isArray(v) ? v : [v])).filter((v): v is string => typeof v === 'string')
+
+  for (const archetype of MODEL_ARCHETYPES) {
+    for (const mode of archetype.modes) {
+      const refSlots = mode.slots.filter((s) => SLOT_FILL[s.kind])
+      it(`${archetype.id} / ${mode.id}：${refSlots.length} 个参考槽的值都进请求（不静默丢）`, () => {
+        const meta: Record<string, unknown> = {
+          modelKey: archetype.identifierPatterns[0],
+          modelVendor: 'kie', vendor: 'kie',
+          archetype: { id: archetype.id, modeId: mode.id },
+        }
+        for (const s of refSlots) meta[SLOT_FILL[s.kind].key] = SLOT_FILL[s.kind].value
+        const nodeKind = archetype.kind === 'image' ? 'image' : 'video'
+        const node: GenerationCanvasNode = { id: 'g1', kind: nodeKind, title: '', position: { x: 0, y: 0 }, prompt: 'p', meta }
+        const ai = buildCatalogTaskRequest(node).request.extras?.archetypeInput as Record<string, unknown>
+        expect(ai, '档案模型必须产出 archetypeInput').toBeTruthy()
+        const present = new Set(flattenValues(ai))
+        for (const s of refSlots) {
+          for (const v of SLOT_FILL[s.kind].flat) {
+            expect(present.has(v), `${archetype.id}/${mode.id} 的槽 ${s.kind} 值未进请求体（会像 omni 参考图那样静默丢）`).toBe(true)
+          }
+        }
+      })
+    }
+  }
 })

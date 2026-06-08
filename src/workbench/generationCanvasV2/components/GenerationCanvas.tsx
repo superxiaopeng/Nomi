@@ -9,31 +9,33 @@ import { importImageFilesToGenerationCanvas } from '../adapters/assetImportAdapt
 import { getDesktopBridge } from '../../../desktop/bridge'
 import { WORKSPACE_FILE_DRAG_MIME, buildWorkspaceFileUrl, parseWorkspaceFileDrag } from '../../explorer/workspaceFileDrag'
 import { EDGE_MODE_LABEL } from '../model/graphOps'
-import type { GenerationCanvasNode, GenerationNodeKind, NodeGroup } from '../model/generationCanvasTypes'
+import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { getGenerationNodeComponent } from '../nodes/renderRegistry'
+import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { notifyModelOptionsRefresh, useModelOptionsState } from '../../../config/useModelOptions'
 import { useWorkbenchStore } from '../../workbenchStore'
-import { GroupFrameList, type CanvasGroupBox } from './GroupFrame'
+import { GroupFrameList } from './GroupFrame'
+import {
+  centerNodeOffset,
+  clampNumber,
+  createInitialViewport,
+  getCanvasGroupBoxes,
+  getNodeSize,
+  getSelectedBounds,
+  getWheelZoomFactor,
+} from './generationCanvasGeometry'
+import { findScrollableAncestor } from './canvasScroll'
 import '../styles/generationCanvas.css'
 
 const GENERATION_PROVIDER = 'chatfire'
 const GENERATION_DEFAULT_BASE_URL = 'https://api.chatfire.site'
 const OPEN_MODEL_CATALOG_EVENT = 'nomi-open-model-catalog'
 const FOCUS_GENERATION_NODE_EVENT = 'nomi-focus-generation-node'
-const WHEEL_ZOOM_FACTOR = 1.24
-const WHEEL_ZOOM_DELTA = 120
-const WHEEL_LINE_HEIGHT = 16
-const WHEEL_PAGE_HEIGHT = 800
-const GROUP_BOX_PADDING = 24
-const GROUP_BOX_LABEL_HEIGHT = 28
-const DEFAULT_NODE_SIZE = { width: 320, height: 360 }
 
 type GenerationCanvasProps = {
   readOnly?: boolean
 }
-
-type WheelZoomEvent = Pick<WheelEvent, 'deltaMode' | 'deltaY'>
 
 type ActiveEdge = {
   id: string
@@ -71,86 +73,6 @@ function writeProviderSettings(apiKey: string, baseUrl: string) {
   baseUrls[GENERATION_PROVIDER] = nextBaseUrl
   window.localStorage.setItem('api-keys-by-provider', JSON.stringify(apiKeys))
   window.localStorage.setItem('base-urls-by-provider', JSON.stringify(baseUrls))
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
-
-function getWheelZoomFactor(event: WheelZoomEvent): number {
-  const deltaModeMultiplier = event.deltaMode === 1
-    ? WHEEL_LINE_HEIGHT
-    : event.deltaMode === 2
-      ? WHEEL_PAGE_HEIGHT
-      : 1
-  const deltaPixels = clampNumber(event.deltaY * deltaModeMultiplier, -WHEEL_ZOOM_DELTA, WHEEL_ZOOM_DELTA)
-  return Math.pow(WHEEL_ZOOM_FACTOR, -deltaPixels / WHEEL_ZOOM_DELTA)
-}
-
-function createInitialViewport(): { zoom: number; offset: { x: number; y: number } } {
-  if (typeof window !== 'undefined' && window.innerWidth < 700) {
-    return {
-      zoom: 0.86,
-      offset: { x: -20, y: -220 },
-    }
-  }
-  return {
-    zoom: 1,
-    offset: { x: 0, y: 0 },
-  }
-}
-
-function getNodeSize(node: GenerationCanvasNode): { width: number; height: number } {
-  return node.size || DEFAULT_NODE_SIZE
-}
-
-function getSelectedBounds(nodes: readonly GenerationCanvasNode[], selectedNodeIds: readonly string[]): {
-  minX: number
-  minY: number
-  width: number
-} | null {
-  const selected = new Set(selectedNodeIds)
-  const selectedNodes = nodes.filter((node) => selected.has(node.id))
-  if (!selectedNodes.length) return null
-  const minX = Math.min(...selectedNodes.map((node) => node.position.x))
-  const minY = Math.min(...selectedNodes.map((node) => node.position.y))
-  const maxX = Math.max(...selectedNodes.map((node) => node.position.x + getNodeSize(node).width))
-  return {
-    minX,
-    minY,
-    width: Math.max(0, maxX - minX),
-  }
-}
-
-function centerNodeOffset(node: GenerationCanvasNode, stageSize: { width: number; height: number }, zoom: number): { x: number; y: number } {
-  const size = getNodeSize(node)
-  return {
-    x: Math.round(stageSize.width / 2 - (node.position.x + size.width / 2) * zoom),
-    y: Math.round(stageSize.height / 2 - (node.position.y + size.height / 2) * zoom),
-  }
-}
-
-function getCanvasGroupBoxes(groups: readonly NodeGroup[], nodes: readonly GenerationCanvasNode[]): CanvasGroupBox[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  return groups.flatMap((group) => {
-    const members = group.nodeIds.flatMap((nodeId) => {
-      const node = nodeById.get(nodeId)
-      return node && (node.categoryId || 'shots') === group.categoryId ? [node] : []
-    })
-    if (!members.length) return []
-    const minX = Math.min(...members.map((node) => node.position.x))
-    const minY = Math.min(...members.map((node) => node.position.y))
-    const maxX = Math.max(...members.map((node) => node.position.x + getNodeSize(node).width))
-    const maxY = Math.max(...members.map((node) => node.position.y + getNodeSize(node).height))
-    return [{
-      group,
-      left: minX - GROUP_BOX_PADDING,
-      top: minY - GROUP_BOX_PADDING - GROUP_BOX_LABEL_HEIGHT,
-      width: maxX - minX + GROUP_BOX_PADDING * 2,
-      height: maxY - minY + GROUP_BOX_PADDING * 2 + GROUP_BOX_LABEL_HEIGHT,
-      memberCount: members.length,
-    }]
-  })
 }
 
 export default function GenerationCanvas({ readOnly = false }: GenerationCanvasProps): JSX.Element {
@@ -192,7 +114,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const commitPersistedChange = useGenerationCanvasStore((state) => state.commitPersistedChange)
   const disconnectEdge = useGenerationCanvasStore((state) => state.disconnectEdge)
   const pendingConnectionSourceId = useGenerationCanvasStore((state) => state.pendingConnectionSourceId)
-  const connectToNode = useGenerationCanvasStore((state) => state.connectToNode)
   const cancelConnection = useGenerationCanvasStore((state) => state.cancelConnection)
   const undo = useGenerationCanvasStore((state) => state.undo)
   const redo = useGenerationCanvasStore((state) => state.redo)
@@ -491,7 +412,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
                canvasY >= n.position.y && canvasY <= n.position.y + h
       })
       if (targetNode && targetNode.id !== pendingConnectionSourceId) {
-        connectToNode(targetNode.id)
+        completeNodeConnection(targetNode.id)
       } else {
         cancelConnection()
       }
@@ -503,7 +424,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
       document.removeEventListener('pointermove', handleMove)
       document.removeEventListener('pointerup', handleUp)
     }
-  }, [pendingConnectionSourceId, connectToNode, cancelConnection, readOnly])
+  }, [pendingConnectionSourceId, cancelConnection, readOnly])
 
   const handleGroupSelectedNodes = React.useCallback(() => {
     const group = groupSelectedNodes(activeCategoryId)
@@ -763,15 +684,14 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   }, [])
 
   const handleWheel = React.useCallback((event: WheelEvent) => {
+    // 滚轮命中卡内可滚区（提示词编辑器等）时交给原生滚动，别被 stage 的缩放监听吞掉（一处覆盖所有入口，P2）。
+    if (event.target instanceof Element && findScrollableAncestor(event.target, stageRef.current, event.deltaY)) return
     event.preventDefault()
     setContextNodeMenu(null)
     if (!stageRef.current) return
     const rect = stageRef.current.getBoundingClientRect()
-    const mouseX = event.clientX - rect.left
-    const mouseY = event.clientY - rect.top
-    const currentZoom = zoomRef.current
-    const nextZoom = clampNumber(currentZoom * getWheelZoomFactor(event), 0.2, 3)
-    zoomAtStagePoint(nextZoom, { x: mouseX, y: mouseY })
+    const nextZoom = clampNumber(zoomRef.current * getWheelZoomFactor(event), 0.2, 3)
+    zoomAtStagePoint(nextZoom, { x: event.clientX - rect.left, y: event.clientY - rect.top })
   }, [zoomAtStagePoint])
 
   React.useEffect(() => {
@@ -833,6 +753,19 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
       y: (rect.height - contentH * nextZoom) / 2 - (minY - padding) * nextZoom,
     })
   }, [nodes, setViewportTransform])
+
+  // 项目首次加载时（无历史视口时）自动适应视图，让用户看到全局布局。
+  // 每次 activeCategoryId 变化后重置，确保切换分类时也能触发。
+  const autoFitDoneRef = React.useRef(false)
+  React.useEffect(() => { autoFitDoneRef.current = false }, [activeCategoryId])
+  React.useEffect(() => {
+    if (autoFitDoneRef.current) return
+    if (nodes.length === 0) return
+    if (categoryViewports[activeCategoryId]) return // 有历史视口，不覆盖用户位置
+    autoFitDoneRef.current = true
+    const tid = setTimeout(fitView, 350) // 等 DOM 完成一帧渲染
+    return () => clearTimeout(tid)
+  }, [nodes.length, categoryViewports, activeCategoryId, fitView])
 
   const getToolbarInsertionPosition = React.useCallback(() => {
     const rect = stageRef.current?.getBoundingClientRect()

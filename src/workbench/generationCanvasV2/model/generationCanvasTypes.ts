@@ -11,7 +11,10 @@ export type GenerationNodeTaskKind = 'text' | 'image' | 'video' | 'workflow' | '
 
 export const CATEGORY_IDS = ['shots', 'cast', 'scene', 'prop', 'audio'] as const
 
-export type CategoryId = (typeof CATEGORY_IDS)[number]
+/** 内置 5 分类 id（闭合）。自定义顶层分类用任意字符串 id，故 CategoryId 放宽为 string。 */
+export type BuiltinCanvasCategoryId = (typeof CATEGORY_IDS)[number]
+
+export type CategoryId = string
 
 /**
  * Phase E Task E11 — Complete provenance record for a generated asset.

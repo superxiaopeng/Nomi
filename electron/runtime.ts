@@ -3,9 +3,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { hardenedFetch, hardenedFetchText } from "./hardenedFetch";
-import { generateText, streamText, tool, type CoreMessage, type LanguageModelV1 } from "ai";
+import { localizeAssetsForVendor, resolveAssetIngestion } from "./catalog/assetLocalization";
+import { absolutePathFromLocalAssetUrl, readNomiLocalAsset, postJsonForAssetUpload } from "./assets/localAssetFile";
+import { streamText, tool, type CoreMessage, type LanguageModelV1 } from "ai";
+import { agentStreamTuning, buildAgentPromptParts, capAgentHistory, createLinkedAbortController } from "./ai/agentChatHarness";
 import { z } from "zod";
 import { buildAiSdkModel } from "./ai/buildAiSdkModel";
+import { consumeAgentStreamWithTimeout } from "./ai/agentStreamConsumer";
 import { mergeMissingParamsIntoBody } from "./ai/onboarding/curlBlueprint";
 import { assertProjectExportRelativePath, ensureExportDirs } from "./export/exportPaths";
 import { ExportJobManager, type ExportJobEvent, type ExportJobSnapshot } from "./export/exportJobManager";
@@ -113,8 +117,8 @@ import type {
   ProfileKind,
   Vendor,
 } from "./catalog/types";
-import { CURRENT_CATALOG_VERSION } from "./catalog/types";
-import { referenceInputParams } from "./catalog/archetypeInput";
+import { CURRENT_CATALOG_VERSION, selectTaskMapping } from "./catalog/types";
+import { firstReferenceImage, taskTemplateParams } from "./catalog/taskParams";
 import { applyBuiltinSeeds } from "./catalog/seedBuiltins";
 export type {
   AiSdkProviderKind,
@@ -235,8 +239,6 @@ type SkillRecord = {
   body: string;
 };
 
-
-
 function parseSkillName(markdown: string, directoryName: string): string {
   const match = markdown.match(/^---\s*\n([\s\S]*?)\n---/);
   const frontmatter = match?.[1] || "";
@@ -274,7 +276,6 @@ function readSkillRecords(): SkillRecord[] {
   }
   return records;
 }
-
 
 function readRequestedSkill(payload: JsonRecord): { key: string; name: string } {
   const chatContext = payload.chatContext;
@@ -340,7 +341,6 @@ function buildSkillSystemPrompt(payload: JsonRecord): string {
   ].join("\n");
 }
 
-
 function bufferFromExportBytes(input: TimelineMp4ExportRequest["webmBytes"]): Buffer {
   if (input instanceof ArrayBuffer) return Buffer.from(input);
   if (ArrayBuffer.isView(input)) return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
@@ -394,30 +394,6 @@ function parseExportJobManifest(value: unknown): NomiRenderManifestV1 {
 // ── filtergraph 导出主路径（音频 + letterbox WYSIWYG）；失败回退 WebM 转码 ──────────
 // 按 jobId 暂存 renderer 原始 manifest；finishExportTempInput 里解析本地资产 + ffprobe + 编译 filtergraph。
 const rawExportManifests = new Map<string, unknown>();
-
-function absolutePathFromLocalAssetUrl(url: unknown, projectId: string): string | null {
-  if (typeof url !== "string") return null;
-  const prefix = "nomi-local://asset/";
-  if (!url.startsWith(prefix)) return null;
-  const rest = url.slice(prefix.length);
-  const slashIndex = rest.indexOf("/");
-  if (slashIndex < 0) return null;
-  let urlProjectId: string;
-  let relativePath: string;
-  try {
-    urlProjectId = decodeURIComponent(rest.slice(0, slashIndex));
-    relativePath = rest.slice(slashIndex + 1).split("/").map(decodeURIComponent).join("/");
-  } catch {
-    return null;
-  }
-  if (urlProjectId !== projectId || !relativePath) return null;
-  try {
-    const absolutePath = resolveProjectRelativePath(projectId, relativePath);
-    return fs.existsSync(absolutePath) && fs.statSync(absolutePath).isFile() ? absolutePath : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * renderer 原始 manifest → 可直接喂 ffmpeg 的 filtergraph 计划：
@@ -933,8 +909,8 @@ function normalizeEnabled(value: unknown, fallback = true): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function normalizeProviderKind(value: unknown, fallback: AiSdkProviderKind = "openai-compatible"): AiSdkProviderKind {
-  return value === "anthropic" || value === "openai-compatible" ? value : fallback;
+export function normalizeProviderKind(value: unknown, fallback: AiSdkProviderKind = "openai-compatible"): AiSdkProviderKind {
+  return value === "anthropic" || value === "openai-compatible" || value === "openai-responses" ? value : fallback;
 }
 
 function filterByParams<T extends { vendorKey?: string; kind?: BillingModelKind; enabled?: boolean; taskKind?: ProfileKind }>(
@@ -1619,7 +1595,6 @@ function collectFilesRecursively(dir: string): string[] {
   return files;
 }
 
-
 function uniqueAssetPath(projectId: string, fileName: string, bucket: "generated" | "imported" = "generated"): { absolutePath: string; relativePath: string } {
   const projectDir = projectDirById(projectId);
   if (!projectDir) throw new Error("Project not found");
@@ -1772,7 +1747,6 @@ export function listProjectAssets(payload: unknown): { items: LocalAssetRecord[]
   };
 }
 
-
 function findExecutableModel(vendorKey: string, modelKey: string, kind?: BillingModelKind): { vendor: Vendor; model: Model; apiKey: string } {
   const state = readCatalog();
   const vendor = state.vendors.find((item) => item.key === vendorKey && item.enabled);
@@ -1803,7 +1777,6 @@ function authQueryParams(vendor: Vendor, apiKey: string): Record<string, string>
 }
 
 // endpoint() 已抽到 electron/vendorEndpoint.ts（纯函数，便于无 electron 的单测）
-
 
 function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
   if (kind === "text_to_video" || kind === "image_to_video") return "video";
@@ -1862,46 +1835,13 @@ async function localizeTaskAsset(projectId: string, assetUrl: string, type: "ima
   };
 }
 
-
-function findTaskMapping(vendorKey: string, taskKind: ProfileKind): Mapping | null {
-  const state = readCatalog();
-  return state.mappings.find((mapping) => mapping.enabled && mapping.vendorKey === vendorKey && mapping.taskKind === taskKind) || null;
+function findTaskMapping(vendorKey: string, taskKind: ProfileKind, modelKey?: string): Mapping | null {
+  // 按 (vendor, taskKind, modelKey) 选——同 vendor 下两个模型共用一个 taskKind 但请求形状不同时
+  // （如 HappyHorse 与 Kling 都 text_to_video），靠 modelKey 精确路由，不再「第一个赢、另一个套错模板」。
+  return selectTaskMapping(readCatalog().mappings, vendorKey, taskKind, modelKey);
 }
 
-function firstReferenceImage(request: TaskRequest): string {
-  const extras = request.extras || {};
-  const referenceImages = Array.isArray(extras.referenceImages) ? extras.referenceImages : [];
-  return firstString(
-    extras.image_url,
-    extras.imageUrl,
-    extras.firstFrameUrl,
-    extras.lastFrameUrl,
-    referenceImages[0],
-  );
-}
-
-function taskTemplateParams(request: TaskRequest): JsonRecord {
-  const extras = request.extras || {};
-  const size = request.width && request.height ? `${request.width}x${request.height}` : firstString(extras.size, extras.aspectRatio);
-  const duration = firstString(extras.duration, extras.durationSeconds, extras.videoDuration);
-  return {
-    ...extras,
-    size,
-    n: extras.n ?? 1,
-    width: request.width,
-    height: request.height,
-    seed: request.seed,
-    steps: request.steps,
-    cfgScale: request.cfgScale,
-    cfg_scale: request.cfgScale,
-    negative_prompt: request.negativePrompt,
-    duration,
-    image_url: firstReferenceImage(request),
-    // 参考输入（单图首/尾帧 + 多参考数组）—— 构建逻辑在 electron/catalog/archetypeInput（M5）。
-    ...referenceInputParams(extras),
-    max_tokens: extras.maxTokens ?? extras.max_tokens,
-  };
-}
+// firstReferenceImage / taskTemplateParams 已抽到 electron/catalog/taskParams.ts（可测，见顶部 import）。
 
 // Adapter over the shared requestPipeline context builder. Production maps the
 // rich TaskRequest fields into normalized params via `taskTemplateParams`; the
@@ -1993,8 +1933,21 @@ async function executeProfileOperation(input: {
   operation: HttpOperation;
   providerMeta?: JsonRecord;
 }): Promise<{ response: unknown; request: unknown }> {
-  const built = buildProfileHttpRequest(input);
-  const response = await requestJson(input.vendor, input.apiKey, built.method, built.url, built.headers, built.query, built.body);
+  // R1：发送前把 request 里的本地素材(nomi-local://)按当前 vendor 声明的策略变成可达值
+  // (上传换公网 URL / 内联 base64)。通用层与供应商无关;无本地素材时零开销原样通过。
+  const localized = await localizeAssetsForVendor(
+    input.request.extras,
+    resolveAssetIngestion(input.vendor),
+    input.apiKey,
+    readNomiLocalAsset,
+    postJsonForAssetUpload,
+  );
+  const effectiveInput =
+    localized.uploaded > 0
+      ? { ...input, request: { ...input.request, extras: localized.value as TaskRequest["extras"] } }
+      : input;
+  const built = buildProfileHttpRequest(effectiveInput);
+  const response = await requestJson(effectiveInput.vendor, effectiveInput.apiKey, built.method, built.url, built.headers, built.query, built.body);
   return {
     response,
     request: built.preview,
@@ -2065,7 +2018,7 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   const projectId = trim(request.extras?.projectId);
   const nodeId = trim(request.extras?.nodeId);
   const taskId = `task-${crypto.randomUUID()}`;
-  const mapping = findTaskMapping(vendorKey, kind);
+  const mapping = findTaskMapping(vendorKey, kind, modelKey);
 
   if (mapping) {
     const executed = await executeProfileOperation({ vendor, model, apiKey, request, operation: mapping.create });
@@ -2240,9 +2193,20 @@ export async function fetchTaskResult(payload: unknown): Promise<{ vendor: strin
   };
 }
 
-function chooseTextModel(): { vendor: Vendor; model: Model; apiKey: string } {
+// vision/preview/audio 等常不可靠发 tool_use → 无偏好时降权（仍作回退），让通用对话模型优先做 Agent 主控（2026-06-07 真机走查 P0）。
+const AUTO_TEXT_MODEL_DEPRIORITIZE = /vision|preview|audio|tts|whisper|embed|rerank|ocr|search|thinking/i;
+function autoTextModelPenalty(model: Model): number {
+  return AUTO_TEXT_MODEL_DEPRIORITIZE.test(`${model.modelKey} ${model.modelAlias ?? ""}`) ? 1 : 0;
+}
+
+function chooseTextModel(prefModelKey?: string): { vendor: Vendor; model: Model; apiKey: string } {
   const state = readCatalog();
-  for (const model of state.models.filter((item) => item.kind === "text" && item.enabled)) {
+  const texts = state.models.filter((item) => item.kind === "text" && item.enabled);
+  // 有偏好：用户选的排第一（其余作回退）。无偏好：不盲选第一个，按「是否像通用对话模型」稳定排序，vision/preview 降到末尾。
+  const ordered = prefModelKey
+    ? [...texts].sort((a, b) => (a.modelKey === prefModelKey ? -1 : 0) - (b.modelKey === prefModelKey ? -1 : 0))
+    : [...texts].sort((a, b) => autoTextModelPenalty(a) - autoTextModelPenalty(b));
+  for (const model of ordered) {
     const vendor = state.vendors.find((item) => item.key === model.vendorKey && item.enabled);
     const apiKey = decryptApiKeyRecord(state.apiKeysByVendor[model.vendorKey]);
     if (vendor && (vendor.authType === "none" || apiKey)) return { vendor, model, apiKey };
@@ -2270,11 +2234,10 @@ export function extractVendorExtraHeaders(vendor: Vendor): Record<string, string
 }
 
 /**
- * Single vendor→LanguageModel construction path. Both runAgentChat and
- * runAgentChatV2 (and any future caller) go through here so provider-kind,
- * baseURL shaping, and custom headers stay consistent (Rule 1: no parallel
- * versions). anthropic uses the vendor's baseUrlHint verbatim (or the SDK
- * default when blank); openai-compatible appends /v1.
+ * Single vendor→LanguageModel construction path. runAgentChatV2 (and any future
+ * caller) goes through here so provider-kind, baseURL shaping, and custom headers
+ * stay consistent (Rule 1: no parallel versions). anthropic uses the vendor's
+ * baseUrlHint verbatim (or the SDK default when blank); openai-compatible appends /v1.
  */
 function buildLanguageModelForVendor(vendor: Vendor, model: Model, apiKey: string): LanguageModelV1 {
   const providerKind = normalizeProviderKind(vendor.providerKind);
@@ -2291,49 +2254,12 @@ function buildLanguageModelForVendor(vendor: Vendor, model: Model, apiKey: strin
   });
 }
 
-export async function runAgentChat(payload: unknown): Promise<unknown> {
-  const raw = payload as JsonRecord;
-  const { vendor, model, apiKey } = chooseTextModel();
-  const systemPrompt = trim(raw.systemPrompt);
-  const skillSystemPrompt = buildSkillSystemPrompt(raw);
-  const userPrompt = trim(raw.prompt) || trim(raw.displayPrompt);
-
-  // Compose system prompts into one (AI SDK `generateText` takes a single
-  // `system` string). The language directive is always present, so `system`
-  // is never undefined.
-  const systemParts = [AGENT_LANGUAGE_DIRECTIVE, systemPrompt, skillSystemPrompt].filter((part) => part && part.length > 0);
-  const system = systemParts.length > 0 ? systemParts.join("\n\n") : undefined;
-
-  const languageModel = buildLanguageModelForVendor(vendor, model, apiKey);
-
-  const result = await generateText({
-    model: languageModel,
-    ...(system ? { system } : {}),
-    messages: [{ role: "user", content: userPrompt }],
-    temperature: typeof raw.temperature === "number" ? raw.temperature : 0.7,
-  });
-
-  return {
-    id: `agent-${crypto.randomUUID()}`,
-    text: result.text,
-    raw: {
-      finishReason: result.finishReason,
-      usage: result.usage,
-      response: result.response,
-      providerMetadata: result.providerMetadata,
-    },
-    toolCalls: [],
-    artifacts: [],
-  };
-}
-
 // ---------------------------------------------------------------------------
 // runAgentChatV2 — Phase B: tool-calling + real streaming
 // ---------------------------------------------------------------------------
 //
-// `runAgentChat` (v1) is kept untouched as a fallback. v2 wires the canvas
-// tools through `streamText` and surfaces token deltas + tool-call lifecycle
-// to the renderer via an injected `emit` callback. The IPC layer (electron/
+// v2 wires the canvas tools through `streamText` and surfaces token deltas +
+// tool-call lifecycle to the renderer via an injected `emit` callback. The IPC layer (electron/
 // main.ts) is responsible for forwarding those events on a per-session
 // channel and for resolving the `awaitToolConfirmation` promise once the
 // user confirms or rejects the proposed tool call.
@@ -2369,6 +2295,7 @@ export type AgentChatV2Hooks = {
     toolName: AgentToolName;
     args: unknown;
   }) => Promise<AgentToolConfirmation>;
+  abortSignal?: AbortSignal; // external cancel (user "Stop") → stream abort
 };
 
 // Wraps a tool descriptor so every invocation routes through the
@@ -2508,6 +2435,8 @@ export type RunAgentChatV2Payload = {
   chatContext?: unknown;
   mode?: string;
   temperature?: number;
+  agentModelKey?: string; // 助手模型偏好（用户选的）：优先用，否则回退第一个可用 text 模型
+  agentVendorKey?: string;
   /**
    * Shared conversation memory key. Both workbench panels use
    * `nomi:workbench:<projectId|local>` so the agent remembers across turns and
@@ -2519,8 +2448,8 @@ export type RunAgentChatV2Payload = {
 };
 
 // In-memory conversation history, keyed by sessionKey. Lives only for the app
-// session (cleared on quit). Capped per key so prompts can't grow unbounded.
-const AGENT_HISTORY_MAX_MESSAGES = 30;
+// session (cleared on quit). Capped per key (capAgentHistory) so prompts can't
+// grow unbounded. History/maxSteps/repair helpers live in ./ai/agentChatHarness.
 const agentChatV2History = new Map<string, CoreMessage[]>();
 
 /** Drop stored history for a session (or all sessions when no key given). */
@@ -2532,28 +2461,11 @@ export function clearAgentChatV2History(sessionKey?: string): void {
   }
 }
 
-/**
- * Cap stored history to the most recent N messages. Slicing can decapitate a
- * tool-call/tool-result pair, so after trimming we also drop any leading
- * `tool` messages (orphaned results the provider would reject) — and the
- * assistant tool-call message they belonged to, advancing to the next clean
- * `user` boundary if needed.
- */
-function capAgentHistory(messages: CoreMessage[]): CoreMessage[] {
-  let trimmed = messages.length > AGENT_HISTORY_MAX_MESSAGES
-    ? messages.slice(messages.length - AGENT_HISTORY_MAX_MESSAGES)
-    : messages;
-  while (trimmed.length > 0 && trimmed[0].role === "tool") {
-    trimmed = trimmed.slice(1);
-  }
-  return trimmed;
-}
-
 export async function runAgentChatV2(
   payload: RunAgentChatV2Payload,
   hooks: AgentChatV2Hooks,
 ): Promise<{ id: string; text: string; finishReason: string; usage?: unknown }> {
-  const { vendor, model, apiKey } = chooseTextModel();
+  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey));
   const systemPrompt = trim(payload.systemPrompt as unknown as JsonRecord["systemPrompt"]);
   const skillSystemPrompt = buildSkillSystemPrompt(payload as unknown as JsonRecord);
   // 收口 sanitize（P0-6）：送进 LLM 的 user/system 文本 ASCII 可移植化（防 Moonshot 等 tokenizer 异常）。
@@ -2580,53 +2492,25 @@ export async function runAgentChatV2(
   const userMessage: CoreMessage = { role: "user", content: userPrompt };
   const messages: CoreMessage[] = [...priorMessages, userMessage];
 
+  const abortController = createLinkedAbortController(hooks.abortSignal);
   const result = streamText({
     model: languageModel,
-    ...(system ? { system } : {}),
-    messages,
+    ...buildAgentPromptParts(system, messages, normalizeProviderKind(vendor.providerKind) === "anthropic"),
     temperature: typeof payload.temperature === "number" ? payload.temperature : 0.7,
     tools,
-    maxSteps: 5,
-    toolCallStreaming: true,
+    abortSignal: abortController.signal,
+    // maxSteps(skill) + toolCallStreaming + maxRetries + repairToolCall（见 harness 模块）。
+    ...agentStreamTuning(resolvedSkillKey, languageModel),
     onError: ({ error }) => hooks.emit({ type: "error", message: error instanceof Error ? error.message : String(error) }),
   });
 
-  let finalText = "";
-  let finalFinish = "unknown";
-  let finalUsage: unknown;
+  const { finalText, finalFinish, finalUsage, ok } = await consumeAgentStreamWithTimeout(result, abortController, hooks, { firstChunkTimeoutMs: 90_000, label: `${vendor?.key}/${model?.modelKey}/${resolvedSkillKey}` });
 
-  for await (const chunk of result.fullStream) {
-    if (chunk.type === "text-delta") {
-      finalText += chunk.textDelta;
-      hooks.emit({ type: "content-delta", delta: chunk.textDelta });
-    } else if (chunk.type === "step-finish") {
-      hooks.emit({ type: "step-finish", finishReason: chunk.finishReason });
-    } else if (chunk.type === "finish") {
-      finalFinish = chunk.finishReason;
-      finalUsage = chunk.usage;
-    } else if (chunk.type === "error") {
-      const message = chunk.error instanceof Error ? chunk.error.message : String(chunk.error);
-      hooks.emit({ type: "error", message });
-    }
-    // tool-call / tool-result events are already emitted from inside each
-    // tool's `execute` (which is where we have access to the awaited user
-    // confirmation result). We deliberately ignore the SDK's mirror events
-    // here to avoid double-emit.
-  }
-
-  hooks.emit({ type: "finish", finishReason: finalFinish, usage: finalUsage });
-
-  // Persist this turn (user message + everything the model generated, incl.
-  // tool-call / tool-result messages) so the next turn has full context.
-  if (sessionKey) {
+  // 历史只存简短 displayPrompt（不存含整张快照的完整 prompt，否则每轮各存一份旧快照、token 膨胀）。
+  if (ok && sessionKey) {
     const generated = (await result.response).messages as CoreMessage[];
-    agentChatV2History.set(sessionKey, capAgentHistory([...priorMessages, userMessage, ...generated]));
+    agentChatV2History.set(sessionKey, capAgentHistory([...priorMessages, { role: "user", content: sanitizeForBroadCompat(trim(payload.displayPrompt)) || userPrompt }, ...generated]));
   }
 
-  return {
-    id: `agent-${crypto.randomUUID()}`,
-    text: finalText,
-    finishReason: finalFinish,
-    usage: finalUsage,
-  };
+  return { id: `agent-${crypto.randomUUID()}`, text: finalText, finishReason: finalFinish, usage: finalUsage };
 }

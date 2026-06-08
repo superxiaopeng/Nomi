@@ -1,6 +1,6 @@
 import React from 'react'
-import { IconCursorText, IconFilePlus, IconMovie, IconReplace, IconSend2 } from '@tabler/icons-react'
-import { NomiAILabel, NomiLoadingMark, WorkbenchButton, WorkbenchIconButton } from '../../design'
+import { IconCornerDownLeft, IconCursorText, IconFilePlus, IconMovie, IconPlayerStopFilled, IconReplace, IconSend2, IconSparkles, IconX } from '@tabler/icons-react'
+import { NomiLoadingMark, NomiLogoMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { cn } from '../../utils/cn'
 import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../ai/workbenchAgentRunner'
@@ -8,9 +8,11 @@ import { clearWorkbenchAgentSession } from '../../api/desktopClient'
 import { AiReplyActionButton } from '../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
-import { openWorkbenchModelIntegration, WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
+import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
+import { AssistantToolsFold } from '../ai/AssistantToolsFold'
 import { useWorkbenchStore } from '../workbenchStore'
 import { requestStoryboardPlanning } from '../generationCanvasV2/agent/storyboardLauncher'
+import { requestFixationPlanning } from '../generationCanvasV2/agent/fixationLauncher'
 import {
   buildCreationAiPrompt,
   CREATION_AI_MODES,
@@ -66,8 +68,10 @@ function readWorkbenchAiReplyText(response: unknown): string {
   return ''
 }
 
-export default function CreationAiPanel(): JSX.Element {
+export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => void } = {}): JSX.Element {
   const [sending, setSending] = React.useState(false)
+  // Cancel handle for the in-flight agent turn (user "Stop").
+  const cancelRef = React.useRef<(() => void) | null>(null)
   const [pendingToolCalls, setPendingToolCalls] = React.useState<PendingDocToolCall[]>([])
   const messagesScrollRef = useTransientScrollingClass<HTMLDivElement>('workbench-scrollbar-visible')
   const workbenchDocument = useWorkbenchStore((state) => state.workbenchDocument)
@@ -146,9 +150,30 @@ export default function CreationAiPanel(): JSX.Element {
     }, 60)
   }, [documentText, selectedText, setDraft, setError, setMessages, setWorkspaceMode])
 
-  const send = React.useCallback(async () => {
+  // Tier2 定妆：把剧本交给 AI，按剧本为主要角色/场景建卡 + 注入身份板提示词（与拆镜头同构）。
+  const launchFixationPlanning = React.useCallback((displayPrompt = '🎭 立角色卡') => {
+    const storyText = (selectedText || documentText).trim()
+    if (!storyText) {
+      setError('先在左侧写一段剧本，再让 AI 按剧本定妆。')
+      return
+    }
+    const now = Date.now()
+    setMessages((prev) => [
+      ...prev,
+      { id: `creation_ai_user_${now}`, role: 'user', content: displayPrompt },
+      { id: `creation_ai_assistant_${now + 1}`, role: 'assistant', content: '已切到生成区，正在让 AI 按剧本为角色/场景定妆。' },
+    ])
+    setDraft('')
+    setError('')
+    setWorkspaceMode('generation')
+    window.setTimeout(() => {
+      requestFixationPlanning({ storyText, source: 'creation-ai-panel' })
+    }, 60)
+  }, [documentText, selectedText, setDraft, setError, setMessages, setWorkspaceMode])
+
+  const send = React.useCallback(async (textOverride?: string) => {
     if (sending) return
-    const userRequest = draft.trim()
+    const userRequest = (textOverride ?? draft).trim()
     if (!userRequest && !selectedText && !documentText) return
     if (STORYBOARD_REQUEST_PATTERN.test(userRequest)) {
       launchStoryboardPlanning(userRequest || '🎬 拆镜头')
@@ -178,6 +203,9 @@ export default function CreationAiPanel(): JSX.Element {
           setMessages((prev) => prev.map((message) => (
             message.id === pendingId ? { ...message, content: streamedText || '处理中...' } : message
           )))
+        },
+        onCancelReady: (cancel) => {
+          cancelRef.current = cancel
         },
         onToolCall: (event: ToolCallEvent) => {
           // Read tools auto-execute against the live editor.
@@ -216,13 +244,15 @@ export default function CreationAiPanel(): JSX.Element {
       )))
     } finally {
       setSending(false)
+      cancelRef.current = null
     }
   }, [activeMode, documentText, draft, launchStoryboardPlanning, selectedText, sending, setDraft, setError, setMessages])
 
+  // 通用创作动作，贴 Nomi 视频创作调性、不绑小说题材（旧的「悬疑开场/童话语气」在产品/宣传项目里调性错配）。
   const suggestions = React.useMemo(() => [
-    '一段悬疑开场',
-    '续写下一段',
-    '改成更童话的语气',
+    '给我一个开头',
+    '把这段写得更有画面感',
+    '梳理成分镜脚本',
   ], [])
 
   const handleNewConversation = React.useCallback(() => {
@@ -236,8 +266,8 @@ export default function CreationAiPanel(): JSX.Element {
     <aside
       className={cn(
         'workbench-creation-ai',
-        'grid grid-rows-[44px_minmax(0,1fr)_auto_auto]',
-        '[grid-template-areas:"header"_"messages"_"error"_"composer"]',
+        'grid grid-rows-[44px_auto_minmax(0,1fr)_auto_auto]',
+        '[grid-template-areas:"header"_"tools"_"messages"_"error"_"composer"]',
         'min-w-0 min-h-0 overflow-hidden',
       )}
       aria-label="AI 创作区"
@@ -248,23 +278,42 @@ export default function CreationAiPanel(): JSX.Element {
           '[grid-area:header] flex items-center justify-between gap-[10px] min-w-0',
         )}
       >
-        <div className={cn('workbench-creation-ai__title', 'inline-flex items-center gap-2')}>
-          <NomiAILabel suffix="创作" />
+        {/* 头部：Nomi 标 + 「助手」+ 动作（含 token 计数）。 */}
+        <div className={cn('workbench-creation-ai__title', 'inline-flex items-center gap-2 min-w-0')}>
+          <NomiLogoMark size={18} />
+          <span className={cn('text-bodySm font-semibold text-nomi-ink')}>助手</span>
         </div>
-        <WorkbenchAiHeaderActions
-          className={cn(
-            'workbench-creation-ai__header-actions',
-            'inline-flex items-center flex-nowrap gap-[6px] ml-auto whitespace-nowrap',
-          )}
-          actionClassName={cn(
-            'workbench-creation-ai__header-action',
-            'inline-flex items-center justify-center shrink-0 cursor-pointer whitespace-nowrap',
-            'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
-          )}
-          onModelIntegration={openWorkbenchModelIntegration}
-          onNewConversation={handleNewConversation}
-        />
+        <div className={cn('inline-flex items-center gap-2 ml-auto min-w-0')}>
+          <WorkbenchAiHeaderActions
+            className={cn('inline-flex items-center flex-nowrap gap-1')}
+            actionClassName={cn(
+              'size-6 inline-grid place-items-center shrink-0',
+              'p-0 border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
+              'hover:bg-nomi-ink-05 hover:text-nomi-ink',
+              'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+            )}
+            onNewConversation={handleNewConversation}
+          />
+          {onCollapse ? (
+            <WorkbenchIconButton
+              className={cn(
+                'size-6 inline-grid place-items-center shrink-0',
+                'p-0 border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
+                'hover:bg-nomi-ink-05 hover:text-nomi-ink',
+                'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+              )}
+              label="收起助手"
+              aria-label="收起创作助手"
+              onClick={onCollapse}
+              icon={<IconX size={15} />}
+            />
+          ) : null}
+        </div>
       </header>
+
+      <div className={cn('[grid-area:tools]')}>
+        <AssistantToolsFold tools={['读全文', '读选区', '插入到光标', '替换选区', '追加到文末']} />
+      </div>
 
       <div
         ref={messagesScrollRef}
@@ -275,17 +324,28 @@ export default function CreationAiPanel(): JSX.Element {
         aria-live="polite"
       >
         {messages.length === 0 && pendingToolCalls.length === 0 ? (
-          <div className={cn('workbench-creation-ai__empty', 'h-full grid place-content-center justify-items-center')}>
-            <div className="workbench-creation-ai__empty-title">需要一点灵感？</div>
-            <div className="workbench-creation-ai__empty-sub">告诉 AI 你想写什么，它会给你一个开头。</div>
-            <div className="workbench-creation-ai__suggestions">
+          <div className={cn(
+            'flex h-full flex-col items-center justify-center gap-2',
+            'max-w-[240px] mx-auto py-6 px-3 text-center',
+          )}>
+            <div className={cn('text-nomi-ink font-[Fraunces,Inter,serif] text-title font-medium')}>需要一点灵感？</div>
+            <div className={cn('text-nomi-ink-60 text-bodySm leading-relaxed')}>
+              告诉 AI 你想写什么，它会给你一个开头。
+            </div>
+            <div className={cn('flex flex-col gap-1.5 w-full mt-2')}>
               {suggestions.map((suggestion) => (
                 <WorkbenchButton
                   key={suggestion}
-                  className="workbench-creation-ai__suggestion"
-                  onClick={() => setDraft(suggestion)}
+                  className={cn(
+                    'w-full min-h-9 py-2 px-3 border border-transparent rounded-nomi',
+                    'flex items-center justify-between gap-2 text-left font-normal',
+                    'bg-nomi-ink-05 text-nomi-ink-80 cursor-pointer',
+                    'hover:border-nomi-line hover:bg-nomi-paper hover:text-nomi-ink',
+                  )}
+                  onClick={() => void send(suggestion)}
                 >
-                  {suggestion}
+                  <span className={cn('min-w-0')}>{suggestion}</span>
+                  <IconCornerDownLeft size={13} className={cn('shrink-0 text-nomi-ink-40')} />
                 </WorkbenchButton>
               ))}
             </div>
@@ -375,7 +435,7 @@ export default function CreationAiPanel(): JSX.Element {
         <textarea
           className={cn(
             'workbench-creation-ai__input',
-            'w-full min-h-[78px] resize-none',
+            'w-full min-h-14 resize-none',
             'border-0 rounded-none bg-transparent',
             'font-inherit outline-none',
             'focus:shadow-none',
@@ -386,60 +446,78 @@ export default function CreationAiPanel(): JSX.Element {
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => void send())}
         />
         <div className={cn('workbench-creation-ai__actions', 'flex items-center justify-between gap-2')}>
-          <label
-            className={cn(
-              'workbench-creation-ai__mode-picker',
-              'min-w-0 h-[30px] inline-flex items-center gap-[6px] px-2 cursor-pointer',
-            )}
+          <NomiSelect
+            ariaLabel="创作模式"
+            leadingLabel="模式"
+            size="sm"
             title={activeMode.description}
-          >
-            <span className={cn('workbench-creation-ai__mode-label', 'shrink-0 whitespace-nowrap')}>模式</span>
-            <select
-              className={cn(
-                'workbench-creation-ai__mode-select',
-                'min-w-[70px] border-0 bg-transparent font-inherit outline-none cursor-pointer',
-              )}
-              aria-label="创作模式"
-              value={activeMode.id}
-              onChange={(event) => setModeId(event.currentTarget.value as CreationAiModeId)}
-            >
-              {CREATION_AI_MODES.map((mode) => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.shortLabel}
-                </option>
-              ))}
-            </select>
-          </label>
-          <WorkbenchButton
+            value={activeMode.id}
+            options={CREATION_AI_MODES.map((mode) => ({ value: mode.id, label: mode.shortLabel }))}
+            onChange={(value) => setModeId(value as CreationAiModeId)}
+          />
+          <button
             className={cn(
+              // 纯 button + NomiSelect trigger 同款 chrome（WorkbenchButton 会强加自己的
+              // 圆角/字重，导致 chip 变圆角矩形而非全圆 pill，故不用它）。
               'workbench-creation-ai__storyboard-chip',
-              'shrink-0 h-[30px] inline-flex items-center gap-[5px] px-2.5',
-              'border border-nomi-line rounded-full bg-nomi-paper',
-              'text-nomi-ink-80 text-[12.5px] font-medium cursor-pointer',
-              'hover:bg-nomi-accent-soft/40 hover:text-nomi-accent hover:border-[color-mix(in_srgb,var(--nomi-accent)_36%,transparent)]',
-              'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-nomi-paper disabled:hover:text-nomi-ink-80',
+              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
+              'border border-nomi-line rounded-pill bg-nomi-paper',
+              'text-caption text-nomi-ink-80 cursor-pointer',
+              'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             type="button"
             title="把当前正文交给 AI 拆成镜头节点"
             disabled={sending || !(selectedText || documentText).trim()}
             onClick={() => launchStoryboardPlanning('🎬 拆镜头')}
           >
-            <IconMovie size={14} />
+            <IconMovie size={13} className="text-nomi-ink-40" />
             <span>拆镜头</span>
-          </WorkbenchButton>
-          <WorkbenchIconButton
+          </button>
+          <button
             className={cn(
-              'workbench-creation-ai__send',
-              'shrink-0 w-[30px] inline-flex items-center justify-center cursor-pointer',
-              'disabled:cursor-not-allowed disabled:opacity-[0.48]',
-              'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+              'workbench-creation-ai__fixation-chip',
+              'shrink-0 h-7 inline-flex items-center gap-1 px-2',
+              'border border-nomi-line rounded-pill bg-nomi-paper',
+              'text-caption text-nomi-ink-80 cursor-pointer',
+              'hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
-            label="发送"
-            aria-label="创作 AI 发送"
-            disabled={sending || !draft.trim()}
-            onClick={() => void send()}
-            icon={<IconSend2 size={15} />}
-          />
+            type="button"
+            title="把剧本交给 AI，为主要角色/场景建卡并写好身份板提示词"
+            disabled={sending || !(selectedText || documentText).trim()}
+            onClick={() => launchFixationPlanning('🎭 立角色卡')}
+          >
+            <IconSparkles size={13} className="text-nomi-ink-40" />
+            <span>立角色卡</span>
+          </button>
+          {sending ? (
+            <WorkbenchIconButton
+              className={cn(
+                'workbench-creation-ai__send',
+                'shrink-0 size-7 inline-flex items-center justify-center cursor-pointer',
+                'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+              )}
+              label="停止"
+              aria-label="停止生成"
+              onClick={() => cancelRef.current?.()}
+              icon={<IconPlayerStopFilled size={13} />}
+            />
+          ) : (
+            <WorkbenchIconButton
+              className={cn(
+                'workbench-creation-ai__send',
+                'shrink-0 size-7 inline-flex items-center justify-center cursor-pointer',
+                'disabled:cursor-not-allowed disabled:opacity-[0.48]',
+                'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+              )}
+              label="发送"
+              aria-label="创作 AI 发送"
+              disabled={!draft.trim()}
+              onClick={() => void send()}
+              icon={<IconSend2 size={15} />}
+            />
+          )}
         </div>
       </footer>
     </aside>

@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconPlayerPlayFilled, IconPlus } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
+import { NomiImage } from '../../design/media'
 import type { AssetRef } from './assetTypes'
 
 // 通用素材块(P0.2,样张 v4)。形态自明 > 文字解释:
@@ -17,6 +18,8 @@ type AssetTileProps = {
   onRemove?: () => void
   /** 传了则可点(hover 高亮)。 */
   onClick?: () => void
+  /** 拖拽重排用:spread 到根 div(draggable + onDragStart/onDragOver/onDrop)。 */
+  dragProps?: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean }
   className?: string
 }
 
@@ -44,7 +47,6 @@ function RemoveButton({ label, onRemove }: { label: string; onRemove: () => void
 
 // 形态自明的内层渲染,被 56px 参考块和 48px picker 项共用(单一真相源,避免两份渲染逻辑)。
 export function AssetThumb({ asset, playSize = 22 }: { asset: AssetRef; playSize?: number }): JSX.Element {
-  const preview = asset.thumbUrl || asset.renderUrl
   if (asset.kind === 'audio') {
     return (
       <span className={cn('flex items-center gap-[2px] h-[22px]')} aria-hidden>
@@ -57,7 +59,7 @@ export function AssetThumb({ asset, playSize = 22 }: { asset: AssetRef; playSize
   if (asset.kind === 'video') {
     return (
       <>
-        {asset.thumbUrl ? <img className={cn('w-full h-full object-cover')} src={asset.thumbUrl} alt={asset.name} /> : null}
+        {asset.thumbUrl ? <NomiImage className={cn('w-full h-full object-cover')} src={asset.thumbUrl} alt={asset.name} /> : null}
         <span className={cn('absolute inset-0 bg-[oklch(0.2_0.01_80/0.28)]')} aria-hidden />
         <span className={cn('absolute inset-0 flex items-center justify-center z-[1]')} aria-hidden>
           <IconPlayerPlayFilled size={playSize} className={cn('text-nomi-paper drop-shadow-[0_1px_2px_oklch(0_0_0/0.5)]')} />
@@ -65,16 +67,17 @@ export function AssetThumb({ asset, playSize = 22 }: { asset: AssetRef; playSize
       </>
     )
   }
-  return <img className={cn('w-full h-full object-cover')} src={preview} alt={asset.name} />
+  return <NomiImage className={cn('w-full h-full object-cover')} thumbnailSrc={asset.thumbUrl} src={asset.renderUrl} alt={asset.name} />
 }
 
-export default function AssetTile({ asset, index, onRemove, onClick, className }: AssetTileProps): JSX.Element {
+export default function AssetTile({ asset, index, onRemove, onClick, dragProps, className }: AssetTileProps): JSX.Element {
   const clickable = Boolean(onClick)
   return (
     <div
       className={cn(
         'relative w-14 h-14 rounded-nomi-sm border border-nomi-line bg-nomi-ink-05 overflow-hidden flex items-center justify-center',
         clickable && 'cursor-pointer hover:outline hover:outline-2 hover:outline-offset-1 hover:outline-nomi-accent',
+        dragProps?.draggable && 'data-[dragover=true]:outline data-[dragover=true]:outline-2 data-[dragover=true]:outline-nomi-accent',
         className,
       )}
       role={clickable ? 'button' : undefined}
@@ -82,6 +85,7 @@ export default function AssetTile({ asset, index, onRemove, onClick, className }
       aria-label={clickable ? asset.name : undefined}
       onClick={onClick}
       onKeyDown={clickable ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick?.() } } : undefined}
+      {...dragProps}
     >
       <AssetThumb asset={asset} />
       {typeof index === 'number' ? <NumberBadge index={index} /> : null}

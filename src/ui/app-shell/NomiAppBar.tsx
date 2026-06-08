@@ -4,6 +4,12 @@ import type { WorkspaceMode } from '../../workbench/workbenchStore'
 import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
 import { cn } from '../../utils/cn'
 
+// 「素材库」点击 → 打开真实素材库面板（不再直接弹文件对话框）。
+// 上传已移进面板内部，AppBar 只负责发开面板事件（仿 nomi-open-model-catalog）。
+function openAssetLibrary(): void {
+  window.dispatchEvent(new CustomEvent('nomi-open-asset-library'))
+}
+
 type NomiAppBarProps = {
   workspaceMode: WorkspaceMode
   onWorkspaceModeChange: (mode: WorkspaceMode) => void
@@ -14,7 +20,6 @@ type NomiAppBarProps = {
 }
 
 export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, projectName, onBackToLibrary, onOpenModelCatalog, onRenameProject }: NomiAppBarProps): JSX.Element {
-  const assetInputRef = React.useRef<HTMLInputElement>(null)
   const [editingProjectName, setEditingProjectName] = React.useState(false)
   const [projectTitle, setProjectTitle] = React.useState(projectName || '未命名 Nomi 项目')
 
@@ -30,22 +35,6 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
     })
     setEditingProjectName(false)
   }, [onRenameProject])
-
-  const handleAssetFilesSelected = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files || []).filter((file) => file.type.startsWith('image/'))
-    event.currentTarget.value = ''
-    if (!files.length) return
-    onWorkspaceModeChange('generation')
-    void import('../../workbench/generationCanvasV2/adapters/assetImportAdapter')
-      .then(({ importImageFilesToGenerationCanvas }) => {
-        void importImageFilesToGenerationCanvas(files, {
-          basePosition: { x: 120, y: 90 },
-        })
-      })
-      .catch((error) => {
-        console.error('image import failed', error)
-      })
-  }, [onWorkspaceModeChange])
 
   const handleOpenModelCatalog = React.useCallback(() => {
     onOpenModelCatalog?.()
@@ -166,18 +155,6 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
         role="toolbar"
         aria-label="全局操作"
       >
-        <input
-          ref={assetInputRef}
-          className={cn(
-            'nomi-appbar__asset-input',
-            'absolute w-px h-px overflow-hidden opacity-0 pointer-events-none',
-          )}
-          type="file"
-          accept="image/*"
-          multiple
-          aria-label="图片素材文件选择器"
-          onChange={handleAssetFilesSelected}
-        />
         <WorkbenchButton
           className={cn(
             'nomi-appbar__ghost',
@@ -188,9 +165,9 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
             'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
             'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
           )}
-          aria-label="打开图片素材导入"
+          aria-label="打开素材库"
           title="素材库"
-          onClick={() => assetInputRef.current?.click()}
+          onClick={openAssetLibrary}
         >
           <IconPhoto size={15} stroke={1.7} />
           <span className={cn('nomi-appbar__action-text', 'max-[700px]:hidden')}>素材库</span>

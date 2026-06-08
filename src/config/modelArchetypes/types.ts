@@ -43,11 +43,12 @@ export type ArchetypeReferenceSlot = {
 export type ArchetypeIntent = "text" | "single" | "firstlast" | "character" | "edit";
 
 /**
- * 该档案的所有模式打到哪条 mapping（catalog mapping 按 (vendor, taskKind) 寻址）。**显式声明，不靠
+ * 该档案打到哪个 mapping 桶（catalog mapping 按 (vendor, taskKind[, modelKey]) 寻址）。**显式声明，不靠
  * 启发式猜**——避免「omni 无首帧 → 误判 text_to_video → 撞到别的模型的 mapping」这类 bug。
- * 同一档案的所有模式都打同一个 createTask 端点（供应商按 model enum 自分流），故只需一个值。
+ * 视频档案所有模式同一个值（供应商按 model enum 自分流）；图像档案的文生图/改图 taskKind 不同，
+ * 由各模式的 `ArchetypeMode.transportTaskKind` 覆盖档案级值。
  */
-export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video";
+export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video" | "text_to_image" | "image_edit";
 
 export type ArchetypeMode = {
   id: string;
@@ -56,8 +57,16 @@ export type ArchetypeMode = {
   vendorTerm: string;
   hint: string;
   slots: ArchetypeReferenceSlot[];
-  /** 标量参数：复用现有控件类型（规则 1，不另造）。 */
+  /** 标量参数：复用现有控件类型（规则 1，不另造）。供应商无关的**缺省**集；某供应商字段枚举不同时用 vendorParams 覆盖。 */
   params: ModelParameterControl[];
+  /**
+   * B 档案分层（用户拍板 2026-06-07）：同一模型身份在不同供应商下**标量参数枚举不同**时，
+   * 按 vendorKey 覆盖 `params`。例：Seedream 文生图在 kie 是 quality(basic/high)，在 apimart 是
+   * resolution(2K/4K) —— 字段名+取值都不同，模板引擎只透传不翻译，故 UI 控件本身要按供应商不同。
+   * 缺省（绝大多数模式两家一致或只一家有）不写；解析时 resolveArchetypeForModel 按模型 vendorKey 特化。
+   * **身份与能力形状（id/family/label/modes/slots/intent）仍供应商无关**——只 params 这一层分供应商（P4）。
+   */
+  vendorParams?: Record<string, ModelParameterControl[]>;
   promptRequired: boolean;
   /**
    * 该模式发请求时用的 model enum，覆盖 catalog 行的 modelKey（评审 M3）。HappyHorse 把 4 个端点
@@ -65,16 +74,21 @@ export type ArchetypeMode = {
    * 缺省（如 Seedance 三模式同 model）→ 用 catalog 的 modelKey。
    */
   modelEnum?: string;
+  /**
+   * 覆盖档案级 transportTaskKind（图像档案专用）：文生图模式=`text_to_image`、改图模式=`image_edit`，
+   * 两者打不同 mapping 桶。视频档案各模式同 taskKind → 缺省即可，用档案级值。
+   */
+  transportTaskKind?: ArchetypeTransportTaskKind;
 };
 
 export type ModelArchetype = {
   id: string; // 'seedance-2'
   family: string; // 'seedance'
   label: string; // 'Seedance 2.0'
-  kind: "video";
+  kind: "video" | "image";
   modes: ArchetypeMode[];
   defaultModeId: string;
-  /** 该档案所有模式打到哪条 mapping（显式，不靠启发式）。见 ArchetypeTransportTaskKind。 */
+  /** 该档案默认打到哪个 mapping 桶（显式，不靠启发式）。图像档案可被 mode.transportTaskKind 覆盖。 */
   transportTaskKind: ArchetypeTransportTaskKind;
   /**
    * 识别用：模型身份（modelKey/别名）匹配这些 pattern 之一就套这套档案。

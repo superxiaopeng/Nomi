@@ -1,6 +1,6 @@
 import React from 'react'
 import { IconDownload, IconPlayerPause, IconPlayerPlay, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
-import { NomiLoadingMark, WorkbenchButton, WorkbenchIconButton } from '../../design'
+import { NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import { useWorkbenchStore } from '../workbenchStore'
 import type { TimelineClip, TimelineState } from '../timeline/timelineTypes'
@@ -276,11 +276,14 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const mediaStyle = {
     transform: `translate(${mediaOffset.x}px, ${mediaOffset.y}px) scale(${mediaScale})`,
   }
+  // 「适应」=contain（整画面内缩、留边）/「填充」=cover（铺满、裁边）。
+  // 之前 object-contain 写死，fitMode 改了没人消费 → 点了没效果，这里 derive 出来。
+  const objectFitClass = fitMode === 'cover' ? 'object-cover' : 'object-contain'
 
   return (
     <section ref={playerRef} className={cn(
       'workbench-preview-player',
-      'min-w-0 min-h-0 grid place-items-center p-8 bg-[var(--workbench-bg)]',
+      'relative min-w-0 min-h-0 grid place-items-center p-8 bg-[var(--workbench-bg)]',
     )} aria-label="预览播放器">
       <div
         ref={stageRef}
@@ -327,164 +330,6 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             </div>
           ) : null}
         </div>
-        <div className={cn(
-          'workbench-preview-player__control-bar',
-          'absolute z-[3] left-1/2 bottom-[14px] -translate-x-1/2',
-          'max-w-[calc(100%-24px)] inline-flex items-center gap-1.5 p-[5px]',
-          'border border-[var(--workbench-border)] rounded-full',
-          'bg-[color-mix(in_oklch,var(--nomi-paper)_88%,transparent)]',
-          'shadow-[var(--workbench-shadow-sm)] backdrop-blur-[12px] backdrop-saturate-[1.2]',
-          'overflow-x-auto scrollbar-none',
-        )} role="toolbar" aria-label="预览控制">
-          <WorkbenchIconButton
-            className={cn(
-              'workbench-preview-player__play',
-              'w-[30px] h-[30px] grid place-items-center border-0 rounded-full',
-              'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
-              'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
-            )}
-            label={playing ? '暂停' : '播放'}
-            icon={playing ? <IconPlayerPause size={16} stroke={2} /> : <IconPlayerPlay size={16} stroke={2} />}
-            onClick={togglePlayback}
-            disabled={isEmpty}
-            title={isEmpty ? '时间轴为空' : undefined}
-          />
-          <span className="text-[11px] opacity-60 tabular-nums min-w-[60px]">
-            {currentSeconds}s / {totalSeconds}s
-          </span>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>画幅</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="预览画幅"
-              value={aspectRatio}
-              onChange={(event) => setPreviewAspectRatio(event.currentTarget.value as PreviewAspectRatio)}
-            >
-              {PREVIEW_RATIOS.map((ratio) => (
-                <option key={ratio.value} value={ratio.value}>
-                  {ratio.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>显示</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="画面适配"
-              value={fitMode}
-              onChange={(event) => setFitMode(event.currentTarget.value as PreviewFitMode)}
-            >
-              <option value="contain">适应</option>
-              <option value="cover">填充</option>
-            </select>
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__control-group',
-            'flex-none inline-flex items-center gap-[3px]',
-          )} aria-label="预览构图">
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
-            <span className={cn(
-              'workbench-preview-player__zoom-label',
-              'min-w-[38px] text-[var(--workbench-muted)] text-[11px] font-bold tabular-nums text-center',
-            )} aria-label="当前缩放">{Math.round(mediaScale * 100)}%</span>
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          {(exportStatus === 'preparing' || exportStatus === 'recording' || exportStatus === 'converting') ? (
-            <div className={cn(
-              'workbench-preview-player__export-progress',
-              'flex items-center gap-2 px-2',
-            )}>
-              <div className={cn(
-                'workbench-preview-player__export-progress-bar-track',
-                'w-20 h-1 bg-white/15 rounded-sm overflow-hidden',
-              )}>
-                <div
-                  className={cn(
-                    'workbench-preview-player__export-progress-bar',
-                    'h-1 bg-[var(--mantine-color-blue-5,#339af0)] rounded-sm transition-[width] duration-200 ease-in-out min-w-1',
-                  )}
-                  style={{ width: `${Math.round(exportRatio * 100)}%` }}
-                />
-              </div>
-              <span className={cn(
-                'workbench-preview-player__export-progress-label',
-                'text-xs text-white/70 whitespace-nowrap',
-              )}>
-                {exportStatus === 'preparing' ? '准备中…' : exportStatus === 'converting' ? '转码 MP4…' : `导出中 ${Math.round(exportRatio * 100)}%`}
-              </span>
-            </div>
-          ) : null}
-          <WorkbenchButton
-            className={cn(
-              'workbench-preview-player__export-button',
-              'h-7 min-w-[92px] px-3 border border-transparent rounded-full',
-              'inline-flex items-center justify-center gap-1.5',
-              'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-[11.5px] font-bold cursor-pointer',
-              'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
-              'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--nomi-ink)]',
-            )}
-            aria-label="导出 MP4"
-            onClick={handleExport}
-            disabled={exportBusy || isEmpty}
-            title={exportTitle}
-          >
-            {exportBusy ? <NomiLoadingMark size={15} className={cn('workbench-preview-player__spinner', 'animate-spin')} /> : <IconDownload size={15} />}
-            导出 MP4
-          </WorkbenchButton>
-          <WorkbenchButton
-            className={cn(
-              'workbench-preview-player__mode',
-              'h-6 min-w-[48px] px-2.5 border border-transparent rounded-full',
-              'bg-transparent text-[var(--workbench-muted)] text-[11.5px] font-semibold cursor-pointer',
-              safeAreaVisible && 'bg-[var(--workbench-accent)] text-[var(--nomi-paper)]',
-              !safeAreaVisible && 'hover:border-[var(--workbench-border-soft)] hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]',
-            )}
-            aria-label="切换安全框"
-            aria-pressed={safeAreaVisible}
-            data-active={safeAreaVisible ? 'true' : 'false'}
-            onClick={() => setSafeAreaVisible((value) => !value)}
-          >
-            安全框
-          </WorkbenchButton>
-        </div>
         {safeAreaVisible ? (
           <div className={cn(
             'workbench-preview-player__safe-area',
@@ -508,7 +353,8 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
         {imageClip?.url ? (
           <img className={cn(
             'workbench-preview-player__image',
-            'absolute inset-0 z-[1] w-full h-full object-contain bg-transparent select-none will-change-transform',
+            'absolute inset-0 z-[1] w-full h-full bg-transparent select-none will-change-transform',
+            objectFitClass,
           )} src={imageClip.url} alt={imageClip.label || ''} style={mediaStyle} />
         ) : null}
         {videoUrl ? (
@@ -516,7 +362,8 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             ref={videoRef}
             className={cn(
               'workbench-preview-player__video',
-              'absolute inset-0 z-[2] w-full h-full object-contain bg-transparent select-none will-change-transform',
+              'absolute inset-0 z-[2] w-full h-full bg-transparent select-none will-change-transform',
+              objectFitClass,
             )}
             src={videoPlaybackUrl}
             crossOrigin="use-credentials"
@@ -533,6 +380,140 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             }}
           />
         ) : null}
+      </div>
+      {/* 控制条放在 player section（非 stage）层：stage 为裁剪 media 用了 overflow-hidden，
+          若把这条浮动工具条放进去，stage 一窄就会裁掉「安全框」并冒出多余横向滚动条。
+          挂到不裁剪的 section 上 → 用全宽、不裁、无滚动条；居中浮在画面底部。 */}
+      <div className={cn(
+        'workbench-preview-player__control-bar',
+        'absolute z-[3] left-1/2 bottom-8 -translate-x-1/2',
+        'max-w-[calc(100%-24px)] inline-flex items-center gap-1.5 p-[5px]',
+        'border border-[var(--workbench-border)] rounded-full',
+        'bg-[color-mix(in_oklch,var(--nomi-paper)_88%,transparent)]',
+        'shadow-[var(--workbench-shadow-sm)] backdrop-blur-[12px] backdrop-saturate-[1.2]',
+        // 子项一律不被 flex 挤压：避免画幅/显示下拉被截成「1…」「适.」、导出/安全框折两行。
+        '[&>*]:shrink-0',
+      )} role="toolbar" aria-label="预览控制">
+        <WorkbenchIconButton
+          className={cn(
+            'workbench-preview-player__play',
+            'w-[30px] h-[30px] grid place-items-center border-0 rounded-full',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
+            'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
+          )}
+          label={playing ? '暂停' : '播放'}
+          icon={playing ? <IconPlayerPause size={16} stroke={2} /> : <IconPlayerPlay size={16} stroke={2} />}
+          onClick={togglePlayback}
+          disabled={isEmpty}
+          title={isEmpty ? '时间轴为空' : undefined}
+        />
+        <span className="text-[11px] opacity-60 tabular-nums min-w-[60px]">
+          {currentSeconds}s / {totalSeconds}s
+        </span>
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <NomiSelect
+          ariaLabel="预览画幅"
+          leadingLabel="画幅"
+          size="xs"
+          value={aspectRatio}
+          options={PREVIEW_RATIOS.map((ratio) => ({ value: ratio.value, label: ratio.label }))}
+          onChange={(value) => setPreviewAspectRatio(value as PreviewAspectRatio)}
+        />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <NomiSelect
+          ariaLabel="画面适配"
+          leadingLabel="显示"
+          size="xs"
+          value={fitMode}
+          options={[
+            { value: 'contain', label: '适应' },
+            { value: 'cover', label: '填充' },
+          ]}
+          onChange={(value) => setFitMode(value as PreviewFitMode)}
+        />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <div className={cn(
+          'workbench-preview-player__control-group',
+          'flex-none inline-flex items-center gap-[3px]',
+        )} aria-label="预览构图">
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
+          <span className={cn(
+            'workbench-preview-player__zoom-label',
+            'min-w-[38px] text-[var(--workbench-muted)] text-[11px] font-bold tabular-nums text-center',
+          )} aria-label="当前缩放">{Math.round(mediaScale * 100)}%</span>
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
+        </div>
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        {(exportStatus === 'preparing' || exportStatus === 'recording' || exportStatus === 'converting') ? (
+          <div className={cn(
+            'workbench-preview-player__export-progress',
+            'flex items-center gap-2 px-2',
+          )}>
+            <div className={cn(
+              'workbench-preview-player__export-progress-bar-track',
+              'w-20 h-1 bg-white/15 rounded-sm overflow-hidden',
+            )}>
+              <div
+                className={cn(
+                  'workbench-preview-player__export-progress-bar',
+                  'h-1 bg-[var(--mantine-color-blue-5,#339af0)] rounded-sm transition-[width] duration-200 ease-in-out min-w-1',
+                )}
+                style={{ width: `${Math.round(exportRatio * 100)}%` }}
+              />
+            </div>
+            <span className={cn(
+              'workbench-preview-player__export-progress-label',
+              'text-xs text-white/70 whitespace-nowrap',
+            )}>
+              {exportStatus === 'preparing' ? '准备中…' : exportStatus === 'converting' ? '转码 MP4…' : `导出中 ${Math.round(exportRatio * 100)}%`}
+            </span>
+          </div>
+        ) : null}
+        <WorkbenchButton
+          className={cn(
+            'workbench-preview-player__export-button',
+            'h-7 px-3 border border-transparent rounded-full whitespace-nowrap',
+            'inline-flex items-center justify-center gap-1.5',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-[11.5px] font-bold cursor-pointer',
+            'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
+            'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--nomi-ink)]',
+          )}
+          aria-label="导出 MP4"
+          onClick={handleExport}
+          disabled={exportBusy || isEmpty}
+          title={exportTitle}
+        >
+          {exportBusy ? <NomiLoadingMark size={15} className={cn('workbench-preview-player__spinner', 'animate-spin')} /> : <IconDownload size={15} />}
+          导出 MP4
+        </WorkbenchButton>
+        <WorkbenchButton
+          className={cn(
+            'workbench-preview-player__mode',
+            'h-7 px-3 border border-transparent rounded-full whitespace-nowrap',
+            'bg-transparent text-[var(--workbench-muted)] text-[11.5px] font-semibold cursor-pointer',
+            safeAreaVisible && 'bg-[var(--workbench-accent)] text-[var(--nomi-paper)]',
+            !safeAreaVisible && 'hover:border-[var(--workbench-border-soft)] hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]',
+          )}
+          aria-label="切换安全框"
+          aria-pressed={safeAreaVisible}
+          data-active={safeAreaVisible ? 'true' : 'false'}
+          onClick={() => setSafeAreaVisible((value) => !value)}
+        >
+          安全框
+        </WorkbenchButton>
       </div>
     </section>
   )

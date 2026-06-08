@@ -44,3 +44,4 @@ docs/onboarding-trials/20*/
 
 # UX 走查截图产物（规则13）—— 不入库
 tests/ux/shots/
+tests/ux/__shots__/

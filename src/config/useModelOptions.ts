@@ -76,9 +76,12 @@ async function getEnabledVendorKeys(): Promise<Set<string>> {
     enabledVendorKeysPromise = (async () => {
       try {
         const vendors = await listWorkbenchModelCatalogVendors()
+        // 「可见」= 启用 **且** 现在能用（有 API key，或免鉴权）。只看 enabled 会把断开的供应商
+        // （拔了 key 但 vendor.enabled 仍 true）的模型留在下拉，让用户误选到没钥匙的家 → 运行时报
+        // `API key missing`。可用性必须由 hasApiKey 派生（根因修复 2026-06-08）。
         const enabled = new Set(
           (Array.isArray(vendors) ? vendors : [])
-            .filter((v) => Boolean(v?.enabled))
+            .filter((v) => Boolean(v?.enabled) && (v?.authType === 'none' || Boolean(v?.hasApiKey)))
             .map((v) => String(v?.key || '').trim().toLowerCase())
             .filter(Boolean),
         )
@@ -233,7 +236,7 @@ export function toCatalogModelOptions(items: ModelCatalogModelDto[]): ModelOptio
     const vendor = typeof item?.vendorKey === 'string' ? item.vendorKey : undefined
     // 认得的模型（按模型身份，供应商无关）→ 用内置档案的控件覆盖 meta.parameterControls，
     // 这样现有渲染路径不变就能渲染档案控件；认不出则保持原 meta（走通用 flat 解析）。
-    const archControls = archetypeParameterControls({ modelKey: modelKey || value, modelAlias: alias, meta: item?.meta })
+    const archControls = archetypeParameterControls({ modelKey: modelKey || value, modelAlias: alias, vendorKey: vendor, meta: item?.meta })
     const meta = archControls
       ? { ...(item?.meta && typeof item.meta === 'object' ? item.meta : {}), parameterControls: archControls }
       : item?.meta

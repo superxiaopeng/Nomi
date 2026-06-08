@@ -1,10 +1,11 @@
 import React from 'react'
-import { IconFolderOpen, IconMovie, IconSparkles, IconTrash } from '@tabler/icons-react'
+import { IconFolderOpen, IconMovie, IconPlugConnected, IconSparkles, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { NomiLogoMark } from '../../design'
+import { NomiImage } from '../../design/media'
 import type { LocalProjectSummary } from './localProjectStore'
 import { TRY_NOW_EXAMPLES, type TryNowExample } from './tryNowExamples'
-import { PROJECT_TEMPLATE_LIST, type ProjectTemplateId } from './projectTemplates'
+import type { ProjectTemplateId } from './projectTemplates'
 
 type Props = {
   onOpenProject: (projectId: string) => void
@@ -12,62 +13,8 @@ type Props = {
   onNewProject: (templateId?: ProjectTemplateId) => void
   onOpenFolder?: () => void
   onTryExample?: (example: TryNowExample) => void
+  onOpenModelCatalog?: () => void
   projects: LocalProjectSummary[]
-}
-
-function TemplatePickerModal({
-  open,
-  onCancel,
-  onPick,
-}: {
-  open: boolean
-  onCancel: () => void
-  onPick: (id: ProjectTemplateId) => void
-}): JSX.Element | null {
-  if (!open) return null
-  return (
-    <div
-      className="fixed inset-0 z-[200] grid place-items-center bg-black/30 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="选择项目模板"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-[640px] bg-nomi-paper border border-nomi-line rounded-nomi-lg shadow-nomi-md p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[18px] font-medium text-nomi-ink m-0">选择项目模板</h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-nomi-ink-40 hover:text-nomi-ink text-[20px] leading-none"
-            aria-label="关闭"
-          >
-            ×
-          </button>
-        </div>
-        <div className="grid gap-3">
-          {PROJECT_TEMPLATE_LIST.map((tpl) => (
-            <button
-              type="button"
-              key={tpl.id}
-              onClick={() => onPick(tpl.id)}
-              className={cn(
-                'text-left px-4 py-3 border border-nomi-line rounded-nomi-md',
-                'bg-nomi-bg hover:bg-nomi-paper hover:border-nomi-accent/40 hover:shadow-nomi-sm',
-                'transition-colors duration-150',
-              )}
-            >
-              <div className="text-[14px] font-medium text-nomi-ink mb-1">{tpl.name}</div>
-              <div className="text-[12px] text-nomi-ink-40 leading-snug">{tpl.description}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function formatUpdatedAt(value: number): string {
@@ -83,12 +30,19 @@ function formatUpdatedAt(value: number): string {
   return new Date(value).toLocaleDateString('zh-CN')
 }
 
-function ThumbnailMosaic({ urls }: { urls: string[] }): JSX.Element {
+// memo 化：搜索/筛选触发父组件重渲时，urls 未变的封面不重渲（图多时省下整片缩略图重建）。
+// urls 每次是新数组引用，故用按值比较的 comparator。
+const ThumbnailMosaic = React.memo(function ThumbnailMosaic({ urls }: { urls: string[] }): JSX.Element {
   if (urls.length === 0) {
-    return <div className="absolute inset-0 bg-nomi-ink-05" />
+    // 未生成的项目无封面 → 只放中性占位图标；名称由卡片下方统一显示，缩略图里不再重复（去重）。
+    return (
+      <div className="absolute inset-0 grid place-items-center bg-nomi-ink-05">
+        <IconMovie size={26} stroke={1.2} className="text-nomi-ink-30" aria-hidden />
+      </div>
+    )
   }
   if (urls.length === 1) {
-    return <img className="absolute inset-0 w-full h-full object-cover block" src={urls[0]} alt="" />
+    return <NomiImage className="absolute inset-0 w-full h-full object-cover block" src={urls[0]} alt="" />
   }
   const cells = urls.slice(0, 4)
   return (
@@ -99,13 +53,13 @@ function ThumbnailMosaic({ urls }: { urls: string[] }): JSX.Element {
       cells.length === 4 && 'grid-cols-2 grid-rows-2',
     )}>
       {cells.map((url, i) => (
-        <img key={i} className="w-full h-full object-cover block" src={url} alt="" />
+        <NomiImage key={i} className="w-full h-full object-cover block" src={url} alt="" />
       ))}
     </div>
   )
-}
+}, (prev, next) => prev.urls.join('|') === next.urls.join('|'))
 
-export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onNewProject, onOpenFolder, onTryExample, projects }: Props): JSX.Element {
+export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onNewProject, onOpenFolder, onTryExample, onOpenModelCatalog, projects }: Props): JSX.Element {
   const [query, setQuery] = React.useState('')
   const normalizedQuery = query.trim().toLowerCase()
   const filteredProjects = normalizedQuery
@@ -176,6 +130,49 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
           </section>
         ) : null}
 
+        {/* ── 主行动：新建空白 / 打开文件夹（始终渲染，不被示例 gate；从下方网格挪上来 → 不再两套并行入口）── */}
+        <section className="shrink-0 flex items-center gap-2 mb-1" aria-label="开始一个项目">
+          <button
+            type="button"
+            onClick={() => onNewProject()}
+            className={cn(
+              'inline-flex items-center gap-1.5 h-8 px-4 rounded-pill border-0 cursor-pointer font-inherit',
+              'bg-nomi-ink text-nomi-paper text-[13px] font-medium transition-colors hover:bg-nomi-accent',
+            )}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            新建空白项目
+          </button>
+          {onOpenFolder ? (
+            <button
+              type="button"
+              onClick={onOpenFolder}
+              className={cn(
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-pill cursor-pointer font-inherit',
+                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[13px] transition-colors hover:border-nomi-ink-20',
+              )}
+            >
+              <IconFolderOpen size={16} stroke={1.8} aria-hidden="true" />
+              打开已有文件夹
+            </button>
+          ) : null}
+          {onOpenModelCatalog ? (
+            <button
+              type="button"
+              onClick={onOpenModelCatalog}
+              className={cn(
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-pill cursor-pointer font-inherit',
+                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-[13px] transition-colors hover:border-nomi-ink-20',
+              )}
+              aria-label="模型接入"
+              title="接入 AI 模型（填一个 key 即可开始生成）"
+            >
+              <IconPlugConnected size={16} stroke={1.8} aria-hidden="true" />
+              模型接入
+            </button>
+          ) : null}
+        </section>
+
         {/* ── Search ── */}
         <div className={cn(
           'shrink-0 flex items-center gap-2 h-9 max-w-[360px] px-3',
@@ -197,77 +194,11 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
           />
         </div>
 
-        {/* ── Grid ── */}
+        {/* ── 最近项目 ── */}
+        {filteredProjects.length > 0 ? (
+          <h2 className="shrink-0 m-0 text-[12px] font-medium text-nomi-ink-60">最近项目</h2>
+        ) : null}
         <div className="shrink-0 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-[14px]">
-
-          {/* New project — first card, plain solid style */}
-          <button
-            className={cn(
-              'group bg-nomi-paper border border-nomi-line rounded-nomi-lg overflow-hidden cursor-pointer text-left font-inherit',
-              'transition-[box-shadow,transform,border-color] duration-150',
-              'hover:shadow-nomi-md hover:border-[var(--nomi-ink-20)] hover:-translate-y-0.5',
-              'active:translate-y-0 active:shadow-none',
-            )}
-            type="button"
-            onClick={() => onNewProject()}
-          >
-            <div className={cn(
-              'aspect-video relative overflow-hidden',
-              'flex items-center justify-center bg-nomi-bg transition-colors duration-150',
-              'group-hover:bg-[color-mix(in_oklch,var(--nomi-accent)_6%,var(--nomi-bg))]',
-            )}>
-              <div className={cn(
-                'w-10 h-10 rounded-full bg-nomi-paper border border-nomi-line',
-                'grid place-items-center text-nomi-ink-40',
-                'transition-[border-color,color,background] duration-150',
-                'group-hover:bg-[color-mix(in_oklch,var(--nomi-accent)_10%,var(--nomi-paper))]',
-                'group-hover:border-[color-mix(in_oklch,var(--nomi-accent)_40%,transparent)]',
-                'group-hover:text-nomi-accent',
-              )}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-              </div>
-            </div>
-            <div className="px-[13px] pt-[10px] pb-3">
-              <div className="text-[13px] font-medium text-nomi-ink-60 truncate mb-0.5 group-hover:text-nomi-accent">新建项目</div>
-              <div className="text-[11.5px] text-nomi-ink-40 truncate">存到默认位置，立即开始</div>
-            </div>
-          </button>
-
-          {onOpenFolder ? (
-            <button
-              className={cn(
-                'group bg-nomi-paper border border-nomi-line rounded-nomi-lg overflow-hidden cursor-pointer text-left font-inherit',
-                'transition-[box-shadow,transform,border-color] duration-150',
-                'hover:shadow-nomi-md hover:border-[var(--nomi-ink-20)] hover:-translate-y-0.5',
-                'active:translate-y-0 active:shadow-none',
-              )}
-              type="button"
-              onClick={onOpenFolder}
-            >
-              <div className={cn(
-                'aspect-video relative overflow-hidden',
-                'flex items-center justify-center bg-nomi-bg transition-colors duration-150',
-                'group-hover:bg-[color-mix(in_oklch,var(--nomi-accent)_6%,var(--nomi-bg))]',
-              )}>
-                <div className={cn(
-                  'w-10 h-10 rounded-full bg-nomi-paper border border-nomi-line',
-                  'grid place-items-center text-nomi-ink-40',
-                  'transition-[border-color,color,background] duration-150',
-                  'group-hover:bg-[color-mix(in_oklch,var(--nomi-accent)_10%,var(--nomi-paper))]',
-                  'group-hover:border-[color-mix(in_oklch,var(--nomi-accent)_40%,transparent)]',
-                  'group-hover:text-nomi-accent',
-                )}>
-                  <IconFolderOpen size={21} stroke={1.8} aria-hidden="true" />
-                </div>
-              </div>
-              <div className="px-[13px] pt-[10px] pb-3">
-                <div className="text-[13px] font-medium text-nomi-ink-60 truncate mb-0.5 group-hover:text-nomi-accent">打开文件夹</div>
-                <div className="text-[11.5px] text-nomi-ink-40 truncate">选择已有目录作为项目空间</div>
-              </div>
-            </button>
-          ) : null}
 
           {filteredProjects.map((project) => {
             const urls = project.thumbnailUrls || (project.thumbnail ? [project.thumbnail] : [])
@@ -290,6 +221,18 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   style={urls.length === 0 && project.thumbStyle ? { background: project.thumbStyle } : undefined}
                 >
                   <ThumbnailMosaic urls={urls} />
+                  {project.source === 'folder' ? (
+                    <span
+                      className={cn(
+                        'absolute top-1.5 left-1.5 z-[3] inline-flex items-center gap-1 h-5 px-2 rounded-full',
+                        'bg-[oklch(0.2_0.01_80/0.55)] text-nomi-paper text-micro backdrop-blur-sm',
+                      )}
+                      title="绑定到外部文件夹的项目"
+                    >
+                      <IconFolderOpen size={11} stroke={1.8} aria-hidden="true" />
+                      文件夹
+                    </span>
+                  ) : null}
                   <div className={cn(
                     'absolute inset-0 bg-[oklch(0.12_0.01_80/0.3)] opacity-0 transition-opacity duration-150',
                     'flex items-center justify-center z-[2]',

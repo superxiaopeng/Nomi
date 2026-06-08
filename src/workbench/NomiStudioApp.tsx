@@ -32,6 +32,11 @@ const OnboardingFloatingPanel = React.lazy(() =>
         default: module.OnboardingFloatingPanel,
     })),
 );
+const AssetLibraryPanel = React.lazy(() =>
+    import("./assets/AssetLibraryPanel").then((module) => ({
+        default: module.AssetLibraryPanel,
+    })),
+);
 const GenerationCanvas = React.lazy(
     () => import("./generationCanvasV2/components/GenerationCanvas"),
 );
@@ -67,6 +72,7 @@ export default function NomiStudioApp(): JSX.Element {
     const [generationAiCollapsed, setGenerationAiCollapsed] =
         React.useState(true);
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
+    const [assetLibraryOpened, setAssetLibraryOpened] = React.useState(false);
     const hydratingProjectRef = React.useRef(false);
     const activeProjectIdRef = React.useRef<string | null>(null);
     const initialHydrationAttemptedRef = React.useRef(false);
@@ -100,6 +106,19 @@ export default function NomiStudioApp(): JSX.Element {
             window.removeEventListener(
                 "nomi-open-model-catalog",
                 handleOpenModelCatalog,
+            );
+    }, []);
+
+    React.useEffect(() => {
+        const handleOpenAssetLibrary = () => setAssetLibraryOpened(true);
+        window.addEventListener(
+            "nomi-open-asset-library",
+            handleOpenAssetLibrary,
+        );
+        return () =>
+            window.removeEventListener(
+                "nomi-open-asset-library",
+                handleOpenAssetLibrary,
             );
     }, []);
 
@@ -424,7 +443,17 @@ export default function NomiStudioApp(): JSX.Element {
                     onNewProject={() => void newProject()}
                     onOpenFolder={() => void openWorkspaceFolder()}
                     onTryExample={(example) => void tryExample(example)}
+                    onOpenModelCatalog={() => setModelCatalogOpened(true)}
                 />
+                {/* 模型接入面板也要在首页可用：全新安装零模型时，「30 秒体验」会派发
+                    nomi-open-model-catalog 引导接入；之前此面板只挂在 studio 视图 →
+                    首页派发事件无人响应，用户卡死（冷启动 J3 P0）。 */}
+                <React.Suspense fallback={null}>
+                    <OnboardingFloatingPanel
+                        opened={modelCatalogOpened}
+                        onClose={() => setModelCatalogOpened(false)}
+                    />
+                </React.Suspense>
                 <ToastHost />
             </>
         );
@@ -466,6 +495,14 @@ export default function NomiStudioApp(): JSX.Element {
                 // zIndex={4000}
                 // withinPortal
             />
+
+            <React.Suspense fallback={null}>
+                <AssetLibraryPanel
+                    opened={assetLibraryOpened}
+                    onClose={() => setAssetLibraryOpened(false)}
+                    projectId={activeProject?.id ?? null}
+                />
+            </React.Suspense>
 
             <FilePreviewPanel />
 

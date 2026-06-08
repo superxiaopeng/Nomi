@@ -15,7 +15,40 @@ export type ProfileKind =
   | "text_to_audio"
   | "image_to_audio";
 
-export type AiSdkProviderKind = "openai-compatible" | "anthropic";
+// openai-responses：OpenAI Responses API（/responses，非 /chat/completions）。
+// 中转（如 foxcode codex 渠道 wire_api=responses）只认 Responses → chat/completions 会 502（2026-06-06 实测根因）。
+export type AiSdkProviderKind = "openai-compatible" | "anthropic" | "openai-responses";
+
+/**
+ * 供应商「怎么吞本地素材」的声明(R1,通用第一)。本地素材(nomi-local://)只有 app 自己能读,
+ * vendor 服务器够不着;发送前必须按 vendor 声明的策略把它变成可达值。通用解析器据此分叉,
+ * 加新 vendor = 多声明一份,通用层不改。
+ *  - inline-base64：直接把 data:URI 塞进 body(无需上传)。
+ *  - upload-url   ：把字节传到 vendor 文件接口 → 拿回临时公网 URL → 填进 body。
+ *  - none         ：vendor 只收公网 URL 且无上传通道 → 明确报错(不静默失败)。
+ */
+export type AssetIngestion =
+  | { strategy: "inline-base64" }
+  | { strategy: "none" }
+  | {
+      strategy: "upload-url";
+      /** 上传端点(完整 URL)。 */
+      endpoint: string;
+      method?: string;
+      /** base64 字段名(如 kie 的 "base64Data")。 */
+      base64Field: string;
+      /** 是否带 data:URI 前缀(默认 true);false = 纯 base64。 */
+      dataUrlPrefix?: boolean;
+      /** 可选:目录字段名 + 值。 */
+      uploadPathField?: string;
+      uploadPath?: string;
+      /** 可选:文件名字段名。 */
+      fileNameField?: string;
+      /** 响应里公网 URL 的点路径(如 kie 的 "data.downloadUrl")。 */
+      urlPath: string;
+      /** 鉴权:复用 vendor 的 api key(默认 bearer)。 */
+      authType?: "bearer";
+    };
 
 export type Vendor = {
   key: string;
@@ -32,6 +65,8 @@ export type Vendor = {
    * so existing model-catalog.json files keep working without migration.
    */
   providerKind?: AiSdkProviderKind;
+  /** R1:本地素材吞入策略。curated vendor 也可由代码注册表兜底(见 assetLocalization.curatedAssetIngestion)。 */
+  assetIngestion?: AssetIngestion;
   meta?: unknown;
   createdAt: string;
   updatedAt: string;
@@ -106,6 +141,14 @@ export type Mapping = {
   id: string;
   vendorKey: string;
   taskKind: ProfileKind;
+  /**
+   * 可选：把这条 mapping 绑定到**特定模型**。缺省（generic）= 该 (vendor, taskKind) 桶的通用模板，
+   * 多个模型共享（如 Seedance + Fast 共用一条 image_to_video）。当同一 vendor 下两个模型的**同一 taskKind
+   * 需要不同请求形状**时（如 kie 的 HappyHorse 与 Kling 都是 text_to_video，但 body 字段不同），各自带
+   * modelKey 区分，避免「按 (vendor,taskKind) 找 mapping 时第一个赢、另一个静默套错模板」。
+   * 选择优先级见 selectTaskMapping：精确 modelKey > generic > 任意 enabled。
+   */
+  modelKey?: string;
   name: string;
   enabled: boolean;
   create: HttpOperation;
@@ -114,6 +157,27 @@ export type Mapping = {
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * 纯函数：在一组 mapping 里选出该 (vendor, taskKind, modelKey) 该用的那条。
+ * 优先级：① 精确绑定该 modelKey 的 → ② generic（无 modelKey）→ ③ 任意 enabled（兜底，兼容老数据）。
+ * 抽成纯函数是为了可单测（runtime.findTaskMapping 读 catalog 后调它）。
+ */
+export function selectTaskMapping(
+  mappings: Mapping[],
+  vendorKey: string,
+  taskKind: ProfileKind,
+  modelKey?: string,
+): Mapping | null {
+  const inBucket = mappings.filter((m) => m.enabled && m.vendorKey === vendorKey && m.taskKind === taskKind);
+  if (inBucket.length === 0) return null;
+  const key = (modelKey || "").trim();
+  return (
+    (key ? inBucket.find((m) => (m.modelKey || "").trim() === key) : undefined) ||
+    inBucket.find((m) => !m.modelKey) ||
+    inBucket[0]
+  );
+}
 
 /** Catalog version.
  *  v2 added Model.onboarding + ApiKeyRecord.enc.

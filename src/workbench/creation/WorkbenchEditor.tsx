@@ -9,13 +9,64 @@ import { normalizeWorkbenchContentJson, type CreationDocumentTools } from '../wo
 import { createImageNodeFromContent, createStoryboardNodeFromContent } from './creationNodeCommands'
 import { useTransientScrollingClass } from './useTransientScrollingClass'
 import { useNomiRichTextEditor } from '../common/useNomiRichTextEditor'
-import { buildRichTextActions } from '../common/richTextActions'
+import { buildRichTextActions, type RichTextAction } from '../common/richTextActions'
 
 const CREATION_PLACEHOLDER =
-  '从这里开始写你的故事或剧本...\n\n💡 选中文字后，点右侧「生成图片」或「生成视频」，画布会自动创建对应节点。'
+  '从这里开始写你的故事、脚本或文案……  选中文字，点右侧即可生成图片 / 视频节点。'
+
+// 工具栏分组：格式按语义分 3 簇（强调 / 标题 / 列表·引用）靠左，历史（撤销/重做）推到右端。
+// 之前用一个 flex-1 spacer 把 9 个按钮全挤到左侧、右边 ~570px 浪费 —— 这里按语义两端锚定。
+const TOOLBAR_LEFT_GROUPS: readonly (readonly string[])[] = [
+  ['bold', 'italic'],
+  ['h1', 'h2'],
+  ['bullet-list', 'ordered-list', 'blockquote'],
+]
+const TOOLBAR_RIGHT_GROUP: readonly string[] = ['undo', 'redo']
+
+function ToolbarButton({ action }: { action: RichTextAction }): JSX.Element {
+  return (
+    <WorkbenchIconButton
+      className={cn(
+        'workbench-editor-toolbar__button',
+        'w-[30px] h-[30px] inline-grid place-items-center',
+        'border border-transparent rounded-[7px]',
+        'bg-transparent text-workbench-muted cursor-pointer',
+        'hover:bg-workbench-hover',
+        'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
+        'disabled:cursor-not-allowed disabled:opacity-[0.38]',
+      )}
+      label={action.label}
+      data-active={action.active ? 'true' : 'false'}
+      disabled={action.disabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={action.onClick}
+      icon={action.icon}
+    />
+  )
+}
+
+function ToolbarDivider(): JSX.Element {
+  return <div className="w-px h-[18px] bg-workbench-border mx-1" aria-hidden="true" />
+}
 
 function WorkbenchEditorToolbar({ editor }: { editor: Editor | null }): JSX.Element {
   const actions = buildRichTextActions(editor)
+  if (actions.length === 0) {
+    return (
+      <div
+        className={cn(
+          'workbench-editor-toolbar',
+          'h-[44px] flex items-center gap-1 px-3',
+          'border-b border-workbench-border-soft bg-workbench-surface',
+        )}
+        aria-label="文本工具栏"
+      />
+    )
+  }
+  const byId = new Map(actions.map((action) => [action.id, action]))
+  const pick = (ids: readonly string[]) => ids.map((id) => byId.get(id)).filter((a): a is RichTextAction => Boolean(a))
+  const leftGroups = TOOLBAR_LEFT_GROUPS.map(pick).filter((group) => group.length > 0)
+  const rightGroup = pick(TOOLBAR_RIGHT_GROUP)
   return (
     <div
       className={cn(
@@ -25,27 +76,18 @@ function WorkbenchEditorToolbar({ editor }: { editor: Editor | null }): JSX.Elem
       )}
       aria-label="文本工具栏"
     >
-      {actions.map((action) => (
-        <WorkbenchIconButton
-          key={action.id}
-          className={cn(
-            'workbench-editor-toolbar__button',
-            'w-[30px] h-[30px] inline-grid place-items-center',
-            'border border-transparent rounded-[7px]',
-            'bg-transparent text-workbench-muted cursor-pointer',
-            'hover:bg-workbench-hover',
-            'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
-            'disabled:cursor-not-allowed disabled:opacity-[0.38]',
-          )}
-          label={action.label}
-          data-active={action.active ? 'true' : 'false'}
-          disabled={action.disabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={action.onClick}
-          icon={action.icon}
-        />
+      {leftGroups.map((group, index) => (
+        <React.Fragment key={group[0]?.id ?? index}>
+          {index > 0 ? <ToolbarDivider /> : null}
+          {group.map((action) => (
+            <ToolbarButton key={action.id} action={action} />
+          ))}
+        </React.Fragment>
       ))}
       <div className="flex-1" aria-hidden="true" />
+      {rightGroup.map((action) => (
+        <ToolbarButton key={action.id} action={action} />
+      ))}
     </div>
   )
 }
@@ -136,7 +178,14 @@ export default function WorkbenchEditor(): JSX.Element {
       <SelectionGeneratePopover editor={editor} selectedText={selectedText} onCreated={() => setSelectedText('')} />
       <div
         ref={scrollRef}
-        className={cn('workbench-editor__scroll', 'min-w-0 min-h-0 overflow-auto')}
+        className={cn(
+          'workbench-editor__scroll', 'min-w-0 min-h-0 overflow-auto',
+          // Tiptap Placeholder 渲染：空文档第一段显示 data-placeholder（仿 PromptEditor，
+          // 补上创作编辑器缺失的 ::before 规则——根因，不是只在这一处贴症状）。
+          '[&_.is-editor-empty]:before:content-[attr(data-placeholder)]',
+          '[&_.is-editor-empty]:before:text-nomi-ink-40 [&_.is-editor-empty]:before:float-left',
+          '[&_.is-editor-empty]:before:pointer-events-none [&_.is-editor-empty]:before:h-0',
+        )}
       >
         <EditorContent editor={editor} />
       </div>

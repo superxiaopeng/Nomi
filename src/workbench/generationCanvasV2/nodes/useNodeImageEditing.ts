@@ -1,7 +1,28 @@
 import React from 'react'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
+import { dataUrlToFile, persistNodeImageFile } from '../adapters/persistNodeImage'
 import type { CropRect } from './render/ImageCropOverlay'
+
+// 裁切 / 旋转 / 网格切分都用 canvas.toDataURL 产出 PNG base64。先用 base64 给即时预览，
+// 紧接着把它落盘换成 nomi-local:// 替换掉 —— 避免 PNG base64 永久挂在 store（图多即卡）。
+// 落盘失败则保留 base64 兜底（可持久化、不丢图）。
+function persistEditedNodeImageToLocal(nodeId: string, dataUrl: string, createdAt: number): void {
+  const file = dataUrlToFile(dataUrl, `edit-${nodeId}-${createdAt}.png`)
+  if (!file) return
+  void persistNodeImageFile(file, nodeId).then((localUrl) => {
+    if (!localUrl) return
+    const store = useGenerationCanvasStore.getState()
+    const node = store.nodes.find((candidate) => candidate.id === nodeId)
+    if (!node) return
+    const hosted = { id: `asset-${nodeId}-${createdAt}`, type: 'image' as const, url: localUrl, createdAt }
+    store.updateNode(nodeId, {
+      result: hosted,
+      history: [hosted],
+      meta: { ...(node.meta || {}), localOnly: false, uploadStatus: 'uploaded' },
+    })
+  })
+}
 
 // 图片本地编辑（切图 / 裁剪 / 旋转翻转）从 BaseGenerationNode 抽出（A1.5 接缝）。
 // 图片类与素材类节点都复用这一处；以后新增图片编辑功能只动这里 + NodeImageEditToolbar，
@@ -223,6 +244,7 @@ export function useNodeImageEditing(
           },
         })
         storeConnectNodes(nodeId, tileNode.id, 'reference')
+        persistEditedNodeImageToLocal(tileNode.id, tile.dataUrl, createdAt)
       })
     } catch {
       // Image splitting can fail if the source image cannot be loaded into a canvas due to CORS.
@@ -276,6 +298,7 @@ export function useNodeImageEditing(
         },
       })
       storeConnectNodes(nodeId, cropNode.id, 'reference')
+      persistEditedNodeImageToLocal(cropNode.id, cropped.dataUrl, createdAt)
     } catch {
       // Crop can fail if the source image cannot be loaded into a canvas due to CORS.
     }
@@ -325,6 +348,7 @@ export function useNodeImageEditing(
         },
       })
       storeConnectNodes(nodeId, opNode.id, 'reference')
+      persistEditedNodeImageToLocal(opNode.id, out.dataUrl, createdAt)
     } catch {
       // Transform can fail if the source image cannot be loaded into a canvas due to CORS.
     } finally {

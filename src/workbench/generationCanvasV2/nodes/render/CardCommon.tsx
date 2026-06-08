@@ -11,7 +11,7 @@ import React from 'react'
 import { cn } from '../../../../utils/cn'
 
 export const STRIPED_BG_CLASS =
-  'bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_10px,var(--nomi-ink-10)_10px_20px)]'
+  'bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_23px,var(--nomi-ink-20)_23px_24px)]'
 
 export function UsageDot({ count }: { count: number }): JSX.Element | null {
   if (count <= 0) return null

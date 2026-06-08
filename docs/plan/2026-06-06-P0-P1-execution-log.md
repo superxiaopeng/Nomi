@@ -44,9 +44,31 @@ CI 五门(filesize/lint≤98/typecheck/vitest/build)全绿 + Rule 11 自 commit/
 - [ ] **P0.2** AssetTile(56px,图/视频缩略+播放三角/音频波形,编号/删除,token + Tabler)
 - [ ] **P0.3** AssetPicker(搜索 + 画布行 + 项目最近网格[可滚]+浏览全部 + 上传 + 拖入),消费 useAssetPool
 - [ ] **P0.4** 节点级 onDrop(独立 hook,守巨壳基线)
-- [ ] **P1.1** AssetReference(声明式 slot 描述符:cardinality/persistAsEdge/form,R5)
-- [ ] **P1.2** 接生成节点 + 删旧三套(inline frame 菜单 104 行 + 源视频 30 行 + ReferenceSlots),净删
-- [ ] **P1.3** 连线→参考管道(数组 meta-only 不画线)
-- [ ] **走查自验收**:Playwright 走查 + 样张 v4 并排对账
-- [ ] **R1 传输**:调研 KIE 喂法 → 实现发送侧 nomi-local→可达 URL 转换(零额度走查;真实生成先问)
-- [ ] **@ 内联引用**:Tiptap(规则 5 先查官方)替换 textarea,编号单源(R6)
+- [x] **P1.1** AssetReference(声明式 slot 描述符:form=single|array / persistAsEdge / numbered / max,R5)。
+  纯展示 + 回调驱动,消费 AssetTile + AssetPicker。
+- [x] **P1.2** 接生成节点 + 删旧三套(inline frame 菜单 ~106 行 + 源视频 ~30 行 + ReferenceSlots 整文件)。
+  NodeParameterControls 649→559(净删 90);写入逻辑复用已验证的 handleSlotAssignment/handleArrayAdd…
+  (单帧连边 / 数组 meta / 源视频 meta 按 slot 描述符分派);新增"选项目素材作单帧来源"路径(setSingleFrameUrlMeta)。
+  ReferenceSlots.tsx 删除(规则 1)。
+- [ ] **P1.3** 连线→参考管道(数组 meta-only 不画线)——连线加参考留待(现 picker 已覆盖画布/项目/上传三源)。
+- [x] **走查自验收**:`archetype-modebar.e2e.mjs` 17 断言全过(模式切换 / 尾帧槽 / **经新 picker 上传角色图→①徽标** /
+  character 提示 / HappyHorse 4 模式 / 设置弹层 / Fast 同族);`smoke.e2e.mjs` 10 断言(主链路回归)。截图人眼确认渲染对齐样张意图。
+- [x] **R1 传输(通用方案)**:vendor 声明 `assetIngestion`(upload-url / inline-base64 / none)+ 通用解析器
+  `assetLocalization`(递归扫 nomi-local、按 strategy 解析、去重替换,全注入可单测)+ KIE 作首个 upload-url
+  实现(免费 base64 端点 → data.downloadUrl)+ 接进 `executeProfileOperation` 发送前。文件侧抽 `localAssetFile`,
+  runtime 净缩 2632→2623。13 单测。**通用第一:加新 vendor=多声明一份,通用层不改。**
+  ✅ **真实验证通过(零额度)**:`tests/ux/r1-upload-verify.mjs` 在真 app 内 safeStorage 解密用户 KIE key →
+  上传 → 拿回 `https://tempfile.redpandaai.co/...`(code 200)→ GET 回 HTTP 200 image/png。
+  本地素材 → 公网可达 URL → 真可取回,传输层对真实 KIE 跑通(上传免费)。
+  ⏳ 唯一剩项:一次**完整生成**端到端(KIE 真去 fetch 该 URL 出片)= 花额度,待用户拍。
+- [x] **@ 内联引用(Tiptap,R6)** ✅:工程核心(`promptMentions` 持久化 `@[asset:url]` + 发送投影单源)+ 编辑器 UI
+  (`PromptEditor` 替 textarea、`AssetMentionNode/Chip` 内联 chip、点 tile 插入)+ @ 键 suggestion
+  (`AssetMentionSuggestion`,@tiptap/suggestion@3.23.5 版本对齐,候选 = referenceImageUrls 单源,下拉走 body)。
+
+### 长尾(多 agent 对抗评审定的顺序,每项按 must-fix 改进后实现)
+- [x] **① 删 tile 同步清 chip**:`removeMention`(整串精确匹配删全部 + 共享 collapse)+ meta/prompt 合并单 updateNode(原子+持久)。
+- [x] **② @ 键 suggestion**(见上)。
+- [x] **③ tile 拖拽重排 + picker 浏览全部**:`moveArrayItem` 单源重排(同 metaKey 守卫)+ `nomi-open-files-panel` 事件开文件面板。
+- [x] **④ 每类型上限 toast + 灰显**:`showInfoToast`(无 Undo)+ picker `atLimitKinds` 灰显,单源计数。
+- [ ] **⑤ 拖入 / 连线 → 参考**:见独立执行文档 `docs/plan/2026-06-06-drop-and-wire-execution.md`(含压缩上下文 + 评审 must-fix
+  + 降风险方案:onDrop 挂 NodeGenerationComposer 非巨壳)。**待用户拍板 D1/D2 后执行。**

@@ -11,7 +11,7 @@ import {
 } from '../model/graphOps'
 import { isGenerationNodeKind, isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
 import { nodeGroupSchema } from '../model/generationCanvasSchema'
-import { CATEGORY_IDS, type CategoryId } from '../model/generationCanvasTypes'
+import { type CategoryId } from '../model/generationCanvasTypes'
 import type {
   GenerationCanvasEdge,
   GenerationCanvasNode,
@@ -154,7 +154,7 @@ function shouldPersistCanvasMutation(options?: CanvasMutationOptions): boolean {
 }
 
 function isCategoryId(value: unknown): value is CategoryId {
-  return typeof value === 'string' && (CATEGORY_IDS as readonly string[]).includes(value)
+  return typeof value === 'string' && value.trim().length > 0 // 自定义分类启用后不再限内置 5 个
 }
 
 function bumpPersistRevision(state: Pick<GenerationCanvasState, 'persistRevision'>): void {

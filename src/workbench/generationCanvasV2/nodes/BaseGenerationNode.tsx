@@ -16,8 +16,11 @@ import PropCardNode from "./render/PropCardNode";
 import AudioStripNode from "./render/AudioStripNode";
 import ImageCropOverlay from "./render/ImageCropOverlay";
 import NodeImageEditToolbar from "./NodeImageEditToolbar";
+import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { useNodeImageEditing } from "./useNodeImageEditing";
 import { cn } from "../../../utils/cn";
+import { NomiImage } from "../../../design/media";
+import { persistNodeImageFile } from "../adapters/persistNodeImage";
 import type { GenerationCanvasNode } from "../model/generationCanvasTypes";
 import { useWorkbenchStore } from "../../workbenchStore";
 import { useGenerationCanvasStore } from "../store/generationCanvasStore";
@@ -33,13 +36,15 @@ import { canRunGenerationNode, runGenerationNode } from "../runner/generationRun
 import { NodeErrorReport } from "./NodeErrorReport";
 import { WorkbenchButton } from "../../../design";
 import NodeGenerationComposer from "./NodeGenerationComposer";
+import { completeNodeConnection } from "./completeNodeConnection";
 import { buildVideoPlaybackUrl } from "../../../media/videoPlaybackUrl";
 import {
     diagnoseVideoPlaybackFailure,
     logVideoPlaybackFailure,
 } from "../../../media/videoPlaybackDiagnostics";
 import PanoramaViewer, { type PanoramaScreenshot } from "./PanoramaViewer";
-import { getGenerationNodeExecutionKind } from "../model/generationNodeKinds";
+import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind } from "../model/generationNodeKinds";
+import { applyFixationMakeup } from "../fixation/buildFixationNode";
 import {
     canDragGenerationNodeToTimeline,
     TIMELINE_DRAG_HANDLE_LABEL,
@@ -234,9 +239,6 @@ function BaseGenerationNodeImpl({
     const startConnection = useGenerationCanvasStore(
         (state) => state.startConnection,
     );
-    const connectToNode = useGenerationCanvasStore(
-        (state) => state.connectToNode,
-    );
     const addNode = useGenerationCanvasStore((state) => state.addNode);
     const updateNode = useGenerationCanvasStore((state) => state.updateNode);
     const storeConnectNodes = useGenerationCanvasStore(
@@ -251,7 +253,7 @@ function BaseGenerationNodeImpl({
             state.pendingConnectionSourceId !== "" &&
             state.pendingConnectionSourceId !== node.id,
     );
-    const canvasZoom = useGenerationCanvasStore((state) => state.canvasZoom);
+    // perf：canvasZoom 仅事件处理器用、渲染从不读它；改按需 getState() 避免缩放时全节点重渲。
     const panoramaFullscreenRef = React.useRef<(() => void) | null>(null);
     const panoramaFourViewRef = React.useRef<(() => void) | null>(null);
     // E11: provenance viewer open state (mounted into node header for AI-generated assets)
@@ -379,7 +381,7 @@ function BaseGenerationNodeImpl({
     const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         const resizeStart = resizeStartRef.current;
         if (resizeStart) {
-            const effectiveZoom = canvasZoom || 1;
+            const effectiveZoom = useGenerationCanvasStore.getState().canvasZoom || 1;
             const deltaX = Math.round(
                 (event.clientX - resizeStart.pointerX) / effectiveZoom,
             );
@@ -509,7 +511,7 @@ function BaseGenerationNodeImpl({
         }
         const dragStart = dragStartRef.current;
         if (!dragStart) return;
-        const effectiveZoom = canvasZoom || 1;
+        const effectiveZoom = useGenerationCanvasStore.getState().canvasZoom || 1;
         const deltaX = Math.round(
             (event.clientX - dragStart.pointerX) / effectiveZoom,
         );
@@ -687,11 +689,7 @@ function BaseGenerationNodeImpl({
             event.preventDefault();
             event.stopPropagation();
             if (!node.derivedFrom || typeof window === "undefined") return;
-            window.dispatchEvent(
-                new CustomEvent(FOCUS_GENERATION_NODE_EVENT, {
-                    detail: { nodeId: node.derivedFrom },
-                }),
-            );
+            window.dispatchEvent(new CustomEvent(FOCUS_GENERATION_NODE_EVENT, { detail: { nodeId: node.derivedFrom } }));
         },
         [node.derivedFrom],
     );
@@ -701,20 +699,19 @@ function BaseGenerationNodeImpl({
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (!file) return;
+            const createdAt = Date.now();
+            // 即时 base64 预览（短命）→ 落盘换 nomi-local 替换，避免全景大图 base64 永久驻留。
             const reader = new FileReader();
             reader.onload = (loadEvent) => {
                 const dataUrl = loadEvent.target?.result;
                 if (typeof dataUrl !== "string") return;
-                updateNode(node.id, {
-                    result: {
-                        id: `panorama-${Date.now()}`,
-                        type: "image",
-                        url: dataUrl,
-                        createdAt: Date.now(),
-                    },
-                });
+                updateNode(node.id, { result: { id: `panorama-${createdAt}`, type: "image", url: dataUrl, createdAt } });
             };
             reader.readAsDataURL(file);
+            void persistNodeImageFile(file, node.id).then((localUrl) => {
+                if (!localUrl) return;
+                updateNode(node.id, { result: { id: `panorama-asset-${createdAt}`, type: "image", url: localUrl, createdAt } });
+            });
         },
         [node.id, updateNode],
     );
@@ -740,11 +737,7 @@ function BaseGenerationNodeImpl({
                   : node.categoryId === "audio"
                     ? "audio-strip"
                     : undefined));
-    const isCardKind =
-        renderKind === "character-card" ||
-        renderKind === "scene-card" ||
-        renderKind === "prop-card" ||
-        renderKind === "audio-strip";
+    const isCardKind = ["character-card", "scene-card", "prop-card", "audio-strip"].includes(renderKind as string);
     // C5: 文本节点走专属可编辑 body（TextDocumentNode），像 card 那样脱离图片预览。
     const isTextKind = node.kind === "text";
     const isImageGridSplitNode =
@@ -928,7 +921,7 @@ function BaseGenerationNodeImpl({
                         }}
                         onClick={(event) => {
                             event.stopPropagation();
-                            connectToNode(node.id);
+                            completeNodeConnection(node.id);
                         }}>
                         <span
                             className='generation-canvas-v2-node__handle-dot'
@@ -1032,24 +1025,25 @@ function BaseGenerationNodeImpl({
                 </div>
             ) : null}
 
-            {(node.kind === "image" || isAssetKind) &&
+            {(node.kind === "image" || isAssetKind || isImageLikeGenerationNodeKind(node.kind)) &&
             selected &&
             !readOnly &&
             node.result?.type === "image" &&
             node.result.url ? (
                 <NodeImageEditToolbar
+                    node={node}
                     splittingGridSize={imageEditing.splittingGridSize}
                     cropMode={imageEditing.cropMode}
                     imageOpBusy={imageEditing.imageOpBusy}
-                    onGridSplit={(gridSize) => {
-                        void imageEditing.handleImageGridSplit(gridSize);
-                    }}
+                    onMakeup={() => applyFixationMakeup(node)}
+                    onGridSplit={(g) => void imageEditing.handleImageGridSplit(g)}
                     onCrop={() => imageEditing.setCropMode(true)}
-                    onTransform={(op) => {
-                        void imageEditing.handleImageTransform(op);
-                    }}
+                    onTransform={(op) => void imageEditing.handleImageTransform(op)}
                 />
             ) : null}
+
+            {/* 视频等无编辑工具条的结果：单独一条「下载」浮条（图片下载已并入上面的编辑工具条）。 */}
+            <NodeResultDownloadButton node={node} selected={selected} />
 
             <header
                 className={cn(
@@ -1160,7 +1154,7 @@ function BaseGenerationNodeImpl({
                     // 棋盘格占位底纹只在「未生成」态出现；有结果后节点尺寸已贴合图片比例，
                     // 不再露出底纹，避免图片外面套一层框。
                     !hasResult &&
-                        "bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_10px,var(--nomi-ink-10)_10px_20px)]",
+                        "bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_23px,var(--nomi-ink-20)_23px_24px)]",
                     // [DESIGN-CARDS-07] 卡片模式隐藏 preview div；C5 文本节点同理。
                     (isCardKind || isTextKind) && "hidden",
                 )}
@@ -1245,14 +1239,13 @@ function BaseGenerationNodeImpl({
                             }}
                         />
                     ) : (
-                        <img
+                        <NomiImage
                             className={cn(
                                 "w-full h-full min-h-0 object-contain pointer-events-none",
                                 "select-none",
                             )}
                             src={node.result.url}
                             alt=''
-                            draggable={false}
                             onLoad={(event) => {
                                 updateMediaDimensions(
                                     event.currentTarget.naturalWidth,

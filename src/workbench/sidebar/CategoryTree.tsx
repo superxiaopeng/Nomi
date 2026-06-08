@@ -1,5 +1,4 @@
 import React from 'react'
-import { cn } from '../../utils/cn'
 import { BUILTIN_CATEGORIES, getBuiltinCategoryById, type ProjectCategory } from '../project/projectCategories'
 import { showUndoToast } from '../../utils/showUndoToast'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -10,6 +9,8 @@ import NodeItem from './NodeItem'
 
 type Props = {
   categories?: ProjectCategory[]
+  /** 外壳「+」按钮按下的递增信号：每 +1 新建一个顶层分类并进入行内改名。 */
+  createCategoryNonce?: number
 }
 
 type SidebarMenuState =
@@ -29,9 +30,12 @@ const DEFAULT_GROUP_COLOR = '#d8c3a5'
  * 不含 aside/折叠/标题外壳——外壳由承载它的 Tab 面板（ProjectExplorerSidebar）提供。
  * 仅在面板展开 + 「分类」tab 激活时挂载，故始终按展开态渲染。
  */
-export default function CategoryTree({ categories }: Props): JSX.Element {
+export default function CategoryTree({ categories, createCategoryNonce = 0 }: Props): JSX.Element {
   const activeCategoryId = useWorkbenchStore((s) => s.activeCategoryId)
   const setActiveCategoryId = useWorkbenchStore((s) => s.setActiveCategoryId)
+  const addCategory = useWorkbenchStore((s) => s.addCategory)
+  const renameCategory = useWorkbenchStore((s) => s.renameCategory)
+  const deleteCategory = useWorkbenchStore((s) => s.deleteCategory)
   const nodes = useGenerationCanvasStore((s) => s.nodes)
   const groups = useGenerationCanvasStore((s) => s.groups)
   const selectedNodeIds = useGenerationCanvasStore((s) => s.selectedNodeIds)
@@ -50,6 +54,8 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
   const reorderGroup = useGenerationCanvasStore((s) => s.reorderGroup)
   const [expandedCategoryIds, setExpandedCategoryIds] = React.useState<Set<string>>(() => new Set([activeCategoryId]))
   const [menu, setMenu] = React.useState<SidebarMenuState | null>(null)
+  const [editingGroupId, setEditingGroupId] = React.useState<string | null>(null)
+  const [editingCategoryId, setEditingCategoryId] = React.useState<string | null>(null)
 
   const visible = React.useMemo(() => {
     const list = (categories && categories.length ? categories : BUILTIN_CATEGORIES)
@@ -199,15 +205,59 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
   }, [copyNodeToCategory, deleteNode, groups, moveNodeToGroup, nodeById])
 
   const handleCreateGroup = React.useCallback((categoryId: string) => {
-    const name = window.prompt('子组名称', '新建子组')
-    if (name === null) return
-    const created = createGroup(categoryId, name)
+    const created = createGroup(categoryId)
     if (created) {
       handleActivateCategory(categoryId)
       setExpandedCategoryIds((current) => new Set(current).add(categoryId))
+      setEditingGroupId(created.id) // 新建即进入行内改名，免去额外弹窗
     }
     closeMenu()
   }, [closeMenu, createGroup, handleActivateCategory])
+
+  const handleCommitGroupName = React.useCallback((groupId: string, name: string) => {
+    const trimmed = name.trim()
+    if (trimmed) renameGroup(groupId, trimmed)
+    setEditingGroupId(null)
+  }, [renameGroup])
+
+  const handleCancelGroupEdit = React.useCallback(() => setEditingGroupId(null), [])
+
+  // 外壳「+」按钮：每次 nonce 自增就新建一个顶层分类并进入行内改名
+  // （含从「文件」tab 切回后 CategoryTree 首次挂载的情形）。
+  const handleCreateCategory = React.useCallback(() => {
+    const created = addCategory()
+    if (!created) return
+    setActiveCategoryId(created.id)
+    setExpandedCategoryIds((current) => new Set(current).add(created.id))
+    setEditingCategoryId(created.id)
+  }, [addCategory, setActiveCategoryId])
+
+  const lastCreateNonce = React.useRef(0)
+  React.useEffect(() => {
+    if (createCategoryNonce === lastCreateNonce.current) return
+    lastCreateNonce.current = createCategoryNonce
+    if (createCategoryNonce > 0) handleCreateCategory()
+  }, [createCategoryNonce, handleCreateCategory])
+
+  const handleCommitCategoryName = React.useCallback((categoryId: string, name: string) => {
+    const trimmed = name.trim()
+    if (trimmed) renameCategory(categoryId, trimmed)
+    setEditingCategoryId(null)
+  }, [renameCategory])
+
+  const handleCancelCategoryEdit = React.useCallback(() => setEditingCategoryId(null), [])
+
+  const handleRenameCategory = React.useCallback((categoryId: string) => {
+    setEditingCategoryId(categoryId)
+    closeMenu()
+  }, [closeMenu])
+
+  const handleDeleteCategory = React.useCallback((categoryId: string) => {
+    const category = (categories || BUILTIN_CATEGORIES).find((c) => c.id === categoryId)
+    const label = category?.name || categoryId
+    if (window.confirm(`删除分类「${label}」？里面的节点会移回「分镜」，不会丢失。`)) deleteCategory(categoryId)
+    closeMenu()
+  }, [categories, closeMenu, deleteCategory])
 
   const handleCopyNode = React.useCallback((nodeId: string) => {
     const node = nodeById.get(nodeId)
@@ -237,12 +287,9 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
   }, [closeMenu, deleteNode, nodeById])
 
   const handleRenameGroup = React.useCallback((groupId: string) => {
-    const group = groups.find((candidate) => candidate.id === groupId)
-    if (!group) return
-    const name = window.prompt('子组名称', group.name)
-    if (name !== null) renameGroup(groupId, name)
+    setEditingGroupId(groupId) // 与新建走同一行内改名，不再弹 window.prompt
     closeMenu()
-  }, [closeMenu, groups, renameGroup])
+  }, [closeMenu])
 
   const handleSetGroupColor = React.useCallback((groupId: string) => {
     const group = groups.find((candidate) => candidate.id === groupId)
@@ -266,27 +313,38 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
 
   const renderContextMenu = () => {
     if (!menu) return null
-    const buttonClass = 'w-full px-3 py-1.5 text-left text-[12px] text-nomi-ink-70 hover:bg-nomi-ink-05'
-    const dangerClass = 'w-full px-3 py-1.5 text-left text-[12px] text-red-600 hover:bg-red-50'
+    const buttonClass = 'w-full px-2.5 py-1 text-left text-[12px] text-nomi-ink-70 hover:bg-nomi-ink-05'
+    const dangerClass = 'w-full px-2.5 py-1 text-left text-[12px] text-red-600 hover:bg-red-50'
     return (
       <div
         role="menu"
-        className="fixed z-50 min-w-[168px] overflow-hidden rounded-lg border border-nomi-line bg-white py-1 shadow-xl"
+        className="fixed z-50 min-w-[120px] overflow-hidden rounded-md border border-nomi-line bg-white py-1 shadow-lg"
         style={{ left: menu.x, top: menu.y }}
         onClick={(event) => event.stopPropagation()}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {menu.type === 'category' ? (
-          <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCreateGroup(menu.categoryId)}>
-            新建子组
-          </button>
-        ) : null}
+        {menu.type === 'category' ? (() => {
+          const category = (categories || BUILTIN_CATEGORIES).find((c) => c.id === menu.categoryId)
+          const isCustom = category ? !category.isBuiltin : false
+          return (
+            <>
+              <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCreateGroup(menu.categoryId)}>新建子组</button>
+              {isCustom ? (
+                <>
+                  <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameCategory(menu.categoryId)}>重命名</button>
+                  <div className="my-0.5 h-px bg-nomi-line" />
+                  <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteCategory(menu.categoryId)}>删除分类</button>
+                </>
+              ) : null}
+            </>
+          )
+        })() : null}
         {menu.type === 'node' ? (
           <>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleCopyNode(menu.nodeId)}>复制</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameNode(menu.nodeId)}>重命名</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRegenerateDerivedNode(menu.nodeId)}>派生重新生成</button>
-            <div className="my-1 h-px bg-nomi-line" />
+            <div className="my-0.5 h-px bg-nomi-line" />
             <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteNode(menu.nodeId)}>删除</button>
           </>
         ) : null}
@@ -295,7 +353,7 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleRenameGroup(menu.groupId)}>重命名</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleSetGroupColor(menu.groupId)}>改颜色</button>
             <button type="button" role="menuitem" className={buttonClass} onClick={() => handleUngroup(menu.groupId)}>解组（保留节点）</button>
-            <div className="my-1 h-px bg-nomi-line" />
+            <div className="my-0.5 h-px bg-nomi-line" />
             <button type="button" role="menuitem" className={dangerClass} onClick={() => handleDeleteGroup(menu.groupId)}>删除（连节点）</button>
           </>
         ) : null}
@@ -320,6 +378,9 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
                 active={activeCategoryId === cat.id}
                 collapsed={false}
                 expanded={expanded}
+                editing={editingCategoryId === cat.id}
+                onCommitName={(name) => handleCommitCategoryName(cat.id, name)}
+                onCancelEdit={handleCancelCategoryEdit}
                 onActivate={() => handleCategoryRowClick(cat.id)}
                 onDropNode={(nodeId) => handleDropNodeOnCategory(nodeId, cat.id)}
                 onContextMenu={(event) => openMenu(event, { type: 'category', categoryId: cat.id })}
@@ -346,6 +407,9 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
                         group={group}
                         nodes={memberNodes}
                         selectedNodeIds={selectedNodeIds}
+                        editing={editingGroupId === group.id}
+                        onCommitName={handleCommitGroupName}
+                        onCancelEdit={handleCancelGroupEdit}
                         onSelectNode={handleSelectNode}
                         onDropNode={handleDropNodeOnGroup}
                         onDropGroup={(activeGroupId, overGroupId) => reorderGroup(cat.id, activeGroupId, overGroupId)}
@@ -363,19 +427,6 @@ export default function CategoryTree({ categories }: Props): JSX.Element {
           )
         })}
       </nav>
-      <div className="px-2 py-2 border-t border-nomi-line">
-        <button
-          type="button"
-          onClick={() => handleCreateGroup(activeCategoryId)}
-          className={cn(
-            'w-full px-2 py-1.5 text-[12px] rounded-md border border-dashed border-nomi-line',
-            'text-nomi-ink-50 hover:text-nomi-ink hover:bg-nomi-ink-05',
-          )}
-          title="在当前分类下新建子组"
-        >
-          + 新子组
-        </button>
-      </div>
       {renderContextMenu()}
     </>
   )

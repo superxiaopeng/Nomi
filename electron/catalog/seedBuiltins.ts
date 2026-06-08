@@ -1,13 +1,16 @@
-// 内置模型种子：把主流模型（先 Seedance 2.0 首帧）按 curated 定义写进 catalog，
-// 而不是靠用户逐个 onboarding（评审 D2「混合：内置优先」）。
+// 内置模型种子：把策展模型按 curated 定义写进 catalog，而不是靠用户逐个 onboarding（评审 D2「混合：内置优先」）。
 //
-// 设计：纯函数 `applyBuiltinSeeds(state) → { state, changed }`，**幂等**且**存在即跳过**
-// （按 key 判断，不靠版本号硬塞）——这样：
-//   - 用户已手动接过 kie / 改过这些记录，不会被覆盖；
+// 设计：纯函数 `applyBuiltinSeeds(state) → { state, changed }`，**幂等**且**存在即跳过/漂移自愈**。
+//   - 用户已手动接过 / 改过这些记录，不会被覆盖（enabled/labelZh/createdAt = 用户所有，保留）；
+//   - 代码所有字段（kind/archetypeId/create/query/statusMapping/taskKind）随代码演进强制对账，老装机自愈；
 //   - 反复调用安全（runtime 在 catalog 载入后调用一次，changed 才落盘）。
 // type-only 复用 runtime 的领域类型，避免第二份定义漂移（评审 P0-3/M1）。
+//
+// **多供应商泛化（2026-06-07，以 apimart 为核心变现通道）**：模型/mapping 的 insert+对账抽成
+// reconcileModels/reconcileMappings 两个**供应商无关**的纯函数，kie 与 apimart 各调一遍同一套逻辑
+// （P1：不开并行版）。GPT Image 2 的视频形状坏 mapping repair 是 kie 历史包袱，仍 kie 专属。
 
-import type { CatalogState, Mapping, Model, Vendor } from "./types";
+import type { CatalogState, HttpOperation, Mapping, Model, Vendor } from "./types";
 import {
   KIE_VENDOR_SEED,
   SEEDANCE_2_CREATE_OP,
@@ -17,125 +20,202 @@ import {
   SEEDANCE_2_QUERY_OP,
 } from "./kieSeedance";
 import { HAPPYHORSE_CREATE_OP, HAPPYHORSE_MAPPING, HAPPYHORSE_MODEL_SEED, HAPPYHORSE_QUERY_OP } from "./kieHappyhorse";
+import {
+  GPT_IMAGE_2_I2I_MAPPING,
+  GPT_IMAGE_2_I2I_MODEL_SEED,
+  GPT_IMAGE_2_T2I_MAPPING,
+  GPT_IMAGE_2_T2I_MODEL_SEED,
+  isBrokenKieImageMapping,
+} from "./kieGptImage2";
+import { SEEDREAM_EDIT_MAPPING, SEEDREAM_MODEL_SEED, SEEDREAM_T2I_MAPPING } from "./kieSeedream";
+import { NANO_BANANA_EDIT_MAPPING, NANO_BANANA_MODEL_SEED, NANO_BANANA_T2I_MAPPING } from "./kieNanoBanana";
+import { KLING_3_I2V_MAPPING, KLING_3_MODEL_SEED, KLING_3_T2V_MAPPING } from "./kieKling";
+import { APIMART_VENDOR_SEED } from "./apimartVendor";
+import { APIMART_IMAGE_MODELS, APIMART_IMAGE_QUERY, APIMART_IMAGE_STATUS } from "./apimartImages";
+import { APIMART_VIDEO_MODELS, APIMART_VIDEO_QUERY, APIMART_VIDEO_STATUS } from "./apimartVideos";
+
+/** curated 模型/mapping 的内部类型（reconcile 两函数的输入）。 */
+type CuratedModel = { modelKey: string; labelZh: string; kind: Model["kind"]; archetypeId?: string };
+type CuratedMapping = {
+  id: string;
+  taskKind: Mapping["taskKind"];
+  modelKey?: string;
+  name: string;
+  create: HttpOperation;
+  query?: HttpOperation;
+  statusMapping?: Mapping["statusMapping"];
+};
 
 /** 稳定 id：按 (vendor, taskKind, model) 固定，便于幂等与排查。 */
 const SEEDANCE_MAPPING_ID = "seed-kie-seedance2-image_to_video";
 const HAPPYHORSE_MAPPING_ID = "seed-kie-happyhorse-text_to_video";
+const GPT_IMAGE_2_T2I_MAPPING_ID = "seed-kie-gpt-image-2-text_to_image";
+const GPT_IMAGE_2_I2I_MAPPING_ID = "seed-kie-gpt-image-2-image_edit";
+const SEEDREAM_T2I_MAPPING_ID = "seed-kie-seedream-text_to_image";
+const SEEDREAM_EDIT_MAPPING_ID = "seed-kie-seedream-image_edit";
+const NANO_BANANA_T2I_MAPPING_ID = "seed-kie-nano-banana-text_to_image";
+const NANO_BANANA_EDIT_MAPPING_ID = "seed-kie-nano-banana-image_edit";
+const KLING_3_T2V_MAPPING_ID = "seed-kie-kling-3-text_to_video";
+const KLING_3_I2V_MAPPING_ID = "seed-kie-kling-3-image_to_video";
 
-/** 模型 meta：指向内置档案（渲染层据此套 UI 模板，见档案层）。 */
-const SEEDANCE_MODEL_META = { archetypeId: "seedance-2" };
-const SEEDANCE_FAST_MODEL_META = { archetypeId: "seedance-2-fast" };
-const HAPPYHORSE_MODEL_META = { archetypeId: "happyhorse" };
+/** kie 的 curated 内置模型（archetypeId = 能力档案指针，代码所有；enabled/labelZh = 用户所有）。 */
+const KIE_CURATED_MODELS: CuratedModel[] = [
+  { modelKey: SEEDANCE_2_MODEL_SEED.modelKey, labelZh: SEEDANCE_2_MODEL_SEED.labelZh, kind: SEEDANCE_2_MODEL_SEED.kind, archetypeId: "seedance-2" },
+  { modelKey: SEEDANCE_2_FAST_MODEL_SEED.modelKey, labelZh: SEEDANCE_2_FAST_MODEL_SEED.labelZh, kind: SEEDANCE_2_FAST_MODEL_SEED.kind, archetypeId: "seedance-2-fast" },
+  { modelKey: HAPPYHORSE_MODEL_SEED.modelKey, labelZh: HAPPYHORSE_MODEL_SEED.labelZh, kind: HAPPYHORSE_MODEL_SEED.kind, archetypeId: "happyhorse" },
+  { modelKey: GPT_IMAGE_2_T2I_MODEL_SEED.modelKey, labelZh: GPT_IMAGE_2_T2I_MODEL_SEED.labelZh, kind: GPT_IMAGE_2_T2I_MODEL_SEED.kind, archetypeId: "gpt-image-2" },
+  { modelKey: GPT_IMAGE_2_I2I_MODEL_SEED.modelKey, labelZh: GPT_IMAGE_2_I2I_MODEL_SEED.labelZh, kind: GPT_IMAGE_2_I2I_MODEL_SEED.kind, archetypeId: "gpt-image-2" },
+  { modelKey: SEEDREAM_MODEL_SEED.modelKey, labelZh: SEEDREAM_MODEL_SEED.labelZh, kind: SEEDREAM_MODEL_SEED.kind, archetypeId: "seedream" },
+  { modelKey: NANO_BANANA_MODEL_SEED.modelKey, labelZh: NANO_BANANA_MODEL_SEED.labelZh, kind: NANO_BANANA_MODEL_SEED.kind, archetypeId: "nano-banana" },
+  { modelKey: KLING_3_MODEL_SEED.modelKey, labelZh: KLING_3_MODEL_SEED.labelZh, kind: KLING_3_MODEL_SEED.kind, archetypeId: "kling-3.0" },
+];
 
-export function applyBuiltinSeeds(
-  state: CatalogState,
-  now: string,
-): { state: CatalogState; changed: boolean } {
+/** kie 的 curated mapping（单源；create/query/statusMapping = 代码所有，强制对账）。 */
+const KIE_CURATED_MAPPINGS: CuratedMapping[] = [
+  { id: SEEDANCE_MAPPING_ID, taskKind: SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING.taskKind, name: SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING.name, create: SEEDANCE_2_CREATE_OP, query: SEEDANCE_2_QUERY_OP },
+  { id: HAPPYHORSE_MAPPING_ID, taskKind: HAPPYHORSE_MAPPING.taskKind, modelKey: HAPPYHORSE_MODEL_SEED.modelKey, name: HAPPYHORSE_MAPPING.name, create: HAPPYHORSE_CREATE_OP, query: HAPPYHORSE_QUERY_OP },
+  { id: GPT_IMAGE_2_T2I_MAPPING_ID, taskKind: GPT_IMAGE_2_T2I_MAPPING.taskKind, name: GPT_IMAGE_2_T2I_MAPPING.name, create: GPT_IMAGE_2_T2I_MAPPING.create, query: GPT_IMAGE_2_T2I_MAPPING.query, statusMapping: GPT_IMAGE_2_T2I_MAPPING.statusMapping },
+  { id: GPT_IMAGE_2_I2I_MAPPING_ID, taskKind: GPT_IMAGE_2_I2I_MAPPING.taskKind, name: GPT_IMAGE_2_I2I_MAPPING.name, create: GPT_IMAGE_2_I2I_MAPPING.create, query: GPT_IMAGE_2_I2I_MAPPING.query, statusMapping: GPT_IMAGE_2_I2I_MAPPING.statusMapping },
+  { id: SEEDREAM_T2I_MAPPING_ID, taskKind: SEEDREAM_T2I_MAPPING.taskKind, modelKey: SEEDREAM_T2I_MAPPING.modelKey, name: SEEDREAM_T2I_MAPPING.name, create: SEEDREAM_T2I_MAPPING.create, query: SEEDREAM_T2I_MAPPING.query, statusMapping: SEEDREAM_T2I_MAPPING.statusMapping },
+  { id: SEEDREAM_EDIT_MAPPING_ID, taskKind: SEEDREAM_EDIT_MAPPING.taskKind, modelKey: SEEDREAM_EDIT_MAPPING.modelKey, name: SEEDREAM_EDIT_MAPPING.name, create: SEEDREAM_EDIT_MAPPING.create, query: SEEDREAM_EDIT_MAPPING.query, statusMapping: SEEDREAM_EDIT_MAPPING.statusMapping },
+  { id: NANO_BANANA_T2I_MAPPING_ID, taskKind: NANO_BANANA_T2I_MAPPING.taskKind, modelKey: NANO_BANANA_T2I_MAPPING.modelKey, name: NANO_BANANA_T2I_MAPPING.name, create: NANO_BANANA_T2I_MAPPING.create, query: NANO_BANANA_T2I_MAPPING.query, statusMapping: NANO_BANANA_T2I_MAPPING.statusMapping },
+  { id: NANO_BANANA_EDIT_MAPPING_ID, taskKind: NANO_BANANA_EDIT_MAPPING.taskKind, modelKey: NANO_BANANA_EDIT_MAPPING.modelKey, name: NANO_BANANA_EDIT_MAPPING.name, create: NANO_BANANA_EDIT_MAPPING.create, query: NANO_BANANA_EDIT_MAPPING.query, statusMapping: NANO_BANANA_EDIT_MAPPING.statusMapping },
+  { id: KLING_3_T2V_MAPPING_ID, taskKind: KLING_3_T2V_MAPPING.taskKind, modelKey: KLING_3_T2V_MAPPING.modelKey, name: KLING_3_T2V_MAPPING.name, create: KLING_3_T2V_MAPPING.create, query: KLING_3_T2V_MAPPING.query },
+  { id: KLING_3_I2V_MAPPING_ID, taskKind: KLING_3_I2V_MAPPING.taskKind, modelKey: KLING_3_I2V_MAPPING.modelKey, name: KLING_3_I2V_MAPPING.name, create: KLING_3_I2V_MAPPING.create, query: KLING_3_I2V_MAPPING.query },
+];
+
+/** apimart 的 curated 模型 + mapping，从单源 APIMART_IMAGE_MODELS / APIMART_VIDEO_MODELS 派生。 */
+const APIMART_CURATED_MODELS: CuratedModel[] = [
+  ...APIMART_IMAGE_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId })),
+  ...APIMART_VIDEO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "video" as const, archetypeId: m.archetypeId })),
+];
+const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
+  ...APIMART_IMAGE_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+      create: mp.create, query: APIMART_IMAGE_QUERY, statusMapping: APIMART_IMAGE_STATUS,
+    })),
+  ),
+  ...APIMART_VIDEO_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+      create: mp.create, query: APIMART_VIDEO_QUERY, statusMapping: APIMART_VIDEO_STATUS,
+    })),
+  ),
+];
+
+/** 供应商种子（裸 baseUrl + bearer）。存在即跳过（用户配置不覆盖）。返回是否变更。 */
+function seedVendor(vendors: Vendor[], seed: typeof KIE_VENDOR_SEED | typeof APIMART_VENDOR_SEED, now: string): boolean {
+  if (vendors.some((v) => v.key === seed.key)) return false;
+  vendors.push({
+    key: seed.key, name: seed.name, enabled: true,
+    baseUrlHint: seed.baseUrl, authType: seed.authType, authHeader: seed.authHeader,
+    createdAt: now, updatedAt: now,
+  });
+  return true;
+}
+
+/**
+ * 某供应商的 curated 模型 insert + 启动对账（供应商无关）。代码所有：kind + meta.archetypeId（漂移强制对账，
+ * 否则模型套错能力）；用户所有：enabled/labelZh/createdAt 保留。返回是否变更。
+ */
+function reconcileModels(models: Model[], vendorKey: string, curated: CuratedModel[], now: string): boolean {
+  let changed = false;
+  for (const c of curated) {
+    const i = models.findIndex((m) => m.modelKey === c.modelKey && m.vendorKey === vendorKey);
+    if (i < 0) {
+      models.push({
+        modelKey: c.modelKey, vendorKey, labelZh: c.labelZh, kind: c.kind, enabled: true,
+        ...(c.archetypeId ? { meta: { archetypeId: c.archetypeId } } : {}),
+        createdAt: now, updatedAt: now,
+      });
+      changed = true;
+      continue;
+    }
+    const ex = models[i];
+    const exArch = (ex.meta as { archetypeId?: string } | undefined)?.archetypeId;
+    const drift = ex.kind !== c.kind || (Boolean(c.archetypeId) && exArch !== c.archetypeId);
+    if (drift) {
+      models[i] = {
+        ...ex, kind: c.kind,
+        ...(c.archetypeId ? { meta: { ...(ex.meta || {}), archetypeId: c.archetypeId } } : {}),
+        updatedAt: now,
+      };
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * 某供应商的 curated mapping insert + 对账（供应商无关，根因修复见原注释）。
+ *   · 已存在（按稳定 seed id）→ 强制对账 create/query/statusMapping/taskKind/modelKey（代码所有），老装机自愈；
+ *   · 缺失 → 仅当同 (vendor, taskKind, modelKey) 身份未被用户/onboarding 记录占用时插入（不重复占槽）。
+ * name/enabled/createdAt = 用户所有，保留。返回是否变更。
+ */
+function reconcileMappings(mappings: Mapping[], vendorKey: string, curated: CuratedMapping[], now: string): boolean {
+  let changed = false;
+  for (const c of curated) {
+    const i = mappings.findIndex((m) => m.id === c.id);
+    if (i >= 0) {
+      const ex = mappings[i];
+      const drift =
+        ex.taskKind !== c.taskKind ||
+        (ex.modelKey || undefined) !== (c.modelKey || undefined) ||
+        JSON.stringify(ex.create) !== JSON.stringify(c.create) ||
+        JSON.stringify(ex.query) !== JSON.stringify(c.query) ||
+        JSON.stringify(ex.statusMapping) !== JSON.stringify(c.statusMapping);
+      if (drift) {
+        mappings[i] = { ...ex, taskKind: c.taskKind, modelKey: c.modelKey, name: ex.name ?? c.name, create: c.create, query: c.query, statusMapping: c.statusMapping, updatedAt: now };
+        changed = true;
+      }
+      continue;
+    }
+    if (mappings.some((m) => m.vendorKey === vendorKey && m.taskKind === c.taskKind && (m.modelKey || undefined) === (c.modelKey || undefined))) continue;
+    mappings.push({
+      id: c.id, vendorKey, taskKind: c.taskKind,
+      ...(c.modelKey ? { modelKey: c.modelKey } : {}),
+      name: c.name, enabled: true, create: c.create, query: c.query, statusMapping: c.statusMapping,
+      createdAt: now, updatedAt: now,
+    });
+    changed = true;
+  }
+  return changed;
+}
+
+export function applyBuiltinSeeds(state: CatalogState, now: string): { state: CatalogState; changed: boolean } {
   const vendors = [...state.vendors];
   const models = [...state.models];
   const mappings = [...state.mappings];
   let changed = false;
 
-  if (!vendors.some((v) => v.key === KIE_VENDOR_SEED.key)) {
-    const vendor: Vendor = {
-      key: KIE_VENDOR_SEED.key,
-      name: KIE_VENDOR_SEED.name,
-      enabled: true,
-      baseUrlHint: KIE_VENDOR_SEED.baseUrl,
-      authType: KIE_VENDOR_SEED.authType,
-      authHeader: KIE_VENDOR_SEED.authHeader,
-      createdAt: now,
-      updatedAt: now,
-    };
-    vendors.push(vendor);
-    changed = true;
+  // 供应商：kie + apimart（apimart 为核心变现通道）。
+  if (seedVendor(vendors, KIE_VENDOR_SEED, now)) changed = true;
+  if (seedVendor(vendors, APIMART_VENDOR_SEED, now)) changed = true;
+
+  // 模型 insert + 对账（两家各跑同一套逻辑）。
+  if (reconcileModels(models, KIE_VENDOR_SEED.key, KIE_CURATED_MODELS, now)) changed = true;
+  if (reconcileModels(models, APIMART_VENDOR_SEED.key, APIMART_CURATED_MODELS, now)) changed = true;
+
+  // kie 历史包袱 repair：把视频形状的坏 (kie, text_to_image) 替换成正确的 GPT Image 2 文生图契约
+  // （旧 onboarding 抽错留下的；契约见 kieGptImage2.ts 直连实测确认）。apimart 无此历史，不需要。
+  for (let i = 0; i < mappings.length; i += 1) {
+    if (isBrokenKieImageMapping(mappings[i])) {
+      mappings[i] = {
+        ...mappings[i],
+        name: GPT_IMAGE_2_T2I_MAPPING.name,
+        create: GPT_IMAGE_2_T2I_MAPPING.create,
+        query: GPT_IMAGE_2_T2I_MAPPING.query,
+        statusMapping: GPT_IMAGE_2_T2I_MAPPING.statusMapping,
+        updatedAt: now,
+      };
+      changed = true;
+    }
   }
 
-  if (
-    !models.some(
-      (m) => m.modelKey === SEEDANCE_2_MODEL_SEED.modelKey && m.vendorKey === KIE_VENDOR_SEED.key,
-    )
-  ) {
-    const model: Model = {
-      modelKey: SEEDANCE_2_MODEL_SEED.modelKey,
-      vendorKey: KIE_VENDOR_SEED.key,
-      labelZh: SEEDANCE_2_MODEL_SEED.labelZh,
-      kind: SEEDANCE_2_MODEL_SEED.kind,
-      enabled: true,
-      meta: SEEDANCE_MODEL_META,
-      createdAt: now,
-      updatedAt: now,
-    };
-    models.push(model);
-    changed = true;
-  }
-
-  // Seedance 2.0 Fast：同族扩展，只多 1 行 model（复用 Seedance 的 image_to_video mapping）。
-  if (!models.some((m) => m.modelKey === SEEDANCE_2_FAST_MODEL_SEED.modelKey && m.vendorKey === KIE_VENDOR_SEED.key)) {
-    models.push({
-      modelKey: SEEDANCE_2_FAST_MODEL_SEED.modelKey,
-      vendorKey: KIE_VENDOR_SEED.key,
-      labelZh: SEEDANCE_2_FAST_MODEL_SEED.labelZh,
-      kind: SEEDANCE_2_FAST_MODEL_SEED.kind,
-      enabled: true,
-      meta: SEEDANCE_FAST_MODEL_META,
-      createdAt: now,
-      updatedAt: now,
-    });
-    changed = true;
-  }
-
-  if (
-    !mappings.some(
-      (mp) =>
-        mp.vendorKey === KIE_VENDOR_SEED.key &&
-        mp.taskKind === SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING.taskKind,
-    )
-  ) {
-    const mapping: Mapping = {
-      id: SEEDANCE_MAPPING_ID,
-      vendorKey: KIE_VENDOR_SEED.key,
-      taskKind: SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING.taskKind,
-      name: SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING.name,
-      enabled: true,
-      create: SEEDANCE_2_CREATE_OP,
-      query: SEEDANCE_2_QUERY_OP,
-      createdAt: now,
-      updatedAt: now,
-    };
-    mappings.push(mapping);
-    changed = true;
-  }
-
-  // HappyHorse 1.0（C4）：同 kie vendor，4 模式合 1 条目 + 1 条 (kie, text_to_video) mapping。
-  if (!models.some((m) => m.modelKey === HAPPYHORSE_MODEL_SEED.modelKey && m.vendorKey === KIE_VENDOR_SEED.key)) {
-    models.push({
-      modelKey: HAPPYHORSE_MODEL_SEED.modelKey,
-      vendorKey: KIE_VENDOR_SEED.key,
-      labelZh: HAPPYHORSE_MODEL_SEED.labelZh,
-      kind: HAPPYHORSE_MODEL_SEED.kind,
-      enabled: true,
-      meta: HAPPYHORSE_MODEL_META,
-      createdAt: now,
-      updatedAt: now,
-    });
-    changed = true;
-  }
-
-  if (!mappings.some((mp) => mp.vendorKey === KIE_VENDOR_SEED.key && mp.taskKind === HAPPYHORSE_MAPPING.taskKind)) {
-    mappings.push({
-      id: HAPPYHORSE_MAPPING_ID,
-      vendorKey: KIE_VENDOR_SEED.key,
-      taskKind: HAPPYHORSE_MAPPING.taskKind,
-      name: HAPPYHORSE_MAPPING.name,
-      enabled: true,
-      create: HAPPYHORSE_CREATE_OP,
-      query: HAPPYHORSE_QUERY_OP,
-      createdAt: now,
-      updatedAt: now,
-    });
-    changed = true;
-  }
+  // mapping insert + 对账（两家各跑同一套逻辑）。
+  if (reconcileMappings(mappings, KIE_VENDOR_SEED.key, KIE_CURATED_MAPPINGS, now)) changed = true;
+  if (reconcileMappings(mappings, APIMART_VENDOR_SEED.key, APIMART_CURATED_MAPPINGS, now)) changed = true;
 
   if (!changed) return { state, changed: false };
   return { state: { ...state, vendors, models, mappings }, changed: true };

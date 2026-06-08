@@ -117,15 +117,25 @@ export function archetypeModeArraySlots(mode: ArchetypeMode): ArchetypeArraySlot
       max: slot.max,
       accept: route.accept,
       numbered,
-      // 说明只保留「编号」语义，不再重复 character1（prompt 旁的提示是唯一一处讲绑定，减少黑话重复）。
+      // 编号语义靠 tile 上的 ①②③ 徽标自明（样张 v4）；character1..N 是发送前投影，用户永不可见。
       ...(numbered ? { caption: '按放入顺序编号 ①②③' } : {}),
     }]
   })
 }
 
-/** 当前模式是否含「角色参考」槽（按序 character1..N）——用于在 prompt 框旁给提示（U2）。 */
+/** 当前模式是否含「角色参考」槽（按序 character1..N，即 @ 引用投影的目标槽）。 */
 export function modeHasCharacterSlot(mode: ArchetypeMode): boolean {
   return mode.slots.some((slot) => Boolean(slot.characterIndexed))
+}
+
+/**
+ * 当前模式是否已放入任何数组参考（omni 角色图/视频/音频任一非空）。
+ * video 节点据此判断「可生成」——omni 不靠首/尾帧，靠参考数组；缺它会被误判为「需要首帧」而锁死生成。
+ * 接受任意非空字符串（含 nomi-local://，传输前 R1 会本地化），不做 http 过滤——这只是「有没有参考」的判断。
+ */
+export function hasArchetypeArrayReferences(meta: Record<string, unknown> | undefined, archetype: ModelArchetype): boolean {
+  const mode = currentArchetypeMode(archetype, meta)
+  return archetypeModeArraySlots(mode).some((slot) => readArchetypeArray(meta, slot.metaKey).length > 0)
 }
 
 /** 当前模式的「源视频」单槽（HappyHorse video-edit）。返回 meta 存储键 + 标签；无则 null。 */
@@ -139,6 +149,30 @@ export function readArchetypeArray(meta: Record<string, unknown> | undefined, me
   const value = meta?.[metaKey]
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+export type ArchetypeArrayAppend =
+  | { status: 'added'; next: string[] }
+  | { status: 'empty' }
+  | { status: 'duplicate' }
+  | { status: 'full' }
+
+/**
+ * 往数组参考槽追加一个 URL 的**纯**单源逻辑（去重 + 上限判定）。renderer 的 handleArrayAdd、
+ * 拖入(useNodeAssetDrop)、连线(completeNodeConnection)三处入口共用它——保证「加参考」只有一套
+ * 去重/上限规则（规则 1：不开第 N 条写路径）。写入 / toast 由调用方按返回状态决定。
+ */
+export function appendArchetypeArrayValue(
+  meta: Record<string, unknown> | undefined,
+  slot: ArchetypeArraySlot,
+  url: string,
+): ArchetypeArrayAppend {
+  const trimmed = url.trim()
+  if (!trimmed) return { status: 'empty' }
+  const current = readArchetypeArray(meta, slot.metaKey)
+  if (current.includes(trimmed)) return { status: 'duplicate' }
+  if (current.length >= slot.max) return { status: 'full' }
+  return { status: 'added', next: [...current, trimmed] }
 }
 
 /** 当前模式的标量参数（复用现有 ModelParameterControl 渲染路径）。 */

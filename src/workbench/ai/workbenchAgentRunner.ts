@@ -1,5 +1,7 @@
 import type { AgentsChatResponseDto, AgentChatV2Session } from '../../api/desktopClient'
 import { sendWorkbenchAiMessage } from './workbenchAiClient'
+import { getAssistantModelPref } from './assistantModelPref'
+import { useAgentUsageStore } from './agentUsageStore'
 
 /**
  * One shared agent runner for both workbench panels (创作区 + 生成区).
@@ -57,9 +59,14 @@ export type RunWorkbenchAgentInput = {
    * auto-executes for read tools) and must invoke `event.confirm(...)`.
    */
   onToolCall?: (event: ToolCallEvent) => void
+  /** Called once the backend session exists, exposing a cancel handle (user "Stop"). */
+  onCancelReady?: (cancel: () => void) => void
 }
 
 export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<AgentsChatResponseDto> {
+  // 助手模型偏好（用户在助手面板选的）→ 加进 payload，后端 chooseTextModel 优先用它，
+  // 否则回退「第一个可用 text 模型」。两个面板都走这里 → 自动生效，无需各自传。
+  const pref = getAssistantModelPref()
   const request = {
     prompt: input.prompt,
     displayPrompt: input.displayPrompt,
@@ -70,6 +77,7 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
     skillKey: input.skillKey,
     skillName: input.skillName,
     mode: input.mode || ('auto' as const),
+    ...(pref ? { agentModelKey: pref.modelKey, agentVendorKey: pref.vendorKey } : {}),
   }
 
   let activeSession: AgentChatV2Session | null = null
@@ -77,6 +85,9 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
     onContent: input.onContent,
     onSession: (session: AgentChatV2Session) => {
       activeSession = session
+      input.onCancelReady?.(() => {
+        void session.cancel()
+      })
     },
     onEvent: (event: { event: string; data: Record<string, unknown> | Record<string, never> }) => {
       if (event.event !== 'tool-call') return
@@ -93,5 +104,9 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
     },
   }
 
-  return sendWorkbenchAiMessage(request, handlers)
+  const response = await sendWorkbenchAiMessage(request, handlers)
+  // Accumulate token usage for both panels here (single feed point) so a
+  // token/cost readout can render it; previously usage was dropped (audit #8).
+  useAgentUsageStore.getState().addUsage(response.usage)
+  return response
 }

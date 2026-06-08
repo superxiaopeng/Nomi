@@ -11,11 +11,12 @@
  */
 import React from 'react'
 import { cn } from '../../../../utils/cn'
+import { NomiImage } from '../../../../design/media'
 import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { readCharacterMeta } from '../../model/nodeMetaFields'
 import { useNodeUsageCount, useNodeVariantCount } from '../../hooks/useNodeRelationships'
 import { STRIPED_BG_CLASS, UsageDot, VariantChip, UploadFallback } from './CardCommon'
-import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { useNodeImageUpload } from '../../adapters/useNodeImageUpload'
 import { EditableNodeTitle } from './EditableNodeTitle'
 
 type Props = {
@@ -26,14 +27,8 @@ function CharacterCardNodeImpl({ node }: Props): JSX.Element {
   const meta = readCharacterMeta(node)
   const usageCount = useNodeUsageCount(node.id, node.title)
   const variantCount = useNodeVariantCount(node.id)
-  const updateNode = useGenerationCanvasStore((state) => state.updateNode)
+  const handleUpload = useNodeImageUpload(node.id, 'character-card-upload')
   const hasImage = Boolean(node.result?.url)
-
-  const handleUpload = React.useCallback((dataUrl: string) => {
-    updateNode(node.id, {
-      result: { id: `upload-${Date.now()}`, type: 'image', url: dataUrl, createdAt: Date.now() },
-    })
-  }, [node.id, updateNode])
 
   // 当三种内容都为空时，信息区整段不渲染——节点只剩图（或占位）。
   const hasTagline = Boolean(meta.tagline)
@@ -45,11 +40,10 @@ function CharacterCardNodeImpl({ node }: Props): JSX.Element {
     <div className={cn('w-full h-full flex flex-col rounded-nomi-sm overflow-hidden bg-nomi-paper')}>
       <div className={cn('w-full flex-1 min-h-0 overflow-hidden', !hasImage && STRIPED_BG_CLASS)}>
         {hasImage ? (
-          <img
+          <NomiImage
             src={node.result!.url!}
             alt={node.title || ''}
             className="w-full h-full object-contain object-center select-none pointer-events-none"
-            draggable={false}
           />
         ) : (
           <UploadFallback accept="image/*" label="角色图" onUpload={handleUpload} />

@@ -1,7 +1,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import ReactPannellum, { usePannellum } from 'react-pannellum'
-import { IconCamera, IconX } from '@tabler/icons-react'
+import { IconCamera, IconMaximize, IconX } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
 import { WorkbenchIconButton } from '../../../design'
 
@@ -376,7 +376,7 @@ export default function PanoramaViewer({ imageUrl, width, height, onEnterFullscr
   return (
     <>
       <div
-        className="relative overflow-hidden rounded"
+        className="group relative overflow-hidden rounded"
         style={{ width, height }}
       >
         <ReactPannellum
@@ -388,13 +388,28 @@ export default function PanoramaViewer({ imageUrl, width, height, onEnterFullscr
         >
           <PanoramaFourViewCaptureBinder onCaptureFourView={onCaptureFourView} onScreenshot={onScreenshot} />
         </ReactPannellum>
-        {/* 覆盖层：只阻止全景图内部事件，不阻止冒泡到节点 */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[11px] text-white/70 [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
-              打开预览后可进行全景操作
-            </span>
-          </div>
+        {/* 覆盖层：默认不拦事件（保留单击选中/拖动节点），悬停浮现「进入全景」按钮。
+            之前只有节点上方那个浮动按钮能进全屏（需选中+有结果+非只读），用户双击图片无反应，
+            这里给一个不依赖节点选中态的直接入口。 */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              setFullscreen(true)
+            }}
+            className={cn(
+              'pointer-events-auto inline-flex items-center gap-1.5 rounded-full',
+              'px-3 py-1.5 text-[11px] font-medium text-white',
+              'bg-[rgba(15,18,22,0.64)] backdrop-blur-[6px]',
+              'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
+              'hover:bg-[rgba(15,18,22,0.8)] focus-visible:opacity-100',
+            )}
+            aria-label="进入全景预览"
+          >
+            <IconMaximize size={14} stroke={1.8} />进入全景
+          </button>
         </div>
       </div>
 

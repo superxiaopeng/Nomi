@@ -49,7 +49,7 @@ const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
  * 不解析 DNS — 这里不做 DNS rebinding 防护（renderer 不直接出网，
  * 攻击面有限）。如果未来支持用户自定义 hook 出网，再加 DNS resolve + recheck。
  */
-function isPrivateHost(hostname: string): boolean {
+export function isPrivateHost(hostname: string): boolean {
   // Lab-only escape hatch: when LAB_ALLOW_LOCALHOST=1, permit localhost so that
   // attack fixtures served from a local test server can be fetched.
   // This env var must NEVER be set in production builds.

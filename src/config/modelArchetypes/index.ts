@@ -1,12 +1,24 @@
 import type { ModelParameterControl } from "../modelCatalogMeta";
 import { SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE } from "./seedance";
 import { HAPPYHORSE_ARCHETYPE } from "./happyhorse";
+import { GPT_IMAGE_2_ARCHETYPE } from "./gptImage2";
+import { SEEDREAM_ARCHETYPE } from "./seedream";
+import { NANO_BANANA_ARCHETYPE } from "./nanoBanana";
+import { KLING_3_ARCHETYPE } from "./kling";
+import { QWEN_IMAGE_ARCHETYPE } from "./qwenImage";
+import { IMAGEN_4_ARCHETYPE } from "./imagen4";
+import { Z_IMAGE_ARCHETYPE } from "./zImage";
+import { SORA_2_ARCHETYPE } from "./sora2";
+import { VEO_3_1_ARCHETYPE } from "./veo31";
+import { WAN_2_7_ARCHETYPE } from "./wan27";
+import { HAILUO_2_3_ARCHETYPE } from "./hailuo23";
+import { SEEDANCE_2_APIMART_ARCHETYPE } from "./seedanceApimart";
 import type { ModelArchetype } from "./types";
 
 export type { ModelArchetype, ArchetypeMode, ArchetypeReferenceSlot, ArchetypeReferenceSlotKind, ArchetypeIntent } from "./types";
 
 /** 内置档案注册表。新模型族在这里登记一条。 */
-export const MODEL_ARCHETYPES: readonly ModelArchetype[] = [SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE, HAPPYHORSE_ARCHETYPE];
+export const MODEL_ARCHETYPES: readonly ModelArchetype[] = [SEEDANCE_2_ARCHETYPE, SEEDANCE_2_FAST_ARCHETYPE, HAPPYHORSE_ARCHETYPE, GPT_IMAGE_2_ARCHETYPE, SEEDREAM_ARCHETYPE, NANO_BANANA_ARCHETYPE, KLING_3_ARCHETYPE, QWEN_IMAGE_ARCHETYPE, IMAGEN_4_ARCHETYPE, Z_IMAGE_ARCHETYPE, SORA_2_ARCHETYPE, VEO_3_1_ARCHETYPE, WAN_2_7_ARCHETYPE, HAILUO_2_3_ARCHETYPE, SEEDANCE_2_APIMART_ARCHETYPE];
 
 /** 按 id 取档案。 */
 export function getArchetypeById(id: string | null | undefined): ModelArchetype | null {
@@ -38,6 +50,8 @@ function identifierMatchesPattern(identifier: string, pattern: string): boolean 
 export type ArchetypeModelLike = {
   modelKey?: string | null;
   modelAlias?: string | null;
+  /** B 档案分层：按供应商特化 params（见 specializeArchetypeForVendor）。缺省=不特化（向后兼容）。 */
+  vendorKey?: string | null;
   meta?: unknown;
 };
 
@@ -57,6 +71,12 @@ function readArchetypeIdFromMeta(meta: unknown): string | null {
  */
 export function resolveArchetypeForModel(model: ArchetypeModelLike | null | undefined): ModelArchetype | null {
   if (!model) return null;
+  const base = resolveBaseArchetype(model);
+  return base ? specializeArchetypeForVendor(base, model.vendorKey) : null;
+}
+
+/** 解析「基础」档案（供应商无关，未特化）：显式 archetypeId 优先，否则按身份匹配 pattern。 */
+function resolveBaseArchetype(model: ArchetypeModelLike): ModelArchetype | null {
   const explicit = getArchetypeById(readArchetypeIdFromMeta(model.meta));
   if (explicit) return explicit;
   const identifiers = [model.modelKey, model.modelAlias].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
@@ -68,6 +88,24 @@ export function resolveArchetypeForModel(model: ArchetypeModelLike | null | unde
     }
   }
   return null;
+}
+
+/**
+ * B 档案分层（用户拍板 2026-06-07）：把档案的 modes.params 替换成该供应商的覆盖版（mode.vendorParams[vendorKey]）。
+ * 身份/能力形状（id/family/label/modes 结构/slots）不变——只 params 这层分供应商（P4）。
+ * 无 vendorKey、或没有任何模式为该供应商声明 vendorParams → 原样返回（绝大多数情况，零开销）。
+ */
+export function specializeArchetypeForVendor(archetype: ModelArchetype, vendorKey: string | null | undefined): ModelArchetype {
+  const key = typeof vendorKey === "string" ? vendorKey.trim() : "";
+  if (!key) return archetype;
+  if (!archetype.modes.some((m) => m.vendorParams && m.vendorParams[key])) return archetype;
+  return {
+    ...archetype,
+    modes: archetype.modes.map((m) => {
+      const vp = m.vendorParams?.[key];
+      return vp ? { ...m, params: vp } : m;
+    }),
+  };
 }
 
 /**

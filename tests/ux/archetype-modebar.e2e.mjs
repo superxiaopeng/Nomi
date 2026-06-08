@@ -69,7 +69,7 @@ try {
   // 断言尾帧参考槽出现（首帧模式 1 槽 → 首尾帧 2 槽）+ 提示行更新
   const after = await win.evaluate(() => {
     const comp = document.querySelector(".generation-canvas-v2-node__composer");
-    const slots = comp ? comp.querySelectorAll('[aria-label="尾帧"]').length : 0;
+    const slots = comp ? comp.querySelectorAll('[aria-label="添加尾帧"]').length : 0;
     const text = comp ? (comp.innerText || "").replace(/\s+/g, " ") : "";
     return { slots, hasLastHint: /首帧 \+ 尾帧/.test(text) };
   });
@@ -80,18 +80,25 @@ try {
   await win.locator('.generation-canvas-v2-node__composer [role="group"][aria-label="生成方式"] button', { hasText: "全能参考" }).first().click();
   await win.waitForTimeout(900);
   await shot("04-omni");
-  const omniText = await win.evaluate(() => (document.querySelector(".generation-canvas-v2-node__composer")?.innerText || "").replace(/\s+/g, " "));
-  assert(/角色参考/.test(omniText), "omni：出现「角色参考」组");
-  assert(/按放入顺序编号|编号/.test(omniText), "omni：角色组说明（按放入顺序编号，不再重复 character1）");
-  assert(/参考视频/.test(omniText) && /参考音频/.test(omniText), "omni：参考视频 / 参考音频 分组小标题（U3）");
+  // 对齐样张 v4:数组参考合并成一排 tile + 一个「加参考」,无三组标签/caption(最少文字)。
+  const omniMerged = await win.evaluate(() => {
+    const comp = document.querySelector(".generation-canvas-v2-node__composer");
+    const text = comp ? (comp.innerText || "").replace(/\s+/g, " ") : "";
+    return {
+      hasMergedAdd: Boolean(comp?.querySelector('[aria-label="加参考"]')),
+      noGroupLabels: !/角色参考|参考视频|参考音频|按放入顺序编号/.test(text),
+    };
+  });
+  assert(omniMerged.hasMergedAdd, "omni：合并成一排 + 一个「加参考」(样张 v4)");
+  assert(omniMerged.noGroupLabels, "omni：无三组标签/caption(最少文字,对齐样张 v4)");
 
-  // 写一张 1x1 png 临时文件，经「+ 角色参考」菜单上传
+  // 写一张 1x1 png 临时文件，经「加参考」→ 统一选择器上传
   const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   const tmpPng = path.join(shotsDir, "_char1.png");
   fs.writeFileSync(tmpPng, Buffer.from(pngB64, "base64"));
-  await win.locator('.generation-canvas-v2-node__composer button[aria-label="添加角色参考"]').first().click();
-  await win.waitForTimeout(400);
-  await win.locator('.generation-canvas-v2-node__composer input[type="file"][aria-label="上传角色参考"]').first().setInputFiles(tmpPng);
+  await win.locator('.generation-canvas-v2-node__composer button[aria-label="加参考"]').first().click();
+  await win.waitForTimeout(400); // 等统一选择器(AssetPicker)弹出
+  await win.locator('input[type="file"][aria-label="上传本地文件"]').first().setInputFiles(tmpPng);
   await win.waitForTimeout(2500); // 等本地素材导入
   await shot("05-omni-char1");
   const afterUpload = await win.evaluate(() => {
@@ -102,6 +109,43 @@ try {
   });
   assert(afterUpload.badge1, "上传后角色图 chip 带 ① 数字徽标（character1）");
   assert(afterUpload.hasCue, "prompt 旁出现 character1.. 提示（U2）");
+
+  // 参考 tile 可拖拽重排(reorder 已接线;数组移动逻辑由 moveArrayItem 单测覆盖)
+  const draggable = await win.evaluate(() => Boolean(document.querySelector('.generation-canvas-v2-node__composer [role="button"][draggable="true"]')));
+  assert(draggable, "参考 tile 可拖拽重排（draggable 已接线）");
+
+  // @ 键唤起 suggestion：描述框打 @ → 弹出已加参考缩略图列表（规范 §4 快捷路径,渲染在 body 不被裁）
+  await win.locator(".generation-canvas-v2-node__prompt-input").last().click();
+  await win.keyboard.type("光 @");
+  await win.waitForTimeout(500);
+  const atPanel = await win.evaluate(() => ({
+    hasPanel: Array.from(document.body.querySelectorAll("span")).some((s) => s.textContent.trim() === "放入哪张"),
+    opts: document.body.querySelectorAll('button[aria-label^="插入参考"]').length,
+  }));
+  assert(atPanel.hasPanel && atPanel.opts >= 1, "打 @ → 弹出参考缩略图 suggestion 列表");
+  await win.keyboard.press("Escape");
+  await win.waitForTimeout(200);
+
+  // @ 内联引用主路径：点已加的参考 tile → 描述框光标处插入 18px chip（规范 §4）
+  await win.locator(".generation-canvas-v2-node__prompt-input").last().click();
+  await win.keyboard.type("阳光下 ");
+  await win.waitForTimeout(200);
+  await win.locator('.generation-canvas-v2-node__composer [role="button"]:has(img)').first().click();
+  await win.waitForTimeout(400);
+  const mention = await win.evaluate(() => {
+    const editor = document.querySelector(".generation-canvas-v2-node__prompt-input");
+    return { chips: editor ? editor.querySelectorAll("[data-asset-mention]").length : 0, chipHasImg: Boolean(editor?.querySelector("[data-asset-mention] img")) };
+  });
+  assert(mention.chips >= 1 && mention.chipHasImg, "点参考 tile → 描述框插入 @ 引用 chip（18px 缩略图）");
+
+  // 删 tile → 描述框里指向它的 chip 同步消失(del-tile-sync-chip,对抗评审验收)
+  await win.locator('.generation-canvas-v2-node__composer button[aria-label^="移除"]').first().click();
+  await win.waitForTimeout(400);
+  const afterDel = await win.evaluate(() => {
+    const editor = document.querySelector(".generation-canvas-v2-node__prompt-input");
+    return editor ? editor.querySelectorAll("[data-asset-mention]").length : -1;
+  });
+  assert(afterDel === 0, "删参考 tile → 描述框里对应 @ chip 同步消失");
 
   // ── C4：切到 HappyHorse → 4 模式合 1（各用模型自己的真名）+ i2v 无比例（U3）──
   await modelSelect.selectOption({ label: "HappyHorse 1.0" }).catch(async () => { await modelSelect.selectOption("happyhorse") });

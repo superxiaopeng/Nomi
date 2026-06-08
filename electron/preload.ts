@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     list: (payload: unknown) => ipcRenderer.invoke("nomi:assets:list", payload),
     importRemoteUrl: (payload: unknown) => ipcRenderer.invoke("nomi:assets:import-remote-url", payload),
     importFile: (payload: unknown) => ipcRenderer.invoke("nomi:assets:import-file", payload),
+    download: (payload: unknown) =>
+      ipcRenderer.invoke("nomi:assets:download", payload) as Promise<{
+        ok: boolean;
+        canceled?: boolean;
+        path?: string;
+      }>,
   },
   exports: {
     startJob: (payload: unknown) => ipcRenderer.invoke("nomi:exports:start-job", payload),
@@ -51,7 +57,6 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     result: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:result", payload),
   },
   agents: {
-    chat: (payload: unknown) => ipcRenderer.invoke("nomi:agents:chat", payload),
     chatV2Start: (payload: unknown) => ipcRenderer.invoke("nomi:agents:chatV2:start", payload) as Promise<{ sessionId: string }>,
     confirmTool: (sessionId: string, toolCallId: string, decision: unknown) =>
       ipcRenderer.invoke("nomi:agents:chatV2:confirmTool", { sessionId, toolCallId, decision }),

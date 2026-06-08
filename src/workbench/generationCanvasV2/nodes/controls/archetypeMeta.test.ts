@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { getArchetypeById } from '../../../../config/modelArchetypes'
 import { archetypeModeModelEnum } from './archetypeMeta'
 import {
+  type ArchetypeArraySlot,
+  appendArchetypeArrayValue,
   applyArchetypeModeSwitch,
   archetypeModeArraySlots,
   archetypeModeChoices,
@@ -9,6 +11,7 @@ import {
   buildArchetypeInputParams,
   currentArchetypeMode,
   ensureArchetypeNodeMeta,
+  hasArchetypeArrayReferences,
   modeHasCharacterSlot,
 } from './archetypeMeta'
 
@@ -139,6 +142,18 @@ describe('C3 全能参考 — 数组槽声明', () => {
     expect(modeHasCharacterSlot(OMNI)).toBe(true)
     expect(modeHasCharacterSlot(SEEDANCE.modes.find((m) => m.id === 'first')!)).toBe(false)
   })
+  it('hasArchetypeArrayReferences：omni 放了参考数组 → true（修复 omni 误判"需要首帧"锁死生成）', () => {
+    const empty = { archetype: { id: 'seedance-2', modeId: 'omni' } }
+    expect(hasArchetypeArrayReferences(empty, SEEDANCE)).toBe(false)
+    const withImg = { ...empty, referenceImageUrls: ['c1.png'] }
+    expect(hasArchetypeArrayReferences(withImg, SEEDANCE)).toBe(true)
+    // nomi-local:// 也算「有参考」（传输前 R1 本地化），不做 http 过滤
+    const withLocal = { ...empty, referenceVideoUrls: ['nomi-local://asset/p/v.mp4'] }
+    expect(hasArchetypeArrayReferences(withLocal, SEEDANCE)).toBe(true)
+    // 首帧模式无数组槽 → 即便 meta 残留 referenceImageUrls 也不算（互斥）
+    const firstMode = { archetype: { id: 'seedance-2', modeId: 'first' }, referenceImageUrls: ['c1.png'] }
+    expect(hasArchetypeArrayReferences(firstMode, SEEDANCE)).toBe(false)
+  })
 })
 
 describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snake 键）', () => {
@@ -162,6 +177,23 @@ describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snak
       referenceImageUrls: ['c1.png', 'c2.png'],
     }
     expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png' })
+  })
+})
+
+describe('appendArchetypeArrayValue — 单源去重/上限（拖入/连线/手动加共用）', () => {
+  const slot: ArchetypeArraySlot = { metaKey: 'referenceImageUrls', label: '角色参考', min: 0, max: 2, accept: 'image', numbered: true }
+  it('空 → empty；空白串也算空', () => {
+    expect(appendArchetypeArrayValue({}, slot, '').status).toBe('empty')
+    expect(appendArchetypeArrayValue({}, slot, '   ').status).toBe('empty')
+  })
+  it('正常追加 → added + 带 next（trim 后入列）', () => {
+    expect(appendArchetypeArrayValue({ referenceImageUrls: ['a.png'] }, slot, ' b.png ')).toEqual({ status: 'added', next: ['a.png', 'b.png'] })
+  })
+  it('已存在 → duplicate（静默，不重复）', () => {
+    expect(appendArchetypeArrayValue({ referenceImageUrls: ['a.png'] }, slot, 'a.png').status).toBe('duplicate')
+  })
+  it('到上限 → full（调用方 toast，别静默丢）', () => {
+    expect(appendArchetypeArrayValue({ referenceImageUrls: ['a.png', 'b.png'] }, slot, 'c.png').status).toBe('full')
   })
 })
 

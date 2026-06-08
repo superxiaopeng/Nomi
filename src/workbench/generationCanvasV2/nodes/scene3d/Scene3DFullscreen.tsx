@@ -1,5 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
+import { NomiSelect } from '../../../../design'
 import { Canvas, type ThreeEvent, useFrame, useThree } from '@react-three/fiber'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -3465,16 +3466,10 @@ function PropertyPanel({
             <>
               <label className="grid gap-1">
                 <span className="text-[11px] text-[var(--nomi-ink-60)]">灯光类型</span>
-                <select
-                  className="h-8 rounded-[6px] border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-[12px] text-[var(--nomi-ink)] outline-none"
-                  disabled={readOnly}
+                <NomiSelect ariaLabel="灯光类型" className="w-full justify-between" disabled={readOnly}
                   value={selectedObject.lightType || 'point'}
-                  onChange={(event) => onObjectPatch(selectedObject.id, { lightType: event.currentTarget.value as Scene3DLightType })}
-                >
-                  <option value="point">Point</option>
-                  <option value="directional">Directional</option>
-                  <option value="spot">Spot</option>
-                </select>
+                  options={[{ value: 'point', label: 'Point' }, { value: 'directional', label: 'Directional' }, { value: 'spot', label: 'Spot' }]}
+                  onChange={(value) => onObjectPatch(selectedObject.id, { lightType: value as Scene3DLightType })} />
               </label>
               <label className="grid gap-1">
                 <span className="text-[11px] text-[var(--nomi-ink-60)]">强度</span>
@@ -3530,14 +3525,9 @@ function PropertyPanel({
           />
           <label className="grid gap-1">
             <span className="text-[11px] text-[var(--nomi-ink-60)]">画幅比例</span>
-            <select
-              className="h-8 rounded-[6px] border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-[12px] text-[var(--nomi-ink)] outline-none"
-              disabled={readOnly}
-              value={selectedCamera.aspectRatio}
-              onChange={(event) => onCameraPatch(selectedCamera.id, { aspectRatio: event.currentTarget.value as Scene3DAspectRatio })}
-            >
-              {SCENE3D_ASPECT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
+            <NomiSelect ariaLabel="画幅比例" className="w-full justify-between" disabled={readOnly}
+              value={selectedCamera.aspectRatio} options={SCENE3D_ASPECT_OPTIONS.map((option) => ({ value: option, label: option }))}
+              onChange={(value) => onCameraPatch(selectedCamera.id, { aspectRatio: value as Scene3DAspectRatio })} />
           </label>
           <div className="grid grid-cols-3 gap-2">
             {(['fov', 'near', 'far'] as const).map((field) => (

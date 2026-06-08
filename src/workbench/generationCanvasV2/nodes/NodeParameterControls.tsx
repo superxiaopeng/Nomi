@@ -1,13 +1,14 @@
 import React from 'react'
-import { IconVideo } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
+import { NomiSelect } from '../../../design'
+import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import { deriveGenerationModelCatalogStatus, findModelOptionByIdentifier, useGenerationModelOptionsState } from '../adapters/modelOptionsAdapter'
 import {
+  formatVideoOptionLabel,
   parseModelParameterControls,
   type ModelParameterControl,
 } from '../../../config/modelCatalogMeta'
 import type { ModelOption } from '../../../config/models'
-import { WorkbenchButton } from '../../../design'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind, isVideoLikeGenerationNodeKind } from '../model/generationNodeKinds'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -22,7 +23,9 @@ import {
   buildEffectiveVideoCatalogConfig,
   buildImageUrlSlots,
   buildModelControls,
-  buildSettingsSummary,
+  catalogControlInitialValue,
+  controlInitialValue,
+  controlValueToString,
   defaultPatchForCatalogControl,
   defaultPatchForControls,
   edgeModeForGroup,
@@ -30,6 +33,9 @@ import {
   getSlotNodeRef,
   getSlotThumbUrl,
   imageCatalogReferenceSlot,
+  isParameterControl,
+  optionLabel,
+  optionValue,
   parseControlInput,
   readMeta,
   removePreviousControlParams,
@@ -37,6 +43,7 @@ import {
 } from './controls/parameterControlModel'
 import {
   type ArchetypeArraySlot,
+  appendArchetypeArrayValue,
   applyArchetypeModeSwitch,
   archetypeModeArraySlots,
   archetypeModeChoices,
@@ -45,20 +52,22 @@ import {
   archetypeModeSourceVideoSlot,
   currentArchetypeMode,
   ensureArchetypeNodeMeta,
-  modeHasCharacterSlot,
   readArchetypeArray,
   resolveArchetypeForModel,
 } from './controls/archetypeMeta'
 import ModeBar from './controls/ModeBar'
-import ReferenceSlots from './controls/ReferenceSlots'
-import SettingsPopover from './controls/SettingsPopover'
+import AssetReference, { type AssetSlot } from '../../assets/AssetReference'
+import type { AssetRef } from '../../assets/assetTypes'
+import { moveArrayItem } from '../../assets/assetTypes'
+import { removeMention } from '../../assets/promptMentions'
+import { showInfoToast } from '../../../utils/showInfoToast'
+import { remapArchetypeMode } from '../runner/usableVendorModel'
 
 type NodeParameterControlsProps = {
   node: GenerationCanvasNode
-  section?: 'all' | 'references' | 'parameters' | 'model' | 'controls' | 'settings'
-  // section="parameters" 的设置芯片：开合状态由父级（composer）持有，便于把弹层渲染在卡底（不被裁剪）。
-  settingsOpen?: boolean
-  onToggleSettings?: () => void
+  section?: 'all' | 'references' | 'parameters' | 'model' | 'controls'
+  /** 点参考 tile → 在描述框光标处插入 @ 引用 chip(主路径,由 composer 注入 editor 命令)。 */
+  onInsertMention?: (url: string) => void
 }
 
 function chooseDefaultModelOption(
@@ -68,11 +77,20 @@ function chooseDefaultModelOption(
 ): ModelOption | undefined {
   void isImageLike
   void isVideoLike
-  return options[0]
+  // 优先选「认得的模型」（有内置档案 = 带真实模板参数，徽标「模板」）作默认，
+  // 而不是盲取 options[0]。否则目录里排第一的可能是用户自接入、未识别的「通用」模型
+  // （如 gemini-omni-video），图片节点一打开默认就是它、看不到 Seedream/nano-banana 等
+  //真正的图片模型，给人「选不到图片模型」的错觉（修①，根因：默认选择没挑「好」的）。
+  // 同时跳过「图生图/编辑」类（空节点默认它 = 没参考图就不能生成，生成钮一直灰）——
+  // 新建空节点该默认到「文生图/文生视频」这类无需参考就能直接生成的模型。
+  const needsReference = (option: ModelOption): boolean =>
+    /image-to-image|img2img|i2i|image2video|edit|inpaint/i.test(`${option.value} ${option.modelKey || ''} ${option.modelAlias || ''}`)
+  const recognized = options.filter((option) => Boolean(resolveArchetypeForOption(option)))
+  return recognized.find((option) => !needsReference(option)) || recognized[0] || options[0]
 }
 
 function resolveArchetypeForOption(option: ModelOption | null) {
-  return resolveArchetypeForModel({ modelKey: option?.modelKey, modelAlias: option?.modelAlias, meta: option?.meta })
+  return resolveArchetypeForModel({ modelKey: option?.modelKey, modelAlias: option?.modelAlias, vendorKey: option?.vendor, meta: option?.meta })
 }
 
 /**
@@ -108,8 +126,7 @@ function resolveRenderedControls(
 export default function NodeParameterControls({
   node,
   section = 'all',
-  settingsOpen = false,
-  onToggleSettings,
+  onInsertMention,
 }: NodeParameterControlsProps): JSX.Element | null {
   const nodes = useGenerationCanvasStore((state) => state.nodes)
   const edges = useGenerationCanvasStore((state) => state.edges)
@@ -120,12 +137,11 @@ export default function NodeParameterControls({
   const modelOptionsState = useGenerationModelOptionsState(node.kind)
   const modelOptions = modelOptionsState.options
   const modelCatalogStatus = deriveGenerationModelCatalogStatus(node.kind, modelOptionsState)
-  const meta = node.meta || {}
+  const meta = React.useMemo<Record<string, unknown>>(() => node.meta || {}, [node.meta])
   const [uploadingSlotKey, setUploadingSlotKey] = React.useState('')
   const [uploadError, setUploadError] = React.useState('')
+  // 统一的「哪个槽的选择器展开」(单/数组共用一个,P1 归一)+ 数组/源视频上传中标记。
   const [openSlotKey, setOpenSlotKey] = React.useState('')
-  // C3 数组参考槽（全能参考）：哪个槽的「+ 添加」菜单展开 + 哪个槽正在上传。
-  const [openArraySlotKey, setOpenArraySlotKey] = React.useState('')
   const [uploadingArrayKey, setUploadingArrayKey] = React.useState('')
   const isImageLike = isImageLikeGenerationNodeKind(node.kind)
   const isVideoLike = isVideoLikeGenerationNodeKind(node.kind)
@@ -212,6 +228,44 @@ export default function NodeParameterControls({
     })
   }, [isGenerationNode, isVideoLike, meta, node.id, node.meta, selectedModelOption, updateNode])
 
+  // 供应商断开后，节点钉死的旧模型已从下拉移除（selectedModelOption===null，但 selectedModelValue 仍在）。
+  // 按 archetype 在当前可用 options 里找同款，自动改选并写回 meta —— 否则节点会卡在选不中的死供应商上，
+  // 标签/参数全错。与运行时咽喉 resolveExecutableNodeFromCatalog 同策略（同 id 优先，family 兜底）。
+  React.useEffect(() => {
+    if (!isGenerationNode || !selectedModelValue || selectedModelOption) return
+    const sourceArchetype = resolveArchetypeForModel({
+      modelKey: selectedModelValue,
+      modelAlias: readMeta(meta, 'modelAlias'),
+      vendorKey: readMeta(meta, 'modelVendor') || readMeta(meta, 'vendor'),
+      meta,
+    })
+    if (!sourceArchetype) return
+    const target =
+      modelOptions.find((option) => resolveArchetypeForOption(option)?.id === sourceArchetype.id) ||
+      modelOptions.find((option) => resolveArchetypeForOption(option)?.family === sourceArchetype.family)
+    const optionVendor = typeof target?.vendor === 'string' ? target.vendor.trim() : ''
+    if (!target?.value || !optionVendor) return
+    const targetArchetype = resolveArchetypeForOption(target)
+    const remapped = targetArchetype
+      ? remapArchetypeMode(sourceArchetype, (meta.archetype as { modeId?: string } | undefined)?.modeId, targetArchetype)
+      : null
+    updateNode(node.id, {
+      meta: {
+        ...(node.meta || {}),
+        modelKey: target.modelKey || target.value,
+        modelAlias: target.modelAlias || target.value,
+        modelVendor: optionVendor,
+        vendor: optionVendor,
+        modelLabel: target.label,
+        ...(remapped ? { archetype: remapped } : {}),
+        ...(isVideoLike
+          ? { videoModel: target.value, videoModelVendor: optionVendor }
+          : { imageModel: target.value, imageModelVendor: optionVendor }),
+      },
+    })
+    showInfoToast(`原供应商已断开，已自动切换到「${target.label}」`)
+  }, [isGenerationNode, isVideoLike, meta, modelOptions, node.id, node.meta, selectedModelOption, selectedModelValue, updateNode])
+
   // 选到一个有内置档案的模型、还没有命名空间 meta 时，初始化 node.meta.archetype（落到默认模式）。
   // 幂等：已是该档案则 no-op，不会循环。
   React.useEffect(() => {
@@ -234,22 +288,33 @@ export default function NodeParameterControls({
     if (!archetype) return
     updateNode(node.id, { meta: applyArchetypeModeSwitch(node.meta || {}, archetype, modeId) })
     setOpenSlotKey('')
-    setOpenArraySlotKey('')
   }
 
   // ── C3 数组参考槽（全能参考，meta-only）：append / remove / 上传，写 node.meta[metaKey] 数组 ──
   const setArrayValue = (metaKey: string, next: string[]) => updateMeta({ [metaKey]: next })
   const handleArrayAdd = (slot: ArchetypeArraySlot, url: string) => {
-    const trimmed = url.trim()
-    if (!trimmed) return
-    const current = readArchetypeArray(node.meta || {}, slot.metaKey)
-    if (current.includes(trimmed) || current.length >= slot.max) return
-    setArrayValue(slot.metaKey, [...current, trimmed])
-    setOpenArraySlotKey('')
+    // 单源去重/上限：与拖入/连线共用 appendArchetypeArrayValue（规则 1：不另开写路径）。
+    const result = appendArchetypeArrayValue(node.meta || {}, slot, url)
+    if (result.status === 'full') { showInfoToast(`最多 ${slot.max} 个${slot.label}`); return } // 到上限:明确告知(对抗评审:别静默丢)
+    if (result.status !== 'added') return // empty / duplicate：静默
+    setArrayValue(slot.metaKey, result.next)
+    setOpenSlotKey('')
   }
   const handleArrayRemove = (metaKey: string, index: number) => {
     const current = readArchetypeArray(node.meta || {}, metaKey)
-    setArrayValue(metaKey, current.filter((_, i) => i !== index))
+    const removedUrl = current[index] // 必须在 filter 前取(对抗评审 must-fix:删后数组已变)
+    const next = current.filter((_, i) => i !== index)
+    // image 数组(= character 参考)删除时,同步抹掉描述框里指向它的 @ chip。
+    // meta 删除 + prompt 改写**合并成单个 updateNode**(对抗评审 must-fix:保 undo 原子性 + 一次持久化;
+    // 走与现有 meta 删除同一持久化路径,不会出现刷新后 chip 复活)。chip/@ 只服务 image 参考,其余照旧。
+    if (metaKey === 'referenceImageUrls' && removedUrl) {
+      const nextPrompt = removeMention(node.prompt || '', removedUrl)
+      if (nextPrompt !== (node.prompt || '')) {
+        updateNode(node.id, { meta: { ...(node.meta || {}), [metaKey]: next }, prompt: nextPrompt })
+        return
+      }
+    }
+    setArrayValue(metaKey, next)
   }
   const handleArrayUpload = async (slot: ArchetypeArraySlot, file: File | null | undefined) => {
     if (!file) return
@@ -313,6 +378,19 @@ export default function NodeParameterControls({
     updateNode(node.id, { meta: { ...meta, ...patch } })
     setOpenSlotKey('')
   }
+  // 把单帧槽设成一个给定 URL（上传 / 选项目素材共用）：断开该组旧画布边(切到无源节点的 url)、写 flat meta。
+  const setSingleFrameUrlMeta = (slot: ImageUrlSlot, url: string) => {
+    const targetMode = edgeModeForGroup(slot.group)
+    const existingEdge = edges.find((e) => e.target === node.id && e.mode === targetMode)
+    if (existingEdge) storeDisconnectEdge(existingEdge.id)
+    const latestMeta = useGenerationCanvasStore.getState().nodes.find((n) => n.id === node.id)?.meta || meta
+    const patch: Record<string, unknown> = { [slot.key]: url, [slot.key + '_nodeRef']: null }
+    if (slot.group === 'first_frame') { patch.firstFrameUrl = url; patch.firstFrameRef = null }
+    if (slot.group === 'last_frame') { patch.lastFrameUrl = url; patch.lastFrameRef = null }
+    if (slot.group === 'reference') { patch.referenceImages = [url]; patch.referenceImageUrl = url; patch.referenceImageRef = null }
+    updateNode(node.id, { meta: { ...latestMeta, ...patch } })
+    setOpenSlotKey('')
+  }
   const handleSlotUpload = async (slot: ImageUrlSlot, file: File | null | undefined) => {
     if (!file) return
     if (!file.type.startsWith('image/')) {
@@ -328,15 +406,7 @@ export default function NodeParameterControls({
       })
       const url = assetUrl(uploaded)
       if (!url) throw new Error('服务器没有返回图片 URL')
-      const patch: Record<string, unknown> = {
-        [slot.key]: url,
-        [slot.key + '_nodeRef']: null,
-      }
-      if (slot.group === 'first_frame') { patch.firstFrameUrl = url; patch.firstFrameRef = null }
-      if (slot.group === 'last_frame') { patch.lastFrameUrl = url; patch.lastFrameRef = null }
-      if (slot.group === 'reference') { patch.referenceImages = [url]; patch.referenceImageUrl = url; patch.referenceImageRef = null }
-      updateNode(node.id, { meta: { ...(useGenerationCanvasStore.getState().nodes.find((n) => n.id === node.id)?.meta || meta), ...patch } })
-      setOpenSlotKey('')
+      setSingleFrameUrlMeta(slot, url)
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -358,40 +428,83 @@ export default function NodeParameterControls({
           { key: 'lastFrameUrl', label: '尾帧', group: 'last_frame' },
         ]
       : modelImageUrlSlots
-  const activeSlots = imageUrlSlots
   const modeChoices = archetype ? archetypeModeChoices(archetype) : []
   const showModeBar = modeChoices.length > 1
-  const candidateImageNodes = nodes.filter((item) => item.id !== node.id && isImageLikeGenerationNodeKind(item.kind))
-  // C3 数组参考槽（全能参考）：当前模式声明的数组槽 + 各自当前 URL 列表。
+  // 当前模式的数组参考槽（全能参考，meta-only）+ 源视频单槽（HappyHorse 视频编辑）。
   const arraySlots: ArchetypeArraySlot[] = archMode ? archetypeModeArraySlots(archMode) : []
-  const arrayValuesByKey: Record<string, string[]> = Object.fromEntries(
-    arraySlots.map((slot) => [slot.metaKey, readArchetypeArray(meta, slot.metaKey)]),
-  )
-  const arrayCandidates = candidateImageNodes
-    .map((item) => ({ id: item.id, title: item.title, url: resultPreviewUrl(item) }))
-    .filter((item) => item.url)
-  // D3：源视频单槽（HappyHorse 视频编辑）。
   const sourceVideoSlot = archMode ? archetypeModeSourceVideoSlot(archMode) : null
-  const sourceVideoUrl = sourceVideoSlot ? readMeta(meta, sourceVideoSlot.metaKey) : ''
-  // U2：当前模式含角色图槽且已放图 → 在 prompt 旁提示「用 character1.. 指代」。
-  const showCharacterCue = Boolean(archMode && modeHasCharacterSlot(archMode) && (arrayValuesByKey.referenceImageUrls?.length || 0) > 0)
   const showReferences = section === 'all' || section === 'references'
 
-  // section="settings"：设置弹层内容（标量参数，带标签）。开合由 composer 控制，渲染在卡底（不被裁剪）。
-  if (section === 'settings') {
-    if (renderedControls.length === 0) return null
-    return (
-      <SettingsPopover
-        open
-        controls={renderedControls}
-        meta={meta}
-        onParameterChange={handleParameterControlChange}
-        onCatalogChange={handleCatalogControlChange}
-      />
-    )
+  // ── P1 统一参考槽：声明式 AssetSlot 列表 + 当前值 + 三类回调（单帧连边 / 数组 meta / 源视频 meta，复用上面已验证的写入逻辑）──
+  const assetSlots: AssetSlot[] = [
+    ...imageUrlSlots.map((s): AssetSlot => ({ key: s.key, label: s.label, accept: 'image', form: 'single', persistAsEdge: true, numbered: false, max: 1 })),
+    ...arraySlots.map((s): AssetSlot => ({ key: s.metaKey, label: s.label, accept: s.accept, form: 'array', persistAsEdge: false, numbered: s.numbered, max: s.max, caption: s.caption })),
+    ...(sourceVideoSlot ? [{ key: sourceVideoSlot.metaKey, label: sourceVideoSlot.label, accept: 'video', form: 'single', persistAsEdge: false, numbered: false, max: 1 } as AssetSlot] : []),
+  ]
+  const assetValuesByKey: Record<string, string | string[]> = {}
+  for (const s of imageUrlSlots) {
+    const edgeSource = getEdgeSourceForSlot(s.group, edges, node.id)
+    const nodeRef = edgeSource || getSlotNodeRef(meta, s.key)
+    const thumbNode = nodeRef ? nodes.find((n) => n.id === nodeRef) : undefined
+    assetValuesByKey[s.key] = (thumbNode ? resultPreviewUrl(thumbNode) : null) || getSlotThumbUrl(meta, s.key, nodes) || readMeta(meta, s.key) || ''
+  }
+  for (const s of arraySlots) assetValuesByKey[s.metaKey] = readArchetypeArray(meta, s.metaKey)
+  if (sourceVideoSlot) assetValuesByKey[sourceVideoSlot.metaKey] = readMeta(meta, sourceVideoSlot.metaKey) || ''
+
+  const handleAssetPick = (slot: AssetSlot, asset: AssetRef) => {
+    if (slot.form === 'array') {
+      const arr = arraySlots.find((a) => a.metaKey === slot.key)
+      if (arr) handleArrayAdd(arr, asset.renderUrl)
+      setOpenSlotKey('')
+      return
+    }
+    if (slot.persistAsEdge) {
+      const img = imageUrlSlots.find((i) => i.key === slot.key)
+      if (!img) return
+      if (asset.source === 'canvas' && asset.origin.source === 'canvas') handleSlotAssignment(img, asset.origin.nodeId)
+      else setSingleFrameUrlMeta(img, asset.renderUrl)
+      return
+    }
+    updateMeta({ [slot.key]: asset.renderUrl })
+    setOpenSlotKey('')
+  }
+  const handleAssetUpload = async (slot: AssetSlot, file: File) => {
+    if (slot.form === 'array') {
+      const arr = arraySlots.find((a) => a.metaKey === slot.key)
+      if (arr) await handleArrayUpload(arr, file)
+      return
+    }
+    if (slot.persistAsEdge) {
+      const img = imageUrlSlots.find((i) => i.key === slot.key)
+      if (img) await handleSlotUpload(img, file)
+      return
+    }
+    await handleSourceVideoUpload(slot.key, file)
+  }
+  // 同槽内拖拽重排:移动 referenceXxxUrls 数组项(单源 setArrayValue 写入);character{N} 编号由
+  // projectPromptForSend 按新数组位置自动重算(单源,无需手动改 prompt/chip)。
+  const handleReorder = (slot: AssetSlot, from: number, to: number) => {
+    if (slot.form !== 'array') return
+    const arr = readArchetypeArray(node.meta || {}, slot.key)
+    if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return
+    setArrayValue(slot.key, moveArrayItem(arr, from, to))
+  }
+  const handleBrowseAll = () => {
+    setOpenSlotKey('')
+    window.dispatchEvent(new CustomEvent('nomi-open-files-panel'))
+  }
+  const handleAssetRemove = (slot: AssetSlot, index: number) => {
+    if (slot.form === 'array') { handleArrayRemove(slot.key, index); return }
+    if (slot.persistAsEdge) {
+      const img = imageUrlSlots.find((i) => i.key === slot.key)
+      if (img) handleSlotAssignment(img, '')
+      return
+    }
+    updateMeta({ [slot.key]: null })
   }
 
-  // section="parameters"：底栏 = 模型芯片(带 模板/通用 徽标) + 设置芯片(摘要 + 开设置弹层)。标量参数不在这，进弹层。
+  // section="parameters"：底栏 = 模型芯片 + 该模型**所有参数横排内联**（每个带小标签的 pill）。
+  // 参数不再藏进弹层——一眼可见、点一下就调；卡宽内容驱动(w-fit)，参数多则卡变宽、触上限在卡内换行。
   if (section === 'parameters') {
     if (modelOptions.length === 0) {
       return (
@@ -411,60 +524,79 @@ export default function NodeParameterControls({
         </button>
       )
     }
+    // 内联参数：统一用 NomiSelect（设计语言一致、对勾在右）；自由数值/文本无候选项的才保留输入 pill。
+    const renderInlineParam = (control: DynamicModelControl): JSX.Element => {
+      if (!isParameterControl(control)) {
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={catalogControlInitialValue(control, meta)}
+            options={control.options.map((o) => ({ value: optionValue(o), label: optionLabel(o) }))}
+            onChange={(v) => handleCatalogControlChange(control, v)}
+          />
+        )
+      }
+      if (control.type === 'boolean') {
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={controlInitialValue(control, meta) || 'false'}
+            options={[{ value: 'true', label: '开' }, { value: 'false', label: '关' }]}
+            onChange={(v) => handleParameterControlChange(control, v)}
+          />
+        )
+      }
+      if (control.options.length > 0) {
+        return (
+          <NomiSelect
+            key={control.key}
+            ariaLabel={control.label}
+            leadingLabel={control.label}
+            value={controlInitialValue(control, meta)}
+            options={control.options.map((o) => ({ value: controlValueToString(o.value), label: formatVideoOptionLabel(o.label, o.priceLabel) }))}
+            onChange={(v) => handleParameterControlChange(control, v)}
+          />
+        )
+      }
+      // 自由数值/文本（无候选项，如步数/seed）：保留小输入 pill（非下拉）。
+      return (
+        <label key={control.key} className={cn('inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper min-w-0 focus-within:border-nomi-accent')}>
+          <span className={cn('shrink-0 text-micro leading-none text-nomi-ink-40')}>{control.label}</span>
+          <input
+            className={cn('appearance-none bg-transparent border-0 outline-0 text-caption text-nomi-ink-80 min-w-0 w-[56px]')}
+            aria-label={control.label}
+            type={control.type === 'number' ? 'number' : 'text'}
+            value={controlInitialValue(control, meta)}
+            min={control.min}
+            max={control.max}
+            step={control.step}
+            placeholder={control.placeholder}
+            onChange={(e) => handleParameterControlChange(control, e.target.value)}
+          />
+        </label>
+      )
+    }
     return (
-      <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-1 flex-nowrap items-center gap-2 min-w-0')}>
-        <div className={cn('inline-flex items-center gap-1.5 min-w-0')}>
-          <div className={cn('relative inline-flex items-center')}>
-            <select
-              className={cn(
-                'appearance-none h-7 max-w-[164px] pl-3 pr-7 rounded-pill',
-                'border border-nomi-line bg-nomi-paper text-nomi-ink-80 font-[inherit] text-caption',
-                'cursor-pointer outline-0 focus:border-nomi-accent truncate',
-              )}
-              style={{
-                backgroundImage:
-                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a8a29e' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>\")",
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 10px center',
-              }}
-              aria-label="模型"
-              value={selectedModelOption?.value || ''}
-              onChange={(event) => handleModelChange(event.target.value)}
-            >
-              <option value="">选择模型</option>
-              {modelOptions.map((option) => (
-                <option key={option.value || 'auto'} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          {selectedModelOption ? (
-            <span
-              className={cn(
-                'shrink-0 text-micro leading-none px-1.5 py-[3px] rounded-pill',
-                archetype ? 'bg-nomi-accent-soft text-nomi-accent' : 'bg-nomi-ink-10 text-nomi-ink-60',
-              )}
-              title={archetype ? '认得这个模型 · 用内置模板' : '未识别 · 通用回退（按接入文档原样展示）'}
-            >{archetype ? '模板' : '通用'}</span>
-          ) : null}
-        </div>
-        {renderedControls.length > 0 && onToggleSettings ? (
-          <button
-            type="button"
-            data-open={settingsOpen ? 'true' : 'false'}
-            aria-expanded={settingsOpen}
-            className={cn(
-              'inline-flex items-center gap-1.5 h-7 px-3 rounded-pill min-w-0',
-              'border border-nomi-line bg-nomi-paper text-nomi-ink-80 font-[inherit] text-caption cursor-pointer',
-              'hover:border-nomi-ink-20',
-              'data-[open=true]:border-nomi-accent data-[open=true]:text-nomi-accent data-[open=true]:bg-nomi-accent-soft',
-            )}
-            aria-label="生成设置"
-            onClick={(event) => { event.stopPropagation(); onToggleSettings() }}
-          >
-            <span className="truncate">{buildSettingsSummary(renderedControls, meta) || '设置'}</span>
-            <span className={cn('shrink-0 text-nomi-ink-40 text-micro')}>▾</span>
-          </button>
-        ) : null}
+      <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-nowrap items-center gap-2')}>
+        {/* 模型芯片：NomiSelect——值右侧嵌「模板/通用」徽标，选项里每个模型也标注。 */}
+        <NomiSelect
+          ariaLabel="模型"
+          placeholder="选择模型"
+          triggerMaxWidth={150}
+          value={selectedModelOption?.value || ''}
+          triggerBadge={selectedModelOption ? { text: archetype ? '模板' : '通用', tone: archetype ? 'accent' : 'muted' } : undefined}
+          options={modelOptions.map((option) => {
+            const hasArchetype = Boolean(resolveArchetypeForOption(option))
+            return { value: option.value, label: option.label, trailing: hasArchetype ? '模板' : '通用', trailingTone: hasArchetype ? 'accent' as const : 'muted' as const }
+          })}
+          onChange={(v) => handleModelChange(v)}
+        />
+        {/* 该模型的标量参数：横排内联，每个带标签，全可见 */}
+        {renderedControls.map((control) => renderInlineParam(control))}
       </div>
     )
   }
@@ -482,163 +614,21 @@ export default function NodeParameterControls({
         <ModeBar choices={modeChoices} activeId={archMode?.id || ''} onSelect={handleModeSwitch} />
       ) : null}
 
-      {showReferences && sourceVideoSlot ? (
-        <div className={cn('flex flex-col gap-[4px]')}>
-          <span className={cn('text-nomi-ink-60 text-micro leading-none')}>{sourceVideoSlot.label}</span>
-          <div className={cn('flex items-center gap-[6px]')}>
-            {sourceVideoUrl ? (
-              <div className={cn('relative w-12 h-12 rounded-nomi-sm border border-nomi-line bg-nomi-ink-05 overflow-hidden flex items-center justify-center')}>
-                <IconVideo size={20} stroke={1.5} className={cn('text-nomi-ink-40')} />
-                <button
-                  type="button"
-                  aria-label="移除源视频"
-                  className={cn('absolute -top-[4px] -right-[4px] w-[15px] h-[15px] rounded-pill bg-nomi-paper border border-nomi-line text-nomi-ink-60 text-micro leading-none flex items-center justify-center cursor-pointer')}
-                  onClick={(event) => { event.stopPropagation(); updateMeta({ [sourceVideoSlot.metaKey]: null }) }}
-                >×</button>
-              </div>
-            ) : (
-              <label className={cn('h-7 px-[10px] rounded-pill border border-dashed border-nomi-ink-20 bg-nomi-paper text-nomi-ink-60 text-micro inline-flex items-center gap-1 cursor-pointer hover:border-nomi-accent hover:text-nomi-accent')}>
-                {uploadingArrayKey === sourceVideoSlot.metaKey ? '上传中…' : `＋ ${sourceVideoSlot.label}`}
-                <input
-                  className={cn('absolute w-px h-px opacity-0 overflow-hidden')}
-                  type="file"
-                  accept="video/*"
-                  aria-label={`上传${sourceVideoSlot.label}`}
-                  disabled={Boolean(uploadingArrayKey)}
-                  onChange={(event) => { const f = event.currentTarget.files?.[0] || null; void handleSourceVideoUpload(sourceVideoSlot.metaKey, f); event.currentTarget.value = '' }}
-                />
-              </label>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {showReferences && imageUrlSlots.length > 0 ? (
-        <div className={cn('generation-canvas-v2-node__ref-pickers', 'flex gap-[5px]')}>
-          {activeSlots.map((slot) => {
-            const edgeSource = getEdgeSourceForSlot(slot.group, edges, node.id)
-            const metaRef = getSlotNodeRef(meta, slot.key)
-            const nodeRef = edgeSource || metaRef
-            const thumbNode = nodeRef ? nodes.find((n) => n.id === nodeRef) : undefined
-            const thumbUrl = (thumbNode ? resultPreviewUrl(thumbNode) : null) || getSlotThumbUrl(meta, slot.key, nodes)
-            const isEdgeConnected = Boolean(edgeSource)
-            const isOpen = openSlotKey === slot.key
-            return (
-              <div key={slot.key} className={cn('generation-canvas-v2-node__ref-picker', 'relative grid flex-none gap-[3px] justify-items-center')}>
-                <WorkbenchButton
-                  className={cn(
-                    'generation-canvas-v2-node__ref-thumb',
-                    'relative w-12 h-12 p-0 rounded-nomi-sm',
-                    'border border-dashed border-nomi-line-soft',
-                    'bg-nomi-ink-05 text-nomi-ink-30 overflow-hidden',
-                    'flex items-center justify-center cursor-pointer',
-                    'data-[filled=true]:border-solid data-[filled=true]:border-nomi-line',
-                    'data-[edge=true]:border-solid data-[edge=true]:border-[oklch(0.6_0.14_250)] data-[edge=true]:shadow-[0_0_0_1px_oklch(0.6_0.14_250)]',
-                  )}
-                  aria-label={slot.label}
-                  data-filled={thumbUrl ? 'true' : 'false'}
-                  data-edge={isEdgeConnected ? 'true' : 'false'}
-                  title={slot.label}
-                  onClick={() => setOpenSlotKey(isOpen ? '' : slot.key)}
-                >
-                  {thumbUrl ? (
-                    <img className={cn('w-full h-full object-cover')} src={thumbUrl} alt={slot.label} />
-                  ) : (
-                    <span className={cn('text-nomi-ink-30 text-[16px] leading-none select-none pointer-events-none')}>+</span>
-                  )}
-                </WorkbenchButton>
-                {isOpen ? (
-                  <div
-                    className={cn(
-                      'generation-canvas-v2-node__ref-menu',
-                      'absolute top-[54px] left-0 z-[3]',
-                      'grid grid-cols-[repeat(4,32px)] gap-1 w-max max-w-[148px] p-[5px]',
-                      'border border-nomi-line-soft rounded-nomi',
-                      'bg-nomi-paper shadow-nomi-lg',
-                    )}
-                    role="menu"
-                    aria-label={`${slot.label}来源`}
-                  >
-                    <label className={cn(
-                      'generation-canvas-v2-node__ref-menu-item',
-                      'relative flex items-center justify-center w-8 h-8 p-0',
-                      'border-0 rounded-nomi-sm bg-nomi-ink-05 text-nomi-ink-40',
-                      'font-[inherit] overflow-hidden cursor-pointer',
-                    )}>
-                      <span className={cn('text-nomi-ink-30 text-[16px] leading-none select-none pointer-events-none')}>{uploadingSlotKey === slot.key ? '…' : '+'}</span>
-                      <input
-                        className={cn('absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default')}
-                        aria-label={`${slot.label}本地图像`}
-                        type="file"
-                        accept="image/*"
-                        disabled={Boolean(uploadingSlotKey)}
-                        onChange={(event) => {
-                          const file = event.currentTarget.files?.[0] || null
-                          void handleSlotUpload(slot, file)
-                          event.currentTarget.value = ''
-                        }}
-                      />
-                    </label>
-                    {candidateImageNodes.map((item) => {
-                      const itemUrl = resultPreviewUrl(item)
-                      if (!itemUrl) return null
-                      return (
-                        <WorkbenchButton
-                          key={item.id}
-                          className={cn(
-                            'generation-canvas-v2-node__ref-menu-item',
-                            'relative flex items-center justify-center w-8 h-8 p-0',
-                            'border-0 rounded-nomi-sm bg-nomi-ink-05 text-nomi-ink-40',
-                            'font-[inherit] overflow-hidden cursor-pointer',
-                          )}
-                          aria-label={item.title}
-                          onClick={() => handleSlotAssignment(slot, item.id)}
-                        >
-                          <img className={cn('w-full h-full object-cover')} src={itemUrl} alt={item.title} />
-                        </WorkbenchButton>
-                      )
-                    })}
-                    {nodeRef ? (
-                      <WorkbenchButton
-                        className={cn(
-                          'generation-canvas-v2-node__ref-menu-item',
-                          'relative flex items-center justify-center w-8 h-8 p-0',
-                          'border-0 rounded-nomi-sm bg-nomi-ink-05',
-                          'text-workbench-danger text-[15px]',
-                          'font-[inherit] overflow-hidden cursor-pointer',
-                        )}
-                        aria-label="清除参考图"
-                        onClick={() => handleSlotAssignment(slot, '')}
-                      >
-                        ×
-                      </WorkbenchButton>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
-
-      {showReferences && arraySlots.length > 0 ? (
-        <ReferenceSlots
-          slots={arraySlots}
-          valuesByKey={arrayValuesByKey}
-          candidates={arrayCandidates}
-          openKey={openArraySlotKey}
-          uploadingKey={uploadingArrayKey}
-          onToggleMenu={(metaKey) => setOpenArraySlotKey((prev) => (prev === metaKey ? '' : metaKey))}
-          onPickNode={(metaKey, url) => { const slot = arraySlots.find((s) => s.metaKey === metaKey); if (slot) handleArrayAdd(slot, url) }}
-          onUpload={(slot, file) => { void handleArrayUpload(slot, file) }}
-          onRemove={handleArrayRemove}
+      {showReferences && assetSlots.length > 0 ? (
+        <AssetReference
+          slots={assetSlots}
+          valuesByKey={assetValuesByKey}
+          projectId={getDesktopActiveProjectId() || null}
+          openSlotKey={openSlotKey}
+          uploadingSlotKey={uploadingSlotKey || uploadingArrayKey}
+          onTogglePicker={(key) => setOpenSlotKey((prev) => (prev === key ? '' : key))}
+          onPick={handleAssetPick}
+          onUpload={(slot, file) => { void handleAssetUpload(slot, file) }}
+          onRemove={handleAssetRemove}
+          onInsertMention={onInsertMention}
+          onReorder={handleReorder}
+          onBrowseAll={handleBrowseAll}
         />
-      ) : null}
-
-      {showReferences && showCharacterCue ? (
-        <div className={cn('text-nomi-ink-60 text-[10.5px] leading-[1.35]')}>
-          提示：在描述里用 <span className="text-nomi-accent">character1</span>、<span className="text-nomi-accent">character2</span>… 指代上面的角色图
-        </div>
       ) : null}
 
       {showReferences && uploadError ? (

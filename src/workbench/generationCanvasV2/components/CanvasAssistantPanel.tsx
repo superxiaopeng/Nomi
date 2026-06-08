@@ -1,5 +1,5 @@
-import { IconSend2, IconX } from '@tabler/icons-react'
-import { NomiAILabel, WorkbenchButton, WorkbenchIconButton } from '../../../design'
+import { IconCornerDownLeft, IconPlayerStopFilled, IconSend2, IconX } from '@tabler/icons-react'
+import { NomiAILabel, NomiLoadingMark, NomiLogoMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../../design'
 import React from 'react'
 import { cn } from '../../../utils/cn'
 import {
@@ -9,19 +9,26 @@ import {
 import { workbenchSessionKey } from '../../ai/workbenchAgentRunner'
 import { clearWorkbenchAgentSession } from '../../../api/desktopClient'
 import { generationCanvasTools } from '../agent/generationCanvasTools'
+import { applyCanvasToolCall } from '../agent/applyCanvasToolCall'
 import {
   buildStoryboardPlanningMessage,
   STORYBOARD_PLANNER_SKILL,
   STORYBOARD_PLANNING_EVENT,
   type StoryboardPlanningRequest,
 } from '../agent/storyboardLauncher'
+import {
+  buildFixationPlanningMessage,
+  FIXATION_PLANNER_SKILL,
+  FIXATION_PLANNING_EVENT,
+  type FixationPlanningRequest,
+} from '../agent/fixationLauncher'
 import AgentPlanCard, { summarizeAgentPlan } from './AgentPlanCard'
-import { getGenerationNodeDefaultTitle } from '../model/generationNodeKinds'
-import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { AiReplyActionButton } from '../../ai/AiReplyActionButton'
 import { handleAiComposerKeyDown } from '../../ai/aiComposerKeyboard'
-import { openWorkbenchModelIntegration, WorkbenchAiHeaderActions } from '../../ai/WorkbenchAiHeaderActions'
+import { WorkbenchAiHeaderActions } from '../../ai/WorkbenchAiHeaderActions'
+import AssistantModelPicker from '../../ai/AssistantModelPicker'
+import { AssistantToolsFold } from '../../ai/AssistantToolsFold'
 
 type PendingToolCall = {
   toolCallId: string
@@ -71,6 +78,9 @@ function createMessageId(): string {
   return `assistant-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// 文字里像「要动画布却没动」的意图特征——配合零工具发射判定「只说不做」，提示换模型。
+const AGENT_ACTION_INTENT = /创建|生成|添加|新增|修改|删除|替换|连接|拆镜头|分镜|节点|我将|我会|我来|计划|操作/
+
 export default function CanvasAssistantPanel({
   defaultCollapsed = false,
   onCollapsedChange,
@@ -81,6 +91,9 @@ export default function CanvasAssistantPanel({
   const snapshot = React.useMemo(() => generationCanvasTools.read_canvas(), [nodes, edges, selectedNodeIds])
   const selectedNodes = React.useMemo(() => generationCanvasTools.read_selected_nodes(), [nodes, selectedNodeIds])
   const [busy, setBusy] = React.useState(false)
+  // Cancel handle for the in-flight agent turn (user "Stop"); set once the
+  // backend session exists, cleared when the turn ends.
+  const cancelRef = React.useRef<(() => void) | null>(null)
   const [mode, setMode] = React.useState<'agent' | 'chat' | 'refine'>('agent')
   const [pendingToolCalls, setPendingToolCalls] = React.useState<PendingToolCall[]>([])
   const threadBottomRef = React.useRef<HTMLDivElement | null>(null)
@@ -139,71 +152,6 @@ export default function CanvasAssistantPanel({
     )))
   }, [setMessages])
 
-  /**
-   * Apply a confirmed tool call by routing through the renderer-side
-   * generationCanvasTools store. Returns a structured result that we feed
-   * back to the LLM. Phase B left this referenced but undefined; C2/C3
-   * fills the gap so the confirmation card can actually mutate the canvas.
-   */
-  const applyConfirmedToolCall = React.useCallback(async (toolName: string, args: unknown): Promise<unknown> => {
-    const record = (args && typeof args === 'object') ? args as Record<string, unknown> : {}
-    if (toolName === 'create_canvas_nodes') {
-      const incoming = Array.isArray(record.nodes) ? record.nodes : []
-      const inputs = incoming.map((raw, index) => {
-        const node = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
-        const kind = (typeof node.kind === 'string' ? node.kind : 'image') as GenerationNodeKind
-        const positionRecord = (node.position && typeof node.position === 'object') ? node.position as Record<string, unknown> : null
-        return {
-          kind,
-          title: typeof node.title === 'string' && node.title.trim()
-            ? node.title.trim()
-            : `${getGenerationNodeDefaultTitle(kind)} ${index + 1}`,
-          prompt: typeof node.prompt === 'string' ? node.prompt : '',
-          position: {
-            x: typeof positionRecord?.x === 'number' ? positionRecord.x : 160 + index * 340,
-            y: typeof positionRecord?.y === 'number' ? positionRecord.y : 260 + (index % 2) * 220,
-          },
-        }
-      })
-      const created = generationCanvasTools.create_nodes(inputs)
-      const clientIdToNodeId: Record<string, string> = {}
-      incoming.forEach((raw, index) => {
-        const node = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
-        const clientId = typeof node.clientId === 'string' ? node.clientId : ''
-        if (clientId && created[index]) clientIdToNodeId[clientId] = created[index].id
-      })
-      return {
-        createdNodeIds: created.map((node) => node.id),
-        clientIdToNodeId,
-      }
-    }
-    if (toolName === 'connect_canvas_edges') {
-      const rawEdges = Array.isArray(record.edges) ? record.edges : []
-      const edges = rawEdges
-        .map((raw) => (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {})
-        .map((edge) => ({
-          source: String(edge.sourceClientId || edge.source || '').trim(),
-          target: String(edge.targetClientId || edge.target || '').trim(),
-        }))
-        .filter((edge) => edge.source && edge.target)
-      if (edges.length > 0) generationCanvasTools.connect_nodes(edges)
-      return { connectedCount: edges.length }
-    }
-    if (toolName === 'set_node_prompt') {
-      const nodeId = String(record.nodeId || '').trim()
-      const prompt = typeof record.prompt === 'string' ? record.prompt : ''
-      const node = generationCanvasTools.update_node_prompt(nodeId, prompt)
-      if (!node) throw new Error('node_not_found')
-      return { nodeId: node.id }
-    }
-    if (toolName === 'delete_canvas_nodes') {
-      const nodeIds = Array.isArray(record.nodeIds) ? record.nodeIds.map((id) => String(id || '').trim()).filter(Boolean) : []
-      const deleted = generationCanvasTools.delete_nodes(nodeIds)
-      return { deletedNodeIds: deleted }
-    }
-    throw new Error(`unknown tool ${toolName}`)
-  }, [])
-
   type SubmitMessageOptions = {
     skill?: { key: string; name: string }
     displayMessage?: string
@@ -221,6 +169,9 @@ export default function CanvasAssistantPanel({
     setBusy(true)
     void (async () => {
       let toolActionCount = 0
+      // 本轮模型是否发出过任何 tool 调用（含只读）。0 = 模型只回文字、没触发任何操作——
+      // 自动选模型撞到不会工具调用的模型时的典型「只说不做」（2026-06-07 走查 P0）。
+      let toolEmittedCount = 0
       try {
         const result = await sendGenerationCanvasAgentMessage({
           message: text,
@@ -231,11 +182,21 @@ export default function CanvasAssistantPanel({
           onContent: (_delta, streamedText) => {
             updateMessage(assistantMessageId, streamedText || '处理中...')
           },
+          onCancelReady: (cancel) => {
+            cancelRef.current = cancel
+          },
           onToolCall: (event: ToolCallEvent) => {
-            // Read-only tools auto-execute without user interaction.
+            toolEmittedCount += 1
+            // Read-only tools auto-execute without user interaction. Wrap in
+            // try/catch so a read failure can't strand the agent loop waiting
+            // for a confirm that never comes.
             if (event.toolName === 'read_canvas_state') {
-              const snap = generationCanvasTools.read_canvas()
-              void event.confirm({ ok: true, result: snap })
+              try {
+                const snap = generationCanvasTools.read_canvas()
+                void event.confirm({ ok: true, result: snap })
+              } catch (error: unknown) {
+                void event.confirm({ ok: false, message: error instanceof Error ? error.message : String(error) })
+              }
               return
             }
             // Destructive / state-changing tools wait for explicit user
@@ -251,7 +212,7 @@ export default function CanvasAssistantPanel({
                     : {}
                   const effectiveArgs = overrides ? { ...baseArgs, ...overrides } : baseArgs
                   try {
-                    const result = await applyConfirmedToolCall(event.toolName, effectiveArgs)
+                    const result = await applyCanvasToolCall(event.toolName, effectiveArgs)
                     toolActionCount += 1
                     await event.confirm({ ok: true, result })
                   } catch (error: unknown) {
@@ -272,6 +233,12 @@ export default function CanvasAssistantPanel({
             assistantMessageId,
             `${finalText ? finalText + '\n\n' : ''}已执行 ${toolActionCount} 个工具调用。`,
           )
+        } else if (toolEmittedCount === 0 && mode === 'agent' && AGENT_ACTION_INTENT.test(finalText)) {
+          // 模型只回文字、没发任何工具调用，但话里像是要操作 → 多半是当前模型不擅长工具调用。
+          updateMessage(
+            assistantMessageId,
+            `${finalText}\n\n⚠️ 这一轮 AI 只回复了文字、没有真正动画布。如果你是想生成或修改节点，多半是当前模型不擅长工具调用——点上方「模型」换一个（推荐 GPT / Claude / DeepSeek 系）再试一次。`,
+          )
         } else {
           updateMessage(assistantMessageId, finalText || '已完成。')
         }
@@ -282,9 +249,10 @@ export default function CanvasAssistantPanel({
         )
       } finally {
         setBusy(false)
+        cancelRef.current = null
       }
     })()
-  }, [appendMessage, applyConfirmedToolCall, busy, mode, selectedNodes, setDraft, setMessages, snapshot, updateMessage])
+  }, [appendMessage, busy, mode, selectedNodes, setDraft, setMessages, snapshot, updateMessage])
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -310,6 +278,24 @@ export default function CanvasAssistantPanel({
     }
     window.addEventListener(STORYBOARD_PLANNING_EVENT, handler as EventListener)
     return () => window.removeEventListener(STORYBOARD_PLANNING_EVENT, handler as EventListener)
+  }, [setCollapsed, submitAgentMessage])
+
+  // Tier2 定妆/定景：创作区「💄 定妆」触发 → 跑 fixation planner skill，按剧本建角色/场景卡 +
+  // 注入身份板提示词（与 storyboard 同构）。
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<FixationPlanningRequest>).detail
+      const storyText = detail?.storyText?.trim() || ''
+      if (!storyText) return
+      setCollapsed(false)
+      const message = buildFixationPlanningMessage(storyText)
+      submitAgentMessage(message, {
+        skill: FIXATION_PLANNER_SKILL,
+        displayMessage: `💄 定妆\n\n${storyText}`,
+      })
+    }
+    window.addEventListener(FIXATION_PLANNING_EVENT, handler as EventListener)
+    return () => window.removeEventListener(FIXATION_PLANNING_EVENT, handler as EventListener)
   }, [setCollapsed, submitAgentMessage])
 
   const handleNewConversation = React.useCallback(() => {
@@ -350,7 +336,11 @@ export default function CanvasAssistantPanel({
     <aside
       className={cn(
         'generation-canvas-v2-assistant',
-        'grid grid-rows-[auto_minmax(0,1fr)_auto] w-[340px] h-full',
+        // flexbox 而非 grid-rows-[…minmax(0,1fr)…] 任意值——后者在本环境解析异常，
+        // 把工具条行撑成 145px 留出 ~120px 空白（用户反馈"上面空这么大"的真凶）。
+        // 宽度撑满外层可拖拽的 grid 列（GenerationWorkspace 把列宽推到 assistantWidth），
+        // 之前写死 w-[340px] → 拖宽后右侧一大片空白、header 右簇被 overflow-hidden 裁断 token。
+        'flex flex-col w-full h-full',
         'max-h-none min-w-0 min-h-0 overflow-hidden',
         'border-0 rounded-none bg-nomi-paper shadow-none',
         'max-[900px]:w-[min(340px,calc(100vw-28px))]',
@@ -360,31 +350,29 @@ export default function CanvasAssistantPanel({
       data-collapsed="false"
       aria-label="生成区 AI 助手"
     >
+      {/* 头部：Nomi 标 + 「助手」+ 动作（含 token 计数）+ 收起。 */}
       <header className={cn(
-        'flex items-center justify-between gap-[10px]',
-        'min-h-[53px] px-4 py-[14px]',
+        'flex items-center justify-between gap-2 px-3 py-2',
         'border-b border-nomi-line-soft bg-nomi-paper',
       )}>
         <div className={cn('flex items-center gap-2 min-w-0')}>
-          <NomiAILabel suffix="生成" />
+          <NomiLogoMark size={18} />
+          <span className={cn('text-bodySm font-semibold text-nomi-ink')}>助手</span>
         </div>
-        <div className={cn('inline-flex items-center flex-nowrap gap-[6px] ml-auto')}>
+        <div className={cn('inline-flex items-center gap-2 ml-auto min-w-0')}>
           <WorkbenchAiHeaderActions
-            className="generation-canvas-v2-assistant__shared-actions"
+            className={cn('generation-canvas-v2-assistant__shared-actions', 'inline-flex items-center flex-nowrap gap-1')}
             actionClassName={cn(
-              'min-w-[26px] w-[26px] h-[26px] inline-grid place-items-center',
-              'p-0 border-0 rounded-nomi-sm bg-transparent',
-              'text-nomi-ink-60 font-[inherit] text-[12.5px] cursor-pointer',
+              'size-6 inline-grid place-items-center',
+              'p-0 border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
               'hover:bg-nomi-ink-05 hover:text-nomi-ink',
             )}
-            onModelIntegration={openWorkbenchModelIntegration}
             onNewConversation={handleNewConversation}
           />
           <WorkbenchIconButton
             className={cn(
-              'min-w-[26px] w-[26px] h-[26px] inline-grid place-items-center',
-              'p-0 border-0 rounded-nomi-sm bg-transparent',
-              'text-nomi-ink-60 font-[inherit] text-[12.5px] cursor-pointer',
+              'size-6 inline-grid place-items-center',
+              'p-0 border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
               'hover:bg-nomi-ink-05 hover:text-nomi-ink',
             )}
             label="收起 AI"
@@ -393,28 +381,31 @@ export default function CanvasAssistantPanel({
           />
         </div>
       </header>
-      <div className={cn('flex flex-col gap-3 min-h-0 overflow-auto p-4')}>
+      <AssistantToolsFold tools={['读画布', '建节点', '设提示词', '连边', '删节点']} />
+      <div className={cn('flex flex-1 flex-col gap-3 min-h-0 overflow-auto p-4')}>
         {messages.length === 0 && pendingToolCalls.length === 0 ? (
           <div className={cn(
-            'flex flex-1 flex-col items-center justify-center gap-[10px]',
+            'flex flex-1 flex-col items-center justify-center gap-2',
             'max-w-[240px] mx-auto py-6 px-3 text-center',
           )}>
-            <div className={cn('text-nomi-ink font-[Fraunces,Inter,serif] text-[17px] font-medium')}>需要 AI 帮忙？</div>
-            <div className={cn('text-nomi-ink-60 text-[13px] leading-[1.55]')}>
-              告诉 AI 你想怎么改，它会写入待确认节点。
+            <div className={cn('text-nomi-ink font-[Fraunces,Inter,serif] text-title font-medium')}>我帮你搭画布</div>
+            <div className={cn('text-nomi-ink-60 text-bodySm leading-relaxed')}>
+              铺镜头、改提示词、连节点都交给我；出图按节点上的「生成」键。
             </div>
-            <div className={cn('flex flex-col gap-[6px] w-full mt-2')}>
-              {['把第一帧改成黄昏色调', '在末尾追加一帧', '整体风格统一为水彩'].map((suggestion) => (
+            <div className={cn('flex flex-col gap-1.5 w-full mt-2')}>
+              {['列 3 个镜头铺到画布', '给选中的镜头写一版提示词', '把镜头按先后顺序连起来'].map((suggestion) => (
                 <WorkbenchButton
                   key={suggestion}
                   className={cn(
-                    'min-h-[34px] py-2 px-3 border border-transparent rounded-nomi',
-                    'bg-nomi-ink-05 text-nomi-ink-80 font-[inherit] text-[12.5px] text-left cursor-pointer',
+                    'w-full min-h-9 py-2 px-3 border border-transparent rounded-nomi',
+                    'flex items-center justify-between gap-2 text-left font-normal',
+                    'bg-nomi-ink-05 text-nomi-ink-80 cursor-pointer',
                     'hover:border-nomi-line hover:bg-nomi-paper hover:text-nomi-ink',
                   )}
-                  onClick={() => setDraft(suggestion)}
+                  onClick={() => submitAgentMessage(suggestion)}
                 >
-                  {suggestion}
+                  <span className={cn('min-w-0')}>{suggestion}</span>
+                  <IconCornerDownLeft size={13} className={cn('shrink-0 text-nomi-ink-40')} />
                 </WorkbenchButton>
               ))}
             </div>
@@ -426,14 +417,19 @@ export default function CanvasAssistantPanel({
               className={cn(
                 'relative max-w-[90%] py-[10px] px-[14px] rounded-nomi',
                 'bg-nomi-ink-05 text-nomi-ink text-[13.5px] leading-[1.55] whitespace-pre-wrap',
-                message.role === 'user' && 'self-end rounded-br-[4px] bg-nomi-ink text-nomi-paper',
+                message.role === 'user' && 'self-end rounded-br-[4px]',
                 message.role === 'assistant' && 'self-start rounded-bl-[4px]',
                 message.role === 'tool' && 'self-start bg-nomi-accent-soft text-nomi-accent',
               )}
               data-role={message.role}
             >
-              {message.content}
-              {message.role !== 'user' ? (
+              {message.role === 'assistant' && message.content === '处理中...' ? (
+                // 与创作助手一致：消息处理中时左侧显示转动的 N（NomiLoadingMark），而非干巴巴的「处理中...」文字。
+                <NomiLoadingMark size={15} label="处理中" />
+              ) : (
+                message.content
+              )}
+              {message.role !== 'user' && message.content !== '处理中...' ? (
                 <AiReplyActionButton
                   className="generation-canvas-v2-assistant__reply-action"
                   content={message.content}
@@ -476,7 +472,7 @@ export default function CanvasAssistantPanel({
                     >
                       <div className={cn('text-nomi-ink text-[13px] font-medium')}>{call.toolName}</div>
                       <div className={cn('text-nomi-ink-80 text-[12.5px]')}>{summarizeToolCall(call.toolName, call.args)}</div>
-                      <details className={cn('text-nomi-ink-60 text-[11.5px]')}>
+                      <details className={cn('text-nomi-ink-60 text-caption')}>
                         <summary className={cn('cursor-pointer select-none')}>查看参数</summary>
                         <pre className={cn('mt-1 max-h-[160px] overflow-auto p-2 rounded-nomi-sm bg-nomi-ink-05 text-[11px] leading-[1.4] whitespace-pre-wrap break-all')}>
                           {JSON.stringify(call.args, null, 2)}
@@ -517,13 +513,15 @@ export default function CanvasAssistantPanel({
       >
         <textarea
           className={cn(
-            'w-full min-h-[40px] p-0 border-0 outline-0 resize-none',
-            'bg-transparent text-nomi-ink font-[inherit] text-[13.5px] leading-[1.45]',
+            // 对齐样张 .input：带边框圆角输入盒。
+            'w-full min-h-14 px-2 py-2 resize-none rounded-nomi',
+            'border border-nomi-line outline-0 focus:border-nomi-accent',
+            'bg-nomi-paper text-nomi-ink font-[inherit] text-[13.5px] leading-[1.45]',
             'placeholder:text-nomi-ink-40',
           )}
           aria-label="给生成助手发送消息"
           rows={1}
-          placeholder="输入你的设计需求..."
+          placeholder="告诉我画布上想怎么搭..."
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => handleAiComposerKeyDown(event, () => {
@@ -531,37 +529,50 @@ export default function CanvasAssistantPanel({
           })}
           disabled={busy}
         />
-        <div className={cn('flex items-center justify-between gap-3')}>
-          <label className={cn('flex items-center gap-[6px]')}>
-            <span className={cn('text-nomi-ink-40 text-[11.5px]')}>模式</span>
-            <select
-              className={cn(
-                'h-[25px] px-[6px] py-[3px]',
-                'border border-nomi-line-soft rounded-nomi-sm outline-0',
-                'bg-nomi-ink-05 text-nomi-ink-80 font-[inherit] text-xs',
-              )}
-              aria-label="AI 模式"
+        <div className={cn('flex items-center justify-between gap-2')}>
+          <div className={cn('flex items-center gap-2 min-w-0')}>
+            <NomiSelect
+              ariaLabel="AI 模式"
+              leadingLabel="模式"
+              size="sm"
               value={mode}
-              onChange={(event) => setMode(event.currentTarget.value as 'agent' | 'chat' | 'refine')}
-            >
-              <option value="agent">Agent</option>
-              <option value="chat">问答</option>
-              <option value="refine">润色</option>
-            </select>
-          </label>
-          <WorkbenchIconButton
-            type="submit"
-            className={cn(
-              'w-[30px] h-[30px] grid place-items-center',
-              'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
-              'hover:enabled:bg-nomi-accent',
-              'disabled:bg-nomi-ink-20 disabled:text-nomi-ink-40 disabled:cursor-not-allowed',
-            )}
-            disabled={busy || !draft.trim()}
-            label="发送"
-            aria-label="生成 AI 发送"
-            icon={<IconSend2 size={15} />}
-          />
+              options={[
+                { value: 'agent', label: 'Agent' },
+                { value: 'chat', label: '问答' },
+                { value: 'refine', label: '润色' },
+              ]}
+              onChange={(value) => setMode(value as 'agent' | 'chat' | 'refine')}
+            />
+            <AssistantModelPicker className="h-7" />
+          </div>
+          {busy ? (
+            <WorkbenchIconButton
+              type="button"
+              onClick={() => cancelRef.current?.()}
+              className={cn(
+                'size-7 grid place-items-center',
+                'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
+                'hover:enabled:bg-nomi-accent',
+              )}
+              label="停止"
+              aria-label="停止生成"
+              icon={<IconPlayerStopFilled size={13} />}
+            />
+          ) : (
+            <WorkbenchIconButton
+              type="submit"
+              className={cn(
+                'size-7 grid place-items-center',
+                'border-0 rounded-full bg-nomi-ink text-nomi-paper cursor-pointer',
+                'hover:enabled:bg-nomi-accent',
+                'disabled:bg-nomi-ink-20 disabled:text-nomi-ink-40 disabled:cursor-not-allowed',
+              )}
+              disabled={!draft.trim()}
+              label="发送"
+              aria-label="生成 AI 发送"
+              icon={<IconSend2 size={15} />}
+            />
+          )}
         </div>
       </form>
     </aside>

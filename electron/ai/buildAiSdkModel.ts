@@ -13,11 +13,13 @@
  * editing this file.
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV1 } from "ai";
 import { applyProfileToRequestBody, getModelProfile } from "./modelProfiles";
-
-export type AiSdkProviderKind = "openai-compatible" | "anthropic";
+// 单一真相源：provider-kind 联合定义在 catalog/types，这里只 re-export，避免并行定义漂移（规则 1）。
+import type { AiSdkProviderKind } from "../catalog/types";
+export type { AiSdkProviderKind };
 
 export interface BuildAiSdkModelInput {
   kind: AiSdkProviderKind;
@@ -59,7 +61,21 @@ function buildProfiledFetch(modelId: string): typeof fetch {
         /* body is not JSON — pass through unchanged */
       }
     }
-    return fetch(url as any, init);
+    // 可观测：vendor HTTP **失败时**打实际 URL + 状态 + 上游返回体片段（诊断 502/超时/路由错的根因，别靠猜——
+    // 见 docs/workflow/2026-06-06-real-generation-e2e-loop.md「主进程埋点」）。成功不打，避免噪音。
+    const urlStr = typeof url === "string" ? url : ((url as { url?: string })?.url || String(url));
+    try {
+      const res = await fetch(url as any, init);
+      if (!res.ok) {
+        let snippet = "";
+        try { snippet = (await res.clone().text()).replace(/\s+/g, " ").slice(0, 300); } catch { /* body unreadable */ }
+        console.error(`[vendor-http] ${res.status} ${res.statusText} ← ${urlStr} (model=${modelId}) :: ${snippet}`);
+      }
+      return res;
+    } catch (fetchError: unknown) {
+      console.error(`[vendor-http] fetch threw ← ${urlStr} (model=${modelId}) :: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+      throw fetchError;
+    }
   }) as typeof fetch;
 }
 
@@ -99,6 +115,19 @@ export function buildAiSdkModel(input: BuildAiSdkModelInput): LanguageModelV1 {
       ...(headers ? { headers } : {}),
     });
     return provider.languageModel(modelId);
+  }
+
+  // OpenAI Responses API（/responses）：中转如 foxcode codex 渠道 wire_api=responses，只认 /responses，
+  // 走 chat/completions 会 502（2026-06-06 实测根因）。用官方 @ai-sdk/openai 的 .responses()。
+  if (input.kind === "openai-responses") {
+    if (!baseURL) throw new Error("buildAiSdkModel: baseURL is required for openai-responses");
+    const provider = createOpenAI({
+      apiKey,
+      baseURL,
+      ...(headers ? { headers } : {}),
+      fetch: buildProfiledFetch(modelId),
+    });
+    return provider.responses(modelId);
   }
 
   if (!baseURL) {

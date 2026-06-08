@@ -52,7 +52,10 @@ function mapLegacyCategoryId(categoryId: string): CategoryId | null {
   if (Object.prototype.hasOwnProperty.call(LEGACY_CATEGORY_MAP, categoryId)) {
     return LEGACY_CATEGORY_MAP[categoryId]
   }
-  return isCategoryId(categoryId) ? categoryId : null
+  // 自定义顶层分类 id（非内置、非 legacy 别名）原样保留——否则迁移会把用户新建的
+  // 分类连同其下节点/子组一并丢弃。只有空 id 才判为非法。
+  const trimmed = typeof categoryId === 'string' ? categoryId.trim() : ''
+  return trimmed ? trimmed : null
 }
 
 export function migrateNodeToCategoryId(

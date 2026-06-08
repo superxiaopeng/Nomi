@@ -18,6 +18,7 @@ import {
   IconPhoto,
   IconBox,
   IconChartBar,
+  IconTag,
   type Icon as TablerIconComponent,
 } from '@tabler/icons-react'
 
@@ -29,8 +30,10 @@ export const categoryIcons: Record<TablerIconName, TablerIconComponent> = {
   IconPhoto,
   IconBox,
   IconChartBar,
+  IconTag, // 自定义顶层分类的通用图标
 }
 
+// 兜底到通用图标：自定义分类或旧数据带未知图标名时也不会渲染出 undefined 组件而崩。
 export function getCategoryIcon(iconName: TablerIconName): TablerIconComponent {
-  return categoryIcons[iconName]
+  return categoryIcons[iconName] ?? IconTag
 }

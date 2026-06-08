@@ -28,6 +28,7 @@ function toProjectSummary(record: LocalProjectRecord): LocalProjectSummary {
     thumbStyle: record.thumbStyle,
     thumbnail: record.thumbnail,
     thumbnailUrls: record.thumbnailUrls,
+    source: record.source,
   }
 }
 

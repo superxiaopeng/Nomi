@@ -1,45 +1,35 @@
 /**
- * 模型设置抽屉——抽屉打开后看到的内容。
+ * 模型设置面板内容（方案 A 折叠摘要卡）。
  *
- * - 顶部：[+ 添加模型] 按钮（打开 Wizard Modal）
- * - 下方：按 kind 分组列出已配置的模型，每条显示：名字 · vendor · 参数数 · 状态
- * - 每条右侧 🗑 删除（不再有"编辑"——v0.8 暂不支持编辑已 onboarded 模型，重新跑 Wizard 即可）
+ * 首屏从「模型墙」变「几行供应商摘要」：
+ *  - grouplabel「预置供应商」+ 已知供应商折叠卡（apimart / kie，VendorOnboardCard）
+ *  - grouplabel「其他模型」+ 自定义模型折叠卡（OtherModelsCard，chip 可删）
+ *  - 末尾「添加模型」虚线卡（长尾逃生口，打开 Wizard）
  *
- * 用户视角权重：
- *  ⭐⭐⭐ 加新模型（动作）
- *  ⭐⭐ 看现有模型（确认配齐了）
- *  ⭐ 删（万一加错）
- *  ❌ 编辑参数 / 编辑 vendor（90% 用户不需要；专家走 catalog 文件）
+ * 头部不再有「添加模型」按钮（P1，入口只留末尾虚线卡一个）。
+ * 不改后端 catalog / IPC / 模型数据。样张：docs/design/mockups/onboarding-panel-A.html
  */
 import React from 'react'
-import { Stack, Group, Text, ActionIcon } from '@mantine/core'
-import { IconPlus, IconTrash } from '@tabler/icons-react'
-import { DesignButton } from '../../design'
+import { IconStack2 } from '@tabler/icons-react'
 import { OnboardingWizard } from './OnboardingWizard'
+import { FoldableModelCard } from './FoldableModelCard'
+import { VendorOnboardCard } from './VendorOnboardCard'
+import { ModelChipGroups, type ChipModel } from './ModelChipGroups'
+import { AddModelCard } from './AddModelCard'
+import { KNOWN_VENDORS, isKnownVendor } from '../../config/knownVendors'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { notifyModelOptionsRefresh } from '../../config/useModelOptions'
 
-type ModelRow = {
-  modelKey: string
-  vendorKey: string
-  labelZh: string
-  kind: 'text' | 'image' | 'video' | 'audio'
-  fieldsCount: number
-  vendorBaseUrl: string
+type VendorMeta = {
+  name: string
+  hasApiKey: boolean
+  baseUrl: string
 }
-
-const KIND_LABEL: Record<ModelRow['kind'], string> = {
-  text: '文本',
-  image: '图片',
-  video: '视频',
-  audio: '音频',
-}
-
-const KIND_ORDER: ModelRow['kind'][] = ['text', 'image', 'video', 'audio']
 
 export function OnboardingDrawer(): JSX.Element {
   const [wizardOpen, setWizardOpen] = React.useState(false)
-  const [models, setModels] = React.useState<ModelRow[]>([])
+  const [models, setModels] = React.useState<ChipModel[]>([])
+  const [vendorMeta, setVendorMeta] = React.useState<Map<string, VendorMeta>>(new Map())
   const [version, setVersion] = React.useState(0) // bump to refetch
 
   React.useEffect(() => {
@@ -48,116 +38,104 @@ export function OnboardingDrawer(): JSX.Element {
     try {
       const ms = bridge.modelCatalog.listModels() as Array<Record<string, unknown>>
       const vs = bridge.modelCatalog.listVendors() as Array<Record<string, unknown>>
-      const vendorMap = new Map<string, string>()
-      for (const v of vs) vendorMap.set(String(v.key), String(v.baseUrlHint || ''))
-      const rows: ModelRow[] = ms.map((m) => {
-        const onboarding = m.onboarding as { fields?: unknown[] } | undefined
-        return {
-          modelKey: String(m.modelKey),
-          vendorKey: String(m.vendorKey),
-          labelZh: String(m.labelZh || m.modelKey),
-          kind: m.kind as ModelRow['kind'],
-          fieldsCount: Array.isArray(onboarding?.fields) ? onboarding!.fields!.length : 0,
-          vendorBaseUrl: vendorMap.get(String(m.vendorKey)) || '',
-        }
-      })
+      const metaMap = new Map<string, VendorMeta>()
+      for (const v of vs) {
+        metaMap.set(String(v.key), {
+          name: String(v.name || v.key),
+          hasApiKey: Boolean(v.hasApiKey),
+          baseUrl: String(v.baseUrlHint || ''),
+        })
+      }
+      const rows: ChipModel[] = ms.map((m) => ({
+        modelKey: String(m.modelKey),
+        vendorKey: String(m.vendorKey),
+        labelZh: String(m.labelZh || m.modelKey),
+        kind: m.kind as ChipModel['kind'],
+      }))
+      setVendorMeta(metaMap)
       setModels(rows)
     } catch {
+      setVendorMeta(new Map())
       setModels([])
     }
   }, [version])
 
-  const handleAdded = React.useCallback(() => {
+  const refresh = React.useCallback(() => {
     notifyModelOptionsRefresh('all')
     setVersion((v) => v + 1)
   }, [])
 
-  const handleDelete = React.useCallback((row: ModelRow) => {
+  const handleDelete = React.useCallback((row: ChipModel) => {
     const bridge = getDesktopBridge()
     if (!bridge) return
     const ok = window.confirm(`删除「${row.labelZh}」？此操作不可恢复。`)
     if (!ok) return
     try {
       bridge.modelCatalog.deleteModel(row.vendorKey, row.modelKey)
-      notifyModelOptionsRefresh('all')
-      setVersion((v) => v + 1)
+      refresh()
     } catch (e) {
       window.alert(`删除失败：${e instanceof Error ? e.message : String(e)}`)
     }
-  }, [])
+  }, [refresh])
 
-  const byKind: Record<ModelRow['kind'], ModelRow[]> = { text: [], image: [], video: [], audio: [] }
-  for (const m of models) byKind[m.kind].push(m)
+  // 已知供应商：catalog 里存在该 vendor 才渲染卡片。
+  const knownCards = KNOWN_VENDORS
+    .map((directory) => {
+      const meta = vendorMeta.get(directory.vendorKey)
+      if (!meta) return null
+      const vendorModels = models.filter((m) => m.vendorKey === directory.vendorKey)
+      return { directory, meta, vendorModels }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
+  // 其他模型：非已知供应商的自定义接入。
+  const otherModels = models.filter((m) => !isKnownVendor(m.vendorKey))
 
   return (
-    <Stack gap="md" p="md">
-      <Group justify="space-between" align="center">
-        <Text size="sm" fw={700} c="var(--nomi-ink)">模型设置</Text>
-        <DesignButton
-          size="xs"
-          leftSection={<IconPlus size={14} />}
-          onClick={() => setWizardOpen(true)}
-        >
-          添加模型
-        </DesignButton>
-      </Group>
+    <div className="flex flex-col">
+      <div className="px-4 pt-4 pb-1">
+        <div className="text-title font-bold text-nomi-ink">模型设置</div>
+      </div>
 
-      {models.length === 0 ? (
-        <Stack align="center" justify="center" h={200} gap="xs">
-          <Text size="sm" c="var(--nomi-ink-60)">还没有模型</Text>
-          <Text size="xs" c="var(--nomi-ink-40)">点上方"添加模型"接入第一个</Text>
-        </Stack>
-      ) : (
-        <Stack gap="sm" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {KIND_ORDER.map((kind) => {
-            const list = byKind[kind]
-            if (list.length === 0) return null
-            return (
-              <Stack key={kind} gap={6}>
-                <Text size="xs" fw={500} c="var(--nomi-ink-60)" tt="uppercase">
-                  {KIND_LABEL[kind]}
-                </Text>
-                {list.map((row) => (
-                  <Group
-                    key={`${row.vendorKey}-${row.modelKey}`}
-                    justify="space-between"
-                    align="center"
-                    wrap="nowrap"
-                    gap="xs"
-                    px="xs"
-                    py={6}
-                    style={{
-                      borderRadius: 'var(--nomi-radius-sm)',
-                      background: 'var(--nomi-paper)',
-                    }}
-                  >
-                    <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="sm" c="var(--nomi-ink)" truncate>{row.labelZh}</Text>
-                      <Text size="xs" c="var(--nomi-ink-60)" truncate>
-                        {row.vendorKey} · {row.fieldsCount > 0 ? `${row.fieldsCount} 参数` : '无参数'}
-                      </Text>
-                    </Stack>
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => handleDelete(row)}
-                      aria-label={`删除 ${row.labelZh}`}
-                    >
-                      <IconTrash size={14} />
-                    </ActionIcon>
-                  </Group>
-                ))}
-              </Stack>
-            )
-          })}
-        </Stack>
-      )}
+      <div className="px-3 pb-3 pt-1 flex flex-col gap-2">
+        <div className="text-micro font-semibold text-nomi-ink-40 pt-2 px-0.5">预置供应商</div>
+        {knownCards.map(({ directory, meta, vendorModels }) => (
+          <VendorOnboardCard
+            key={directory.vendorKey}
+            directory={directory}
+            vendorName={meta.name}
+            baseUrl={meta.baseUrl}
+            hasApiKey={meta.hasApiKey}
+            models={vendorModels}
+            onChanged={refresh}
+          />
+        ))}
+
+        {otherModels.length > 0 ? (
+          <>
+            <div className="text-micro font-semibold text-nomi-ink-40 pt-2 px-0.5">其他模型</div>
+            <FoldableModelCard
+              glyph={<IconStack2 size={16} stroke={1.6} />}
+              glyphTone="soft"
+              name="其他模型"
+              subtitle={`${otherModels.length} 个自定义模型`}
+              status="ok"
+              statusLabel="已配置"
+              defaultExpanded={false}
+            >
+              <ModelChipGroups models={otherModels} connected onDelete={handleDelete} />
+            </FoldableModelCard>
+          </>
+        ) : null}
+
+        <AddModelCard onClick={() => setWizardOpen(true)} />
+      </div>
 
       <OnboardingWizard
         opened={wizardOpen}
         onClose={() => setWizardOpen(false)}
-        onCommitted={handleAdded}
+        onCommitted={refresh}
       />
-    </Stack>
+    </div>
   )
 }
