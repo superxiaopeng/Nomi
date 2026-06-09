@@ -190,27 +190,37 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   const send = React.useCallback(async (textOverride?: string) => {
     if (sending) return
     const userRequest = (textOverride ?? draft).trim()
-    if (!userRequest && !selectedText && !documentText) return
+    const readyAttachments = attachments.filter((item) => item.status === 'ready' && item.url)
+    if (!userRequest && !selectedText && !documentText && !readyAttachments.length) return
     if (STORYBOARD_REQUEST_PATTERN.test(userRequest)) {
       launchStoryboardPlanning(userRequest || '🎬 拆镜头')
       return
     }
     const prompt = buildCreationAiPrompt({ mode: activeMode, userRequest })
-    const displayPrompt = userRequest || `${activeMode.label}：处理当前文稿`
+    const displayPrompt = userRequest || (readyAttachments.length ? '请看这些附件' : `${activeMode.label}：处理当前文稿`)
+    const attachmentPayload = readyAttachments.map((item) => ({
+      url: item.url as string,
+      contentType: item.contentType,
+      fileName: item.fileName,
+      kind: item.kind,
+    }))
     const userMessage: WorkbenchAiMessage = {
       id: `creation_ai_user_${Date.now()}`,
       role: 'user',
       content: displayPrompt,
+      ...(readyAttachments.length ? { attachments: readyAttachments } : {}),
     }
     const pendingId = `creation_ai_assistant_${Date.now() + 1}`
     setMessages((prev) => [...prev, userMessage, { id: pendingId, role: 'assistant', content: '处理中...' }])
     setDraft('')
+    clearAttachments()
     setError('')
     setSending(true)
     try {
       const response = await runWorkbenchAgent({
         prompt,
         displayPrompt,
+        ...(attachmentPayload.length ? { attachments: attachmentPayload } : {}),
         sessionKey: workbenchSessionKey(),
         projectId: readUrlParam('projectId'),
         skillKey: `workbench.creation.${activeMode.id}`,
@@ -262,7 +272,7 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
       setSending(false)
       cancelRef.current = null
     }
-  }, [activeMode, documentText, draft, launchStoryboardPlanning, selectedText, sending, setDraft, setError, setMessages])
+  }, [activeMode, attachments, clearAttachments, documentText, draft, launchStoryboardPlanning, selectedText, sending, setDraft, setError, setMessages])
 
   // 通用创作动作，贴 Nomi 视频创作调性、不绑小说题材（旧的「悬疑开场/童话语气」在产品/宣传项目里调性错配）。
   const suggestions = React.useMemo(() => [
@@ -393,6 +403,9 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
               )}
             >
               <div className={cn('workbench-creation-ai__message-content', 'whitespace-normal')}>
+                {message.attachments?.length ? (
+                  <AttachmentRail attachments={message.attachments} readOnly className={cn('mb-1.5')} />
+                ) : null}
                 {message.role === 'assistant' && message.content === '处理中...' ? (
                   <NomiLoadingMark size={15} label="处理中" />
                 ) : (

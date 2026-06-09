@@ -1,4 +1,4 @@
-import type { AgentsChatResponseDto, AgentChatV2Session } from '../../api/desktopClient'
+import type { AgentAttachmentPayload, AgentsChatResponseDto, AgentChatV2Session } from '../../api/desktopClient'
 import { sendWorkbenchAiMessage } from './workbenchAiClient'
 import { getAssistantModelPref } from './assistantModelPref'
 import { useAgentUsageStore } from './agentUsageStore'
@@ -53,6 +53,8 @@ export type RunWorkbenchAgentInput = {
   skillName: string
   projectId?: string
   mode?: 'auto'
+  /** 待发附件（图片走原生多模态；文件 S4 抽文本）。 */
+  attachments?: AgentAttachmentPayload[]
   onContent?: (delta: string, text: string) => void
   /**
    * Called whenever the LLM issues a tool call. The caller shows UI (or
@@ -78,6 +80,7 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
     skillName: input.skillName,
     mode: input.mode || ('auto' as const),
     ...(pref ? { agentModelKey: pref.modelKey, agentVendorKey: pref.vendorKey } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   }
 
   let activeSession: AgentChatV2Session | null = null

@@ -6,6 +6,15 @@ export function requireDesktopRuntime(feature: string): DesktopBridge {
   return desktop
 }
 
+// 一条待发附件的「上线」表示（renderer→IPC→electron 透传）。bytes 不进 payload——
+// 只带 nomi-local:// URL，electron 主进程按需读字节（readNomiLocalAsset）。
+export type AgentAttachmentPayload = {
+  url: string
+  contentType: string
+  fileName: string
+  kind: 'image' | 'file'
+}
+
 export type AgentsChatRequestDto = {
   vendor?: string
   prompt: string
@@ -17,6 +26,7 @@ export type AgentsChatRequestDto = {
   mode?: 'chat' | 'auto' | string
   temperature?: number
   systemPrompt?: string
+  attachments?: AgentAttachmentPayload[]
 }
 
 export type AgentUsage = {

@@ -11,6 +11,7 @@ import {
 // 流模块循环依赖），但 desktopClient 对外公共导出面保持不变。
 export {
   coerceAgentUsage,
+  type AgentAttachmentPayload,
   type AgentsChatRequestDto,
   type AgentUsage,
   type AgentsChatResponseDto,

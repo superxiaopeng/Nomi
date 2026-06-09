@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { streamText, tool, type CoreMessage, type LanguageModelV1 } from "ai";
+import { streamText, tool, type CoreMessage, type CoreUserMessage, type LanguageModelV1 } from "ai";
 import { z } from "zod";
 import { agentStreamTuning, buildAgentPromptParts, capAgentHistory, createLinkedAbortController } from "./agentChatHarness";
 import { consumeAgentStreamWithTimeout } from "./agentStreamConsumer";
@@ -23,6 +23,8 @@ import { getSkillsRoots, readText } from "../runtimePaths";
 import { decryptApiKeyRecord } from "../catalog/secrets";
 import { extractVendorExtraHeaders, normalizeProviderKind, readCatalog } from "../catalog/catalogStore";
 import type { Model, Vendor } from "../catalog/types";
+import { readNomiLocalAsset } from "../assets/localAssetFile";
+import { buildAgentUserContent, modelSupportsImageInput, type AgentUserAttachment } from "./agentUserContent";
 
 type SkillRecord = {
   name: string;
@@ -139,13 +141,21 @@ function autoTextModelPenalty(model: Model): number {
   return AUTO_TEXT_MODEL_DEPRIORITIZE.test(`${model.modelKey} ${model.modelAlias ?? ""}`) ? 1 : 0;
 }
 
-function chooseTextModel(prefModelKey?: string): { vendor: Vendor; model: Model; apiKey: string } {
+function imageInputRank(model: Model): number {
+  return modelSupportsImageInput(model.modelKey, model.modelAlias, model.meta) ? 1 : 0;
+}
+
+function chooseTextModel(prefModelKey?: string, preferImageInput = false): { vendor: Vendor; model: Model; apiKey: string } {
   const state = readCatalog();
   const texts = state.models.filter((item) => item.kind === "text" && item.enabled);
-  // 有偏好：用户选的排第一（其余作回退）。无偏好：不盲选第一个，按「是否像通用对话模型」稳定排序，vision/preview 降到末尾。
+  // 有偏好：用户选的排第一（其余作回退）。
+  // 无偏好且本轮带图：优先支持图片输入的 text 模型（gpt-4o/claude/gemini 既能看图又擅长 tool_use）。
+  // 无偏好无图：不盲选第一个，按「是否像通用对话模型」稳定排序，vision/preview 降到末尾。
   const ordered = prefModelKey
     ? [...texts].sort((a, b) => (a.modelKey === prefModelKey ? -1 : 0) - (b.modelKey === prefModelKey ? -1 : 0))
-    : [...texts].sort((a, b) => autoTextModelPenalty(a) - autoTextModelPenalty(b));
+    : preferImageInput
+      ? [...texts].sort((a, b) => imageInputRank(b) - imageInputRank(a))
+      : [...texts].sort((a, b) => autoTextModelPenalty(a) - autoTextModelPenalty(b));
   for (const model of ordered) {
     const vendor = state.vendors.find((item) => item.key === model.vendorKey && item.enabled);
     const apiKey = decryptApiKeyRecord(state.apiKeysByVendor[model.vendorKey]);
@@ -358,6 +368,8 @@ export type RunAgentChatV2Payload = {
   temperature?: number;
   agentModelKey?: string; // 助手模型偏好（用户选的）：优先用，否则回退第一个可用 text 模型
   agentVendorKey?: string;
+  /** 待发附件：图片走原生多模态（image part）；文件 S4 抽文本。 */
+  attachments?: AgentUserAttachment[];
   /**
    * Shared conversation memory key. Both workbench panels use
    * `nomi:workbench:<projectId|local>` so the agent remembers across turns and
@@ -382,11 +394,32 @@ export function clearAgentChatV2History(sessionKey?: string): void {
   }
 }
 
+function readAgentAttachments(payload: RunAgentChatV2Payload): AgentUserAttachment[] {
+  const raw = (payload as { attachments?: unknown }).attachments;
+  if (!Array.isArray(raw)) return [];
+  const out: AgentUserAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const url = typeof rec.url === "string" ? rec.url : "";
+    if (!url) continue;
+    out.push({
+      url,
+      contentType: typeof rec.contentType === "string" ? rec.contentType : "application/octet-stream",
+      fileName: typeof rec.fileName === "string" ? rec.fileName : "asset",
+      kind: rec.kind === "image" ? "image" : "file",
+    });
+  }
+  return out;
+}
+
 export async function runAgentChatV2(
   payload: RunAgentChatV2Payload,
   hooks: AgentChatV2Hooks,
 ): Promise<{ id: string; text: string; finishReason: string; usage?: unknown }> {
-  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey));
+  const attachments = readAgentAttachments(payload);
+  const wantsImageInput = attachments.some((item) => item.kind === "image");
+  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey), wantsImageInput);
   const systemPrompt = trim(payload.systemPrompt as unknown as JsonRecord["systemPrompt"]);
   const skillSystemPrompt = buildSkillSystemPrompt(payload as unknown as JsonRecord);
   // 收口 sanitize（P0-6）：送进 LLM 的 user/system 文本 ASCII 可移植化（防 Moonshot 等 tokenizer 异常）。
@@ -410,7 +443,17 @@ export async function runAgentChatV2(
   const sessionKey = trim(payload.sessionKey);
   if (sessionKey && payload.resetSession) agentChatV2History.delete(sessionKey);
   const priorMessages = sessionKey ? agentChatV2History.get(sessionKey) ?? [] : [];
-  const userMessage: CoreMessage = { role: "user", content: userPrompt };
+  // 图片附件 → 原生多模态 image part（按模型能力门控，不支持则降级为文字 + 清晰提示）。
+  const userContent = buildAgentUserContent({
+    prompt: userPrompt,
+    attachments,
+    supportsImageInput: modelSupportsImageInput(model.modelKey, model.modelAlias, model.meta),
+    resolveImage: (url) => {
+      const asset = readNomiLocalAsset(url);
+      return asset ? { data: asset.bytes, mimeType: asset.contentType } : null;
+    },
+  });
+  const userMessage: CoreMessage = { role: "user", content: userContent as CoreUserMessage["content"] };
   const messages: CoreMessage[] = [...priorMessages, userMessage];
 
   const abortController = createLinkedAbortController(hooks.abortSignal);

@@ -38,7 +38,7 @@ function RemoveButton({ onRemove, className }: { onRemove: () => void; className
   )
 }
 
-function AttachmentChip({ attachment, onRemove }: { attachment: ComposerAttachment; onRemove: () => void }): JSX.Element {
+function AttachmentChip({ attachment, onRemove, readOnly }: { attachment: ComposerAttachment; onRemove: () => void; readOnly?: boolean }): JSX.Element {
   const uploading = attachment.status === 'uploading'
   const error = attachment.status === 'error'
 
@@ -60,7 +60,7 @@ function AttachmentChip({ attachment, onRemove }: { attachment: ComposerAttachme
         {uploading ? (
           <span className="absolute inset-0 grid place-items-center bg-nomi-paper/60"><NomiLoadingMark size={15} /></span>
         ) : null}
-        <RemoveButton onRemove={onRemove} className="absolute -right-1 -top-1" />
+        {readOnly ? null : <RemoveButton onRemove={onRemove} className="absolute -right-1 -top-1" />}
       </div>
     )
   }
@@ -83,7 +83,9 @@ function AttachmentChip({ attachment, onRemove }: { attachment: ComposerAttachme
           {error ? '上传失败' : [attachmentTypeLabel(attachment.fileName, attachment.contentType), formatAttachmentSize(attachment.sizeBytes)].filter(Boolean).join(' · ')}
         </span>
       </span>
-      <RemoveButton onRemove={onRemove} className="ml-auto shrink-0 rounded-nomi-sm text-nomi-ink-40 hover:bg-nomi-ink-10 hover:text-nomi-ink" />
+      {readOnly ? null : (
+        <RemoveButton onRemove={onRemove} className="ml-auto shrink-0 rounded-nomi-sm text-nomi-ink-40 hover:bg-nomi-ink-10 hover:text-nomi-ink" />
+      )}
     </div>
   )
 }
@@ -91,17 +93,24 @@ function AttachmentChip({ attachment, onRemove }: { attachment: ComposerAttachme
 export function AttachmentRail({
   attachments,
   onRemove,
+  readOnly,
   className,
 }: {
   attachments: ComposerAttachment[]
-  onRemove: (id: string) => void
+  onRemove?: (id: string) => void
+  readOnly?: boolean
   className?: string
 }): JSX.Element | null {
   if (!attachments.length) return null
   return (
     <div className={cn('flex flex-wrap gap-2', className)} aria-label="已添加的附件">
       {attachments.map((attachment) => (
-        <AttachmentChip key={attachment.id} attachment={attachment} onRemove={() => onRemove(attachment.id)} />
+        <AttachmentChip
+          key={attachment.id}
+          attachment={attachment}
+          readOnly={readOnly}
+          onRemove={() => onRemove?.(attachment.id)}
+        />
       ))}
     </div>
   )

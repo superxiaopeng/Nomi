@@ -1,5 +1,6 @@
 import {
   workbenchAgentsChatStream,
+  type AgentAttachmentPayload,
   type AgentChatV2Session,
   type AgentsChatResponseDto,
   type AgentsChatStreamEvent,
@@ -18,6 +19,8 @@ export type WorkbenchAiRequest = {
   /** 助手模型偏好（用户选的）：透传给后端 chooseTextModel 优先用。 */
   agentModelKey?: string
   agentVendorKey?: string
+  /** 待发附件（图片走原生多模态；文件 S4 抽文本）。 */
+  attachments?: AgentAttachmentPayload[]
 }
 
 export type WorkbenchAiStreamHandlers = {
@@ -44,6 +47,7 @@ function buildWorkbenchAiPayload(input: WorkbenchAiRequest) {
     mode: input.mode || 'auto',
     temperature: 0.7,
     ...(input.agentModelKey ? { agentModelKey: input.agentModelKey, agentVendorKey: input.agentVendorKey } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   }
 }
 
