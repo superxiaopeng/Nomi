@@ -52,11 +52,11 @@
   .cap span{font-weight:400;color:var(--nomi-ink-60);}
 
   /* ===== 助手面板外壳（仿 .workbench-creation-ai：260px 侧栏）===== */
-  .panel{width:300px;background:var(--workbench-surface-solid);border:1px solid var(--workbench-border);
+  .panel{width:360px;background:var(--workbench-surface-solid);border:1px solid var(--workbench-border);
          border-radius:var(--nomi-radius);box-shadow:var(--nomi-shadow-md);overflow:hidden;
          display:flex;flex-direction:column;position:relative;}
   .panel__header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--nomi-line-soft);}
-  .brand{width:18px;height:18px;border-radius:5px;background:var(--nomi-ink);display:grid;place-items:center;color:var(--nomi-paper);font-family:var(--nomi-font-display);font-size:11px;font-weight:600;}
+  .brand{width:18px;height:18px;border-radius:var(--nomi-radius-sm);background:var(--nomi-ink);display:grid;place-items:center;color:var(--nomi-paper);font-family:var(--nomi-font-display);font-size:11px;font-weight:600;}
   .panel__title{font-size:13px;font-weight:600;}
   .hspacer{margin-left:auto;display:flex;align-items:center;gap:2px;}
 
@@ -75,18 +75,18 @@
             overflow:hidden;background:var(--nomi-ink-10);flex:none;}
   .chip-img img{width:100%;height:100%;object-fit:cover;display:block;}
   .chip-file{display:flex;align-items:center;gap:8px;height:48px;padding:0 8px 0 8px;border:1px solid var(--nomi-line);
-             border-radius:var(--nomi-radius);background:var(--nomi-ink-05);max-width:188px;flex:none;}
-  .chip-file__icon{width:30px;height:30px;border-radius:var(--nomi-radius-sm);display:grid;place-items:center;flex:none;color:var(--nomi-paper);}
-  .ic-pdf{background:var(--workbench-danger);}
-  .ic-doc{background:var(--nomi-accent);}
-  .ic-xls{background:#248a3d;}
+             border-radius:var(--nomi-radius-sm);background:var(--nomi-ink-05);max-width:184px;flex:none;}
+  /* 文件类型：中性 tile + 字形区分（density-first，不动用语义 danger/accent 红蓝），类型已由 sub 标签「PDF · …」承载 */
+  .chip-file__icon{width:28px;height:28px;border-radius:var(--nomi-radius-sm);display:grid;place-items:center;flex:none;
+                   background:var(--nomi-ink-10);color:var(--nomi-ink-60);}
   .chip-file__meta{min-width:0;display:flex;flex-direction:column;gap:1px;}
   .chip-file__name{font-size:13px;color:var(--nomi-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .chip-file__sub{font-size:11px;color:var(--nomi-ink-60);white-space:nowrap;}
-  .chip-x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:999px;background:var(--nomi-ink);
+  /* ✕ 命中区 ≥22/24（a11y：实现时再 padding 到 24 命中盒，字形可保持小）*/
+  .chip-x{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:999px;background:var(--nomi-ink);
           color:var(--nomi-paper);border:2px solid var(--nomi-paper);display:grid;place-items:center;cursor:pointer;}
-  .chip-x svg{width:9px;height:9px;}
-  .chip-file .chip-x{position:static;border:0;width:20px;height:20px;background:transparent;color:var(--nomi-ink-40);margin-left:auto;}
+  .chip-x svg{width:10px;height:10px;}
+  .chip-file .chip-x{position:static;border:0;width:24px;height:24px;background:transparent;color:var(--nomi-ink-40);margin-left:auto;}
   .chip-file .chip-x:hover{background:var(--nomi-ink-10);color:var(--nomi-ink);}
   .chip-file .chip-x svg{width:12px;height:12px;}
   /* 上传中蒙层 */
@@ -163,7 +163,7 @@
     字号 micro 11 / caption 12 / bodySm 13 / body 14（<code>nomiTheme.fontSize</code>）·
     圆角 <code>--nomi-radius-sm</code>(6) chip、<code>--nomi-radius</code>(10) 面板、<code>--nomi-radius-lg</code>(16) modal、999 pill ·
     间距 4 的倍数（gap 8 / padding 10–12）·
-    色：<code>--nomi-ink*</code> 阶梯、<code>--nomi-accent</code> 强调、<code>--workbench-danger</code> PDF 角标 ·
+    色：<code>--nomi-ink*</code> 阶梯 + <code>--nomi-accent</code> 强调；<b>文件类型 = 中性 tile（ink-10 + ink-60 字形）</b>，类型由「PDF · …」sub 标签承载——不动用语义红/蓝（避免与错误态 / 发送按钮撞色，density-first）·
     阴影 <code>--nomi-shadow-md/lg</code> · 图标 Tabler stroke 1.5。
     <br><b>关键改动：</b>① textarea <code>min-h 56 → max-h 160</code> 自增高；② 附件 chip 区在 textarea 上方；③ composer 左侧加 <use> 回形针入口；④ 头部加「放大」。
   </div>
@@ -198,11 +198,9 @@
           <div class="actions">
             <button class="iconbtn" title="添加附件（也可拖拽 / 粘贴）"><svg width="16" height="16"><use href="#i-paperclip"/></svg></button>
             <span class="sel"><span class="lead">模式</span> 通用 ▾</span>
-            <button class="send"><svg width="15" height="15"><use href="#i-send"/></svg></button>
-          </div>
-          <div class="actions" style="margin-top:-2px;">
             <span class="pill"><svg width="13" height="13"><use href="#i-movie"/></svg> 拆镜头</span>
             <span class="pill"><svg width="13" height="13"><use href="#i-sparkles"/></svg> 立角色卡</span>
+            <button class="send"><svg width="15" height="15"><use href="#i-send"/></svg></button>
           </div>
         </div>
       </div>
@@ -253,7 +251,7 @@
               <div class="att-rail att-rail--inbubble">
                 <div class="chip-img"><img alt="" src="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'&gt;&lt;rect width='48' height='48' fill='%23c9d6e8'/&gt;&lt;circle cx='16' cy='18' r='6' fill='%23eef2f8'/&gt;&lt;path d='M4 44 L20 28 L30 38 L40 30 L48 38 L48 48 L0 48Z' fill='%23a9bdd8'/&gt;&lt;/svg&gt;"/></div>
                 <div class="chip-file" style="height:40px;">
-                  <span class="chip-file__icon ic-xls" style="width:26px;height:26px;"><svg width="14" height="14"><use href="#i-table"/></svg></span>
+                  <span class="chip-file__icon ic-xls" style="width:24px;height:24px;"><svg width="14" height="14"><use href="#i-table"/></svg></span>
                   <span class="chip-file__meta"><span class="chip-file__name">角色表.xlsx</span><span class="chip-file__sub">XLSX · 18 KB</span></span>
                 </div>
               </div>
@@ -287,7 +285,6 @@
       <div class="modal">
         <div class="modal__header">
           <div class="brand">N</div><div class="panel__title">助手</div>
-          <span class="selectable-note">· 文本可选中复制（Cmd/Ctrl+C），回复带复制按钮</span>
           <div class="hspacer">
             <button class="iconbtn" title="新对话"><svg width="15" height="15"><use href="#i-plus"/></svg></button>
             <button class="iconbtn" title="缩小"><svg width="15" height="15"><use href="#i-minimize"/></svg></button>
@@ -299,7 +296,7 @@
               <div class="bubble">
                 <div class="att-rail att-rail--inbubble">
                   <div class="chip-file" style="height:40px;">
-                    <span class="chip-file__icon ic-doc" style="width:26px;height:26px;"><svg width="14" height="14"><use href="#i-filetext"/></svg></span>
+                    <span class="chip-file__icon ic-doc" style="width:24px;height:24px;"><svg width="14" height="14"><use href="#i-filetext"/></svg></span>
                     <span class="chip-file__meta"><span class="chip-file__name">产品大纲.docx</span><span class="chip-file__sub">DOCX · 42 KB</span></span>
                   </div>
                 </div>
