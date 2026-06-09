@@ -1,6 +1,6 @@
 // 把「文字 prompt + 待发附件」拼成 Vercel AI SDK 的 user message content。
-// 纯函数（字节读取由 resolveImage 回调注入），便于单测。S2：图片走原生多模态；
-// 非图片文件本片先计数提示（S3 加 PDF file part、S4 加文档抽文本）。
+// 纯函数（字节读取由 resolveBytes 回调注入），便于单测。
+// 图片 → image part；PDF → file part（按模型能力门控）；其它文档 → 计数提示（S4 抽文本接手）。
 
 export type AgentUserAttachment = {
   url: string
@@ -9,49 +9,71 @@ export type AgentUserAttachment = {
   kind: 'image' | 'file'
 }
 
-export type ResolvedImage = { data: Uint8Array; mimeType: string }
-
 type TextPart = { type: 'text'; text: string }
 type ImagePart = { type: 'image'; image: Uint8Array; mimeType?: string }
-export type AgentUserContent = string | Array<TextPart | ImagePart>
+type FilePart = { type: 'file'; data: Uint8Array; mimeType: string }
+export type AgentUserContent = string | Array<TextPart | ImagePart | FilePart>
 
 // 已知支持图片输入（vision）的模型族。meta.supportsImageInput 显式声明优先。
 const VISION_MODEL_RE =
   /gpt-4o|gpt-4\.1|gpt-4-vision|chatgpt-4o|o1|o3|o4-mini|claude-3|claude-opus-4|claude-sonnet-4|claude-haiku-4|gemini|llava|qwen.*-?vl|pixtral|internvl|minicpm-v|grok.*vision|vision/i
 
-export function modelSupportsImageInput(
-  modelKey: string,
-  modelAlias: string | null | undefined,
-  meta: unknown,
-): boolean {
+// 已知支持原生 PDF file part 的模型族（Anthropic claude-3.5+ / OpenAI gpt-4o,4.1,o-系 / Google gemini）。
+const PDF_INPUT_MODEL_RE =
+  /claude-3-5|claude-3-7|claude-opus-4|claude-sonnet-4|claude-haiku-4|gpt-4o|gpt-4\.1|o1|o3|o4-mini|gemini/i
+
+function metaFlag(meta: unknown, key: string): boolean | undefined {
   if (meta && typeof meta === 'object') {
-    const declared = (meta as Record<string, unknown>).supportsImageInput
-    if (typeof declared === 'boolean') return declared
+    const value = (meta as Record<string, unknown>)[key]
+    if (typeof value === 'boolean') return value
   }
+  return undefined
+}
+
+export function modelSupportsImageInput(modelKey: string, modelAlias: string | null | undefined, meta: unknown): boolean {
+  const declared = metaFlag(meta, 'supportsImageInput')
+  if (typeof declared === 'boolean') return declared
   return VISION_MODEL_RE.test(`${modelKey || ''} ${modelAlias || ''}`.toLowerCase())
+}
+
+export function modelSupportsPdfInput(modelKey: string, modelAlias: string | null | undefined, meta: unknown): boolean {
+  const declared = metaFlag(meta, 'supportsPdfInput')
+  if (typeof declared === 'boolean') return declared
+  return PDF_INPUT_MODEL_RE.test(`${modelKey || ''} ${modelAlias || ''}`.toLowerCase())
+}
+
+function isPdf(attachment: AgentUserAttachment): boolean {
+  return attachment.contentType.toLowerCase().includes('pdf') || attachment.fileName.toLowerCase().endsWith('.pdf')
 }
 
 export function buildAgentUserContent(params: {
   prompt: string
   attachments?: AgentUserAttachment[]
   supportsImageInput: boolean
-  resolveImage: (url: string) => ResolvedImage | null
+  supportsPdfInput: boolean
+  resolveBytes: (url: string) => Uint8Array | null
 }): AgentUserContent {
-  const { prompt, attachments = [], supportsImageInput, resolveImage } = params
+  const { prompt, attachments = [], supportsImageInput, supportsPdfInput, resolveBytes } = params
   if (!attachments.length) return prompt
 
-  const imageParts: ImagePart[] = []
+  const mediaParts: Array<ImagePart | FilePart> = []
   let droppedImages = 0
-  let droppedFiles = 0
+  let droppedPdfs = 0
+  let droppedDocs = 0
 
   for (const att of attachments) {
     if (att.kind === 'image') {
       if (!supportsImageInput) { droppedImages += 1; continue }
-      const resolved = resolveImage(att.url)
-      if (!resolved) { droppedImages += 1; continue }
-      imageParts.push({ type: 'image', image: resolved.data, mimeType: resolved.mimeType || att.contentType })
+      const bytes = resolveBytes(att.url)
+      if (!bytes) { droppedImages += 1; continue }
+      mediaParts.push({ type: 'image', image: bytes, mimeType: att.contentType })
+    } else if (isPdf(att)) {
+      if (!supportsPdfInput) { droppedPdfs += 1; continue }
+      const bytes = resolveBytes(att.url)
+      if (!bytes) { droppedPdfs += 1; continue }
+      mediaParts.push({ type: 'file', data: bytes, mimeType: 'application/pdf' })
     } else {
-      droppedFiles += 1
+      droppedDocs += 1
     }
   }
 
@@ -59,11 +81,14 @@ export function buildAgentUserContent(params: {
   if (droppedImages > 0) {
     notes.push(`（注：${droppedImages} 张图片未发送——当前模型不支持图片输入或读取失败。可在助手里换一个支持图片的模型。）`)
   }
-  if (droppedFiles > 0) {
-    notes.push(`（注：附带了 ${droppedFiles} 个文件，当前版本尚未读取其内容。）`)
+  if (droppedPdfs > 0) {
+    notes.push(`（注：${droppedPdfs} 个 PDF 未发送——当前模型不支持 PDF 输入。可换 Claude / GPT-4o / Gemini 等模型。）`)
+  }
+  if (droppedDocs > 0) {
+    notes.push(`（注：附带了 ${droppedDocs} 个文档，当前版本尚未读取其内容。）`)
   }
 
   const text = [prompt, ...notes].filter(Boolean).join('\n\n')
-  if (!imageParts.length) return text
-  return [{ type: 'text', text }, ...imageParts]
+  if (!mediaParts.length) return text
+  return [{ type: 'text', text }, ...mediaParts]
 }

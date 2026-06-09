@@ -24,7 +24,7 @@ import { decryptApiKeyRecord } from "../catalog/secrets";
 import { extractVendorExtraHeaders, normalizeProviderKind, readCatalog } from "../catalog/catalogStore";
 import type { Model, Vendor } from "../catalog/types";
 import { readNomiLocalAsset } from "../assets/localAssetFile";
-import { buildAgentUserContent, modelSupportsImageInput, type AgentUserAttachment } from "./agentUserContent";
+import { buildAgentUserContent, modelSupportsImageInput, modelSupportsPdfInput, type AgentUserAttachment } from "./agentUserContent";
 
 type SkillRecord = {
   name: string;
@@ -418,8 +418,11 @@ export async function runAgentChatV2(
   hooks: AgentChatV2Hooks,
 ): Promise<{ id: string; text: string; finishReason: string; usage?: unknown }> {
   const attachments = readAgentAttachments(payload);
-  const wantsImageInput = attachments.some((item) => item.kind === "image");
-  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey), wantsImageInput);
+  // 带图片或 PDF 时，优先选支持多模态输入的 text 模型（vision 模型也基本支持 PDF file part）。
+  const wantsRichInput = attachments.some(
+    (item) => item.kind === "image" || item.contentType.toLowerCase().includes("pdf") || item.fileName.toLowerCase().endsWith(".pdf"),
+  );
+  const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey), wantsRichInput);
   const systemPrompt = trim(payload.systemPrompt as unknown as JsonRecord["systemPrompt"]);
   const skillSystemPrompt = buildSkillSystemPrompt(payload as unknown as JsonRecord);
   // 收口 sanitize（P0-6）：送进 LLM 的 user/system 文本 ASCII 可移植化（防 Moonshot 等 tokenizer 异常）。
@@ -448,9 +451,10 @@ export async function runAgentChatV2(
     prompt: userPrompt,
     attachments,
     supportsImageInput: modelSupportsImageInput(model.modelKey, model.modelAlias, model.meta),
-    resolveImage: (url) => {
+    supportsPdfInput: modelSupportsPdfInput(model.modelKey, model.modelAlias, model.meta),
+    resolveBytes: (url) => {
       const asset = readNomiLocalAsset(url);
-      return asset ? { data: asset.bytes, mimeType: asset.contentType } : null;
+      return asset ? asset.bytes : null;
     },
   });
   const userMessage: CoreMessage = { role: "user", content: userContent as CoreUserMessage["content"] };
