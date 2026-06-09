@@ -3,6 +3,7 @@ import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../.
 import type { GenerationCanvasSnapshot, GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getAgentCreatableGenerationNodeKinds } from '../model/generationNodeKinds'
 import { applyCanvasToolCall } from './applyCanvasToolCall'
+import { listAvailableModelsForAgent, formatAvailableModelsForPrompt } from './availableModels'
 
 export type { ToolCallEvent } from '../../ai/workbenchAgentRunner'
 
@@ -63,7 +64,7 @@ function buildGenerationCanvasAgentPrompt(input: SendGenerationCanvasAgentMessag
     '',
     '你可以调用以下工具（详细 schema 由系统注入）：',
     '- read_canvas_state：读取当前画布所有节点和边。',
-    `- create_canvas_nodes：在画布上创建一批待用户确认的节点（每个节点必须给定 clientId、kind=${creatableKinds} 之一、title、prompt、position）。`,
+    `- create_canvas_nodes：在画布上创建一批待用户确认的节点（每个节点必须给定 clientId、kind=${creatableKinds} 之一、title、prompt、position；建议再给 modelKey + 可选 modeId + params 以指定模型和比例/清晰度等参数，取值见下方「可用模型」清单）。`,
     '- connect_canvas_edges：把多个节点之间用引用边连起来；sourceClientId / targetClientId 引用同一轮 create_canvas_nodes 里的 clientId，或 read_canvas_state 返回的真实节点 id。',
     '- set_node_prompt：改写一个已有节点的 prompt（润色模式专用）。',
     '- delete_canvas_nodes：删除一个或多个已有节点（破坏性，需要用户确认）。',
@@ -106,9 +107,18 @@ async function defaultExecuteToolCall(event: ToolCallEvent): Promise<void> {
 export async function sendGenerationCanvasAgentMessage(
   input: SendGenerationCanvasAgentMessageInput,
 ): Promise<GenerationCanvasAgentResponse> {
-  const prompt = input.buildPrompt
+  const basePrompt = input.buildPrompt
     ? input.buildPrompt({ message: input.message, snapshot: input.snapshot, selectedNodes: input.selectedNodes })
     : buildGenerationCanvasAgentPrompt(input)
+  // bug①：注入「可用模型清单」，让 agent 能为每个节点建议 modelKey/modeId/params。
+  // 失败（catalog 未就绪等）不阻断对话——退回无清单的基础 prompt。
+  let prompt = basePrompt
+  try {
+    const modelsBlock = formatAvailableModelsForPrompt(await listAvailableModelsForAgent())
+    if (modelsBlock) prompt = `${basePrompt}\n\n${modelsBlock}`
+  } catch {
+    // 静默退回 basePrompt
+  }
 
   const response = await runWorkbenchAgent({
     prompt,

@@ -37,6 +37,12 @@ export const plannedNodeSchema = z.object({
     x: z.number(),
     y: z.number(),
   }),
+  // bug①：agent 为节点建议模型 + 模式 + 标量参数（比例/清晰度…），用户在计划卡可改可确认。
+  // modelKey/modeId 必须取自系统提示词给出的「可用模型清单」；params 是宽松键值（schema 不按
+  // 单个模型严格——一次 batch 可含多模型），合法性在写入时按档案逐字段校验（单字段，跨字段留二期）。
+  modelKey: z.string().optional(),
+  modeId: z.string().optional(),
+  params: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 export const plannedEdgeSchema = z.object({

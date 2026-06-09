@@ -1,0 +1,103 @@
+// 可用模型清单生成器：把 catalog 真实可用的模型 join 上各自档案（archetype），
+// flatten 成 agent 可读 / 计划清单卡可渲染的清单。
+//
+// 两条关键约束（来自 bug① spike）：
+//  1. 只收**有档案**的模型——agent 只对有 archetype 的模型选模型/配参数，避免对缺档案的模型
+//     手配漂移（同 onboarding「缺 archetype 先补再配」纪律）。
+//  2. 只暴露**真实可用**的 modelKey（来自 catalog 实际接入），避开 useNodeModelAutoSelect 的
+//     effect3（供应商断开自愈）覆盖 agent 选择。
+//
+// 参数随 (model × mode × vendor) 三元组变：每个 model 带 modes[]，每个 mode 带自己的 params
+// （resolveArchetypeForModel 内部已按 vendor 特化）。agent 必须同时选 modelKey + modeId。
+import type { ModelOption } from "../../../config/models";
+import type { ModelParameterControl } from "../../../config/modelCatalogMeta";
+import { resolveArchetypeForModel } from "../../../config/modelArchetypes";
+import { preloadModelOptions } from "../../../config/modelCatalogCache";
+
+export type AgentModelMode = {
+  modeId: string;
+  /** 模型自己的叫法（vendor 原词，如「全能参考」）——计划卡副标签 + agent 提示用真名。 */
+  vendorTerm: string;
+  intent: string;
+  hint: string;
+  params: ModelParameterControl[];
+};
+
+export type AgentModelEntry = {
+  modelKey: string;
+  modelAlias: string | null;
+  vendor: string | null;
+  label: string;
+  kind: "image" | "video";
+  archetypeId: string;
+  defaultModeId: string;
+  modes: AgentModelMode[];
+};
+
+/**
+ * 把 catalog 的 ModelOption[] join 档案后 flatten 成 agent 可选模型清单。纯函数，可单测。
+ * 无档案的模型直接跳过；同一 modelKey 去重（image/video 两边可能重复）。
+ */
+export function buildAgentModelEntries(options: readonly ModelOption[]): AgentModelEntry[] {
+  const entries: AgentModelEntry[] = [];
+  const seen = new Set<string>();
+  for (const option of options) {
+    const modelKey = option.modelKey ?? option.value;
+    if (!modelKey || seen.has(modelKey)) continue;
+    const archetype = resolveArchetypeForModel({
+      modelKey: option.modelKey ?? option.value,
+      modelAlias: option.modelAlias,
+      vendorKey: option.vendor,
+      meta: option.meta,
+    });
+    if (!archetype) continue;
+    seen.add(modelKey);
+    entries.push({
+      modelKey,
+      modelAlias: option.modelAlias ?? null,
+      vendor: option.vendor ?? null,
+      label: option.label,
+      kind: archetype.kind,
+      archetypeId: archetype.id,
+      defaultModeId: archetype.defaultModeId,
+      modes: archetype.modes.map((mode) => ({
+        modeId: mode.id,
+        vendorTerm: mode.vendorTerm,
+        intent: mode.intent,
+        hint: mode.hint,
+        params: mode.params,
+      })),
+    });
+  }
+  return entries;
+}
+
+/** 拉取 image+video 两类真实可用模型，join 档案生成 agent 可选清单（渲染层，走 catalog IPC）。 */
+export async function listAvailableModelsForAgent(): Promise<AgentModelEntry[]> {
+  const [imageOptions, videoOptions] = await Promise.all([
+    preloadModelOptions("image"),
+    preloadModelOptions("video"),
+  ]);
+  return buildAgentModelEntries([...imageOptions, ...videoOptions]);
+}
+
+/** 把可选模型清单格式化成注入 agent 系统提示词的紧凑文本。空清单返回 ''（不注入）。 */
+export function formatAvailableModelsForPrompt(entries: readonly AgentModelEntry[]): string {
+  if (entries.length === 0) return "";
+  const lines = entries.map((entry) => {
+    const modes = entry.modes.map((m) => `${m.modeId}(${m.vendorTerm})`).join(" / ");
+    const params =
+      entry.modes[0]?.params
+        .map((p) => {
+          const opts = p.options?.map((o) => o.value).join(",");
+          return opts ? `${p.key}[${opts}]` : p.key;
+        })
+        .join(" ") ?? "";
+    return `- modelKey=${entry.modelKey}（${entry.label}，${entry.kind}）模式: ${modes}；参数: ${params}`;
+  });
+  return [
+    "可用模型（为每个节点选一个，在 create_canvas_nodes 的节点里给出 modelKey、可选 modeId、params）：",
+    ...lines,
+    "规则：modelKey 必须用上面列出的；modeId 用该模型的模式 id；params 用对应模型/模式支持的取值（如 aspect_ratio=9:16）。用户会在确认卡上调整，配错会被自动纠正。",
+  ].join("\n");
+}

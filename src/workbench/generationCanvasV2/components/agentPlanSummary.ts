@@ -10,6 +10,21 @@ export type PlannedNode = {
   title: string
   prompt: string
   position?: { x: number; y: number }
+  // bug①：agent 建议的模型 + 模式 + 标量参数（计划卡 chip 展示 + 用户可改 + 确认后写入节点 meta）。
+  modelKey?: string
+  modeId?: string
+  params?: Record<string, string | number | boolean>
+}
+
+/** 只保留标量值（string/number/boolean），丢弃 agent 可能塞进来的对象/数组等非法参数值。 */
+function sanitizeAgentParams(raw: Record<string, unknown>): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = value
+    }
+  }
+  return out
 }
 
 export type PlannedEdge = {
@@ -51,6 +66,11 @@ export function summarizeAgentPlan(calls: readonly PendingToolCallLike[]): Agent
       prompt: typeof node.prompt === 'string' ? node.prompt : '',
       ...(position && typeof position.x === 'number' && typeof position.y === 'number'
         ? { position: { x: position.x, y: position.y } }
+        : {}),
+      ...(typeof node.modelKey === 'string' && node.modelKey.trim() ? { modelKey: node.modelKey.trim() } : {}),
+      ...(typeof node.modeId === 'string' && node.modeId.trim() ? { modeId: node.modeId.trim() } : {}),
+      ...(node.params && typeof node.params === 'object' && !Array.isArray(node.params)
+        ? { params: sanitizeAgentParams(node.params as Record<string, unknown>) }
         : {}),
     }
   })
