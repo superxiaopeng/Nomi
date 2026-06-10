@@ -15,6 +15,7 @@ import {
 } from "./library/tryNowExamples";
 import type { WorkbenchProjectPersistenceService } from "./project/projectPersistenceService";
 import { useWorkspaceEvents } from "./useWorkspaceEvents";
+import { useWorkbenchStore } from "./workbenchStore";
 import { cn } from "../utils/cn";
 import { toast } from "../ui/toast";
 import { setDesktopActiveProjectId } from "../desktop/activeProject";
@@ -182,6 +183,9 @@ export default function NomiStudioApp(): JSX.Element {
 
     const openProject = React.useCallback(
         (projectId: string) => {
+            // 常规打开默认落「生成」画布。显式设，避免继承上一个示例残留的 creation
+            // （WorkbenchShell 挂载在 URL 无 step 时会沿用 store 当前模式）。
+            useWorkbenchStore.getState().setWorkspaceMode("generation");
             void hydrateProject(projectId);
         },
         [hydrateProject],
@@ -258,19 +262,10 @@ export default function NomiStudioApp(): JSX.Element {
             const { useWorkbenchStore } = await import("./workbenchStore");
             const store = useWorkbenchStore.getState();
             store.setWorkbenchDocument(doc);
+            // 统一示例行为：打开后落在「创作」、不自动拆镜（不偷偷耗 LLM 额度、用户掌控节奏）。
+            // 展开创作助手让「拆镜头」CTA 一眼可见，用户读完故事一键拆镜进画布。
             store.setWorkspaceMode("creation");
-            // Allow the creation editor + canvas assistant panel to mount before
-            // dispatching, so the storyboard listener actually picks up the event.
-            window.setTimeout(() => {
-                void import(
-                    "./generationCanvasV2/agent/storyboardLauncher"
-                ).then(({ requestStoryboardPlanning }) => {
-                    requestStoryboardPlanning({
-                        storyText: example.story,
-                        source: `library-try-now:${example.id}`,
-                    });
-                });
-            }, 200);
+            store.setCreationAssistantAutoOpen(true);
         },
         [hydrateProject, refreshProjects],
     );

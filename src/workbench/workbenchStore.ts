@@ -88,6 +88,9 @@ type WorkbenchState = {
   setCreationAiMessages: (messages: WorkbenchAiMessage[] | ((messages: WorkbenchAiMessage[]) => WorkbenchAiMessage[])) => void
   setCreationAiAttachments: (attachments: ComposerAttachment[] | ((attachments: ComposerAttachment[]) => ComposerAttachment[])) => void
   setCreationAiError: (error: string) => void
+  /** 一次性信号：打开示例/新项目时请求创作助手默认展开（让「拆镜头」CTA 一眼可见），消费后清掉。 */
+  creationAssistantAutoOpen: boolean
+  setCreationAssistantAutoOpen: (open: boolean) => void
   resetCreationAiConversation: () => void
   setTimeline: (timeline: TimelineState) => void
   setTimelinePlaying: (playing: boolean) => void
@@ -193,6 +196,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   creationAiMessages: [],
   creationAiAttachments: [],
   creationAiError: '',
+  creationAssistantAutoOpen: false,
   timeline: createDefaultTimeline(),
   timelinePlaying: false,
   previewAspectRatio: '16:9',
@@ -233,6 +237,9 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   },
   setCreationAiError: (creationAiError) => {
     set({ creationAiError })
+  },
+  setCreationAssistantAutoOpen: (creationAssistantAutoOpen) => {
+    set({ creationAssistantAutoOpen })
   },
   resetCreationAiConversation: () => {
     set({ creationAiDraft: '', creationAiMessages: [], creationAiAttachments: [], creationAiError: '' })

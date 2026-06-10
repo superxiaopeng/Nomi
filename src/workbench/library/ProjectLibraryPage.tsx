@@ -94,10 +94,10 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
             </div>
             <div className="flex flex-col gap-1">
               <h2 className="m-0 font-nomi-display text-[20px] font-normal tracking-[-0.018em] text-nomi-ink leading-snug">
-                把一段故事，自动拆成 6-12 个镜头
+                把一段故事，拆成 6-12 个镜头
               </h2>
               <p className="m-0 text-caption text-nomi-ink-60 leading-relaxed">
-                选一个示例，Nomi 会新建项目、填入故事文本，并自动调用 Agent 拆镜头 → 画布上看到一整排可生成的镜头节点。
+                选一个示例，Nomi 会新建项目、填入故事文本并打开创作助手，点「拆镜头」即可在画布上看到一整排可生成的镜头节点。
               </p>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2 mt-1">

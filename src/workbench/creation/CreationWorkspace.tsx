@@ -3,10 +3,20 @@ import { cn } from '../../utils/cn'
 import CreationAiPanel from './CreationAiPanel'
 import WorkbenchEditor from './WorkbenchEditor'
 import { NomiAILabel, WorkbenchButton } from '../../design'
+import { useWorkbenchStore } from '../workbenchStore'
 
 export default function CreationWorkspace(): JSX.Element {
   // 与生成区助手一致：一开始收着（浮起一个 pill），点开才展开成 344px 侧栏。
   const [collapsed, setCollapsed] = React.useState(true)
+  // 一次性信号：打开示例/新项目时自动展开助手，让「拆镜头」CTA 一眼可见，消费后清掉。
+  const autoOpen = useWorkbenchStore((s) => s.creationAssistantAutoOpen)
+  const setAutoOpen = useWorkbenchStore((s) => s.setCreationAssistantAutoOpen)
+  React.useEffect(() => {
+    if (autoOpen) {
+      setCollapsed(false)
+      setAutoOpen(false)
+    }
+  }, [autoOpen, setAutoOpen])
 
   return (
     <section
