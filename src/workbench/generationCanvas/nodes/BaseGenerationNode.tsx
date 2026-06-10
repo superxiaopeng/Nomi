@@ -19,6 +19,8 @@ import NodeImageEditToolbar from "./NodeImageEditToolbar";
 import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { useNodeImageEditing } from "./useNodeImageEditing";
 import { useNodeDragResize } from "./useNodeDragResize";
+import { useShotIndex } from "../hooks/useNodeRelationships";
+import { PendingGenerationPlaceholder } from "./render/CardCommon";
 import { cn } from "../../../utils/cn";
 import { NomiImage } from "../../../design/media";
 import { persistNodeImageFile } from "../adapters/persistNodeImage";
@@ -368,6 +370,8 @@ function BaseGenerationNodeImpl({
               ? `独立副本（来自 ${sourceNodeLabel}）`
               : "独立副本（源节点已不存在）";
     const nodeExecutionKind = getGenerationNodeExecutionKind(node.kind);
+    // L3：待生成卡给镜头序号，让未选中的占位卡也能一眼分清哪个镜头（非 shots 返回 null）。
+    const shotIndex = useShotIndex(node.id, node.categoryId);
     const handlePanoramaScreenshot = React.useCallback(
         (screenshot: PanoramaScreenshot) => {
             const { dataUrl, dimensions } = screenshot;
@@ -808,25 +812,17 @@ function BaseGenerationNodeImpl({
                         />
                     )
                 ) : (
-                    // v0.8: 占位态。对于 video 节点（Kling 等），明确告诉用户需要首帧。
-                    <div
-                        className={cn(
-                            "flex w-full h-full items-center justify-center pointer-events-none px-4 text-center",
-                        )}>
-                        {selected ? null : nodeExecutionKind === "video" &&
-                          !canGenerate &&
-                          !isGenerating ? (
-                            <span className='text-[11px] text-nomi-ink-40 leading-relaxed'>
-                                把图片节点拖过来
-                                <br />
-                                作为首帧
-                            </span>
-                        ) : (
-                            <span className='text-[11px] text-nomi-ink-40'>
-                                等待生成
-                            </span>
-                        )}
-                    </div>
+                    <PendingGenerationPlaceholder
+                        selected={selected}
+                        needsFirstFrame={
+                            nodeExecutionKind === "video" &&
+                            !canGenerate &&
+                            !isGenerating
+                        }
+                        shotIndex={shotIndex}
+                        title={node.title}
+                        prompt={node.prompt}
+                    />
                 )}
                 {imageEditing.cropMode &&
                 (node.kind === "image" || isAssetKind) &&

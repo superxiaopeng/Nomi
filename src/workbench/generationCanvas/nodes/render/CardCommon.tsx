@@ -48,6 +48,56 @@ export function PlaceholderCenter({ label }: { label: string }): JSX.Element {
 }
 
 /**
+ * L3: 生成节点的"待生成"占位卡。未选中时不再只显斜纹 + "等待生成"，而是给
+ * 镜头序号徽标 + 标题 + 提示词首行预览，让用户一眼分清哪个镜头（J3 走查）。
+ * - selected：参数面板会盖上来，这里不渲染
+ * - needsFirstFrame：video 节点缺首帧 → 提示拖图进来
+ * - shotIndex：仅 shots 分类有，非 shots 传 null（不显徽标）
+ */
+export function PendingGenerationPlaceholder({
+  selected,
+  needsFirstFrame,
+  shotIndex,
+  title,
+  prompt,
+}: {
+  selected: boolean
+  needsFirstFrame: boolean
+  shotIndex: number | null
+  title?: string
+  prompt?: string
+}): JSX.Element | null {
+  if (selected) return null
+  if (needsFirstFrame) {
+    return (
+      <div className="flex w-full h-full items-center justify-center pointer-events-none px-4 text-center">
+        <span className="text-micro text-nomi-ink-40 leading-relaxed">
+          把图片节点拖过来
+          <br />
+          作为首帧
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="flex w-full h-full flex-col pointer-events-none p-2.5 gap-1 overflow-hidden">
+      {shotIndex != null ? (
+        <span className="self-start inline-flex items-center h-[18px] px-[7px] rounded-full bg-nomi-ink text-nomi-paper text-micro font-bold tabular-nums">
+          镜头 {shotIndex}
+        </span>
+      ) : null}
+      {title ? <span className="text-[13px] font-semibold text-nomi-ink-80 truncate">{title}</span> : null}
+      {prompt ? (
+        <span className="text-caption text-nomi-ink-60 leading-snug overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+          {prompt}
+        </span>
+      ) : null}
+      <span className="mt-auto text-micro text-nomi-ink-40">等待生成</span>
+    </div>
+  )
+}
+
+/**
  * v0.7.1: 卡片上传 CTA — 占位态时显示 + 上传按钮。
  * - image 卡（character/scene/prop）：accept=image/*
  * - audio 卡：accept=audio/*
