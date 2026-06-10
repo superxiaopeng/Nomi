@@ -405,7 +405,7 @@ export default function NodeParameterControls({
       ) : null}
 
       {showReferences && uploadError ? (
-        <div className={cn('text-workbench-danger text-[10.5px] leading-[1.25]')} role="alert">{uploadError}</div>
+        <div className={cn('text-workbench-danger text-micro leading-[1.25]')} role="alert">{uploadError}</div>
       ) : null}
     </div>
   )

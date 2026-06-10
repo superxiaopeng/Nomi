@@ -449,7 +449,7 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
                 )}
                 data-tool-call-id={call.toolCallId}
               >
-                <div className={cn('workbench-creation-ai__tool-call-head', 'inline-flex items-center gap-[6px] text-nomi-accent text-[12.5px] font-medium')}>
+                <div className={cn('workbench-creation-ai__tool-call-head', 'inline-flex items-center gap-[6px] text-nomi-accent text-caption font-medium')}>
                   {writeToolIcon(call.toolName)}
                   {writeToolLabel(call.toolName)}
                 </div>

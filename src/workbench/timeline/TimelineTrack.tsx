@@ -94,7 +94,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
           'flex-none min-w-0 h-auto ml-auto px-1.5 py-px',
           'inline-grid place-items-center border-0 rounded-full',
           'bg-[var(--nomi-ink-05)] text-[var(--nomi-ink-40)]',
-          'text-[10.5px] font-bold tabular-nums',
+          'text-micro font-bold tabular-nums',
         )}>{track.clips.length}</span>
       </div>
       <div

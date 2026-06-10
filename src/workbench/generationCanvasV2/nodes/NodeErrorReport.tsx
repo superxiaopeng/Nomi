@@ -55,7 +55,7 @@ export function NodeErrorReport({ message, onRetry }: { message: string; onRetry
         <IconAlertTriangle size={16} stroke={1.7} className="mt-[1px] shrink-0 text-workbench-danger" />
         <span className="text-[14px] font-bold leading-snug text-nomi-ink">{report.reason}</span>
       </div>
-      {report.hint ? <p className="mt-2 text-[12.5px] leading-relaxed text-nomi-ink-60">{report.hint}</p> : null}
+      {report.hint ? <p className="mt-2 text-caption leading-relaxed text-nomi-ink-60">{report.hint}</p> : null}
 
       <div className="min-h-0 flex-1" />
 
@@ -98,7 +98,7 @@ export function NodeErrorReport({ message, onRetry }: { message: string; onRetry
             setShowRaw((value) => !value)
           }}
           aria-expanded={showRaw}
-          className="inline-flex items-center gap-0.5 text-[11.5px] text-nomi-ink-40 hover:text-nomi-ink-60"
+          className="inline-flex items-center gap-0.5 text-micro text-nomi-ink-40 hover:text-nomi-ink-60"
         >
           技术详情
           {showRaw ? <IconChevronDown size={13} stroke={1.6} /> : <IconChevronRight size={13} stroke={1.6} />}

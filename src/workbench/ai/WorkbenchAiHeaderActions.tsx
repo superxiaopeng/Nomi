@@ -24,7 +24,7 @@ export function WorkbenchAiHeaderActions({
     <div className={cn('workbench-ai-header-actions inline-flex items-center flex-nowrap gap-1.5', className)}>
       {totalTokens > 0 ? (
         <span
-          className={cn('mr-0.5 whitespace-nowrap text-[10.5px] tabular-nums text-nomi-ink-40')}
+          className={cn('mr-0.5 whitespace-nowrap text-micro tabular-nums text-nomi-ink-40')}
           title={`本会话累计 ${totalTokens.toLocaleString()} tokens`}
         >
           {totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}k` : totalTokens} tok

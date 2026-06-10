@@ -32,8 +32,8 @@ function makeComponents(compact: boolean): Components {
     code: ({ node: _n, className, children, ...p }) => {
       const isBlock = String(className || '').includes('language-')
       return isBlock
-        ? <code className={`font-nomi-mono text-[12.5px] ${className || ''}`.trim()} {...p}>{children}</code>
-        : <code className="font-nomi-mono text-[12.5px] bg-nomi-ink-05 rounded-nomi-sm px-1 py-0.5" {...p}>{children}</code>
+        ? <code className={`font-nomi-mono text-caption ${className || ''}`.trim()} {...p}>{children}</code>
+        : <code className="font-nomi-mono text-caption bg-nomi-ink-05 rounded-nomi-sm px-1 py-0.5" {...p}>{children}</code>
     },
     pre: ({ node: _n, ...p }) => <pre className={`bg-nomi-ink-05 rounded-nomi-sm p-3 ${pMy} overflow-auto text-nomi-ink-80`} {...p} />,
   }

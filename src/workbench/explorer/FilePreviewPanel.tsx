@@ -102,5 +102,5 @@ function TextPreview({ url, markdown }: { url: string; markdown: boolean }): JSX
   if (state.loading) return <div className="text-[13px] text-nomi-ink-40">加载中…</div>
   if (state.error) return <div className="text-[13px] text-workbench-danger">读取失败：{state.error}</div>
   if (markdown) return <NomiMarkdown>{state.text}</NomiMarkdown>
-  return <pre className="whitespace-pre-wrap break-words font-nomi-mono text-[12.5px] leading-relaxed text-nomi-ink-80">{state.text}</pre>
+  return <pre className="whitespace-pre-wrap break-words font-nomi-mono text-caption leading-relaxed text-nomi-ink-80">{state.text}</pre>
 }

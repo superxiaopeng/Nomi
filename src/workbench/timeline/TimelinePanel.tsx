@@ -274,7 +274,7 @@ export default function TimelinePanel({ density = 'compact', regionLabel, action
               >
                 <span className={cn(
                   'workbench-timeline__ruler-label',
-                  'absolute left-1.5 top-[3px] font-mono text-[10.5px] font-medium leading-none',
+                  'absolute left-1.5 top-[3px] font-mono text-micro font-medium leading-none',
                   'text-[var(--nomi-ink-40)] whitespace-nowrap tabular-nums',
                 )}>{tick.label}</span>
               </span>

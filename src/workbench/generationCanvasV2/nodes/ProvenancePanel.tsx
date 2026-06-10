@@ -66,7 +66,7 @@ export default function ProvenancePanel({ node, open, onClose, onRegenerate }: P
             </div>
           </div>
         ) : (
-          <div className="space-y-3 text-[12.5px]">
+          <div className="space-y-3 text-caption">
             <ProvenanceRow label="供应商" value={provenance.provider || '—'} />
             <ProvenanceRow label="模型" value={provenance.modelKey || '—'} />
             <ProvenanceRow label="时间" value={new Date(provenance.timestamp).toLocaleString('zh-CN')} />
@@ -74,7 +74,7 @@ export default function ProvenancePanel({ node, open, onClose, onRegenerate }: P
               <ProvenanceRow label="Seed" value={String(provenance.seed)} mono />
             ) : null}
             <div>
-              <div className="text-[10.5px] text-nomi-ink-40 uppercase tracking-wide mb-1">Prompt</div>
+              <div className="text-micro text-nomi-ink-40 uppercase tracking-wide mb-1">Prompt</div>
               <div className="bg-nomi-bg border border-nomi-line-soft rounded-nomi-sm p-2 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words text-nomi-ink-80">
                 {provenance.prompt || '(空)'}
               </div>
@@ -90,7 +90,7 @@ export default function ProvenancePanel({ node, open, onClose, onRegenerate }: P
             </div>
             {provenance.negativePrompt ? (
               <div>
-                <div className="text-[10.5px] text-nomi-ink-40 uppercase tracking-wide mb-1">Negative Prompt</div>
+                <div className="text-micro text-nomi-ink-40 uppercase tracking-wide mb-1">Negative Prompt</div>
                 <div className="bg-nomi-bg border border-nomi-line-soft rounded-nomi-sm p-2 text-[12px] font-mono">
                   {provenance.negativePrompt}
                 </div>
@@ -98,8 +98,8 @@ export default function ProvenancePanel({ node, open, onClose, onRegenerate }: P
             ) : null}
             {provenance.params && Object.keys(provenance.params).length > 0 ? (
               <div>
-                <div className="text-[10.5px] text-nomi-ink-40 uppercase tracking-wide mb-1">参数</div>
-                <pre className="bg-nomi-bg border border-nomi-line-soft rounded-nomi-sm p-2 text-[11.5px] font-mono overflow-x-auto text-nomi-ink-80">
+                <div className="text-micro text-nomi-ink-40 uppercase tracking-wide mb-1">参数</div>
+                <pre className="bg-nomi-bg border border-nomi-line-soft rounded-nomi-sm p-2 text-micro font-mono overflow-x-auto text-nomi-ink-80">
 {JSON.stringify(provenance.params, null, 2)}
                 </pre>
               </div>
@@ -141,13 +141,12 @@ function ProvenanceRow({ label, value, mono, small }: { label: string; value: st
   return (
     <div className="flex items-baseline gap-3">
       <div className={cn(
-        'text-nomi-ink-40 shrink-0 w-[80px]',
-        small ? 'text-[10.5px]' : 'text-[11.5px]',
+        'text-nomi-ink-40 shrink-0 w-[80px] text-micro',
       )}>{label}</div>
       <div className={cn(
         'flex-1 text-nomi-ink-80',
         mono ? 'font-mono' : '',
-        small ? 'text-[11px]' : 'text-[12.5px]',
+        small ? 'text-micro' : 'text-caption',
         'break-words',
       )}>{value}</div>
     </div>

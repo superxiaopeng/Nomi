@@ -463,7 +463,7 @@ export default function CanvasAssistantPanel({
               key={message.id}
               className={cn(
                 'relative max-w-[90%] py-[10px] px-[14px] rounded-nomi',
-                'bg-nomi-ink-05 text-nomi-ink text-[13.5px] leading-[1.55] whitespace-pre-wrap',
+                'bg-nomi-ink-05 text-nomi-ink text-body-sm leading-[1.55] whitespace-pre-wrap',
                 message.role === 'user' && 'self-end rounded-br-[4px]',
                 message.role === 'assistant' && 'self-start rounded-bl-[4px]',
                 message.role === 'tool' && 'self-start bg-nomi-accent-soft text-nomi-accent',
@@ -521,7 +521,7 @@ export default function CanvasAssistantPanel({
                       data-tool-call-id={call.toolCallId}
                     >
                       <div className={cn('text-nomi-ink text-[13px] font-medium')}>{call.toolName}</div>
-                      <div className={cn('text-nomi-ink-80 text-[12.5px]')}>{summarizeToolCall(call.toolName, call.args)}</div>
+                      <div className={cn('text-nomi-ink-80 text-caption')}>{summarizeToolCall(call.toolName, call.args)}</div>
                       <details className={cn('text-nomi-ink-60 text-caption')}>
                         <summary className={cn('cursor-pointer select-none')}>查看参数</summary>
                         <pre className={cn('mt-1 max-h-[160px] overflow-auto p-2 rounded-nomi-sm bg-nomi-ink-05 text-[11px] leading-[1.4] whitespace-pre-wrap break-all')}>
@@ -577,7 +577,7 @@ export default function CanvasAssistantPanel({
             // 对齐样张 .input：带边框圆角输入盒。
             'min-h-14 px-2 py-2 rounded-nomi',
             'border border-nomi-line focus:border-nomi-accent',
-            'bg-nomi-paper text-nomi-ink text-[13.5px] leading-[1.45]',
+            'bg-nomi-paper text-nomi-ink text-body-sm leading-[1.45]',
             'placeholder:text-nomi-ink-40',
           )}
           aria-label="给生成助手发送消息"

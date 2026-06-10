@@ -476,7 +476,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             'workbench-preview-player__export-button',
             'h-7 px-3 border border-transparent rounded-full whitespace-nowrap',
             'inline-flex items-center justify-center gap-1.5',
-            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-[11.5px] font-bold cursor-pointer',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-micro font-bold cursor-pointer',
             'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
             'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--nomi-ink)]',
           )}

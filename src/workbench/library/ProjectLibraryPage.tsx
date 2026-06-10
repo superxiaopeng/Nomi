@@ -88,7 +88,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
             data-try-now-hero="true"
             aria-label="30 秒体验 Nomi 故事板"
           >
-            <div className="flex items-center gap-2 text-nomi-accent text-[11.5px] font-medium uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-nomi-accent text-micro font-medium uppercase tracking-wider">
               <IconSparkles size={14} />
               <span>30 秒体验 Nomi</span>
             </div>
@@ -96,7 +96,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
               <h2 className="m-0 font-nomi-display text-[20px] font-normal tracking-[-0.018em] text-nomi-ink leading-snug">
                 把一段故事，自动拆成 6-12 个镜头
               </h2>
-              <p className="m-0 text-[12.5px] text-nomi-ink-60 leading-relaxed">
+              <p className="m-0 text-caption text-nomi-ink-60 leading-relaxed">
                 选一个示例，Nomi 会新建项目、填入故事文本，并自动调用 Agent 拆镜头 → 画布上看到一整排可生成的镜头节点。
               </p>
             </div>
@@ -121,7 +121,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   )} aria-hidden="true">{example.emoji}</span>
                   <span className="flex-1 min-w-0 flex flex-col gap-[2px]">
                     <span className="text-[13px] font-medium text-nomi-ink truncate group-hover:text-nomi-accent">{example.label}</span>
-                    <span className="text-[11.5px] text-nomi-ink-60 truncate">{example.subtitle}</span>
+                    <span className="text-micro text-nomi-ink-60 truncate">{example.subtitle}</span>
                   </span>
                   <IconMovie size={15} className="shrink-0 text-nomi-ink-40 group-hover:text-nomi-accent" />
                 </button>
@@ -255,7 +255,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                     <button
                       className={cn(
                         'h-[30px] px-[14px] rounded-nomi-sm border-none',
-                        'bg-white/90 text-nomi-ink font-inherit text-[12.5px] font-medium cursor-pointer',
+                        'bg-white/90 text-nomi-ink font-inherit text-caption font-medium cursor-pointer',
                         'transition-colors duration-150 hover:bg-white',
                       )}
                       type="button"
@@ -267,7 +267,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                 </div>
                 <div className="px-[13px] pt-[10px] pb-3">
                   <div className="text-[13px] font-medium text-nomi-ink truncate mb-0.5">{project.name}</div>
-                  <div className="text-[11.5px] text-nomi-ink-40">{formatUpdatedAt(project.updatedAt)}</div>
+                  <div className="text-micro text-nomi-ink-40">{formatUpdatedAt(project.updatedAt)}</div>
                 </div>
               </div>
             )
