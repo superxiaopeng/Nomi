@@ -353,12 +353,6 @@
       font-size: 12px;
     }
 
-    .source-line {
-      margin-top: 4px;
-      color: var(--nomi-ink-40);
-      font-size: 11px;
-    }
-
     .folder-action {
       width: 32px;
       height: 32px;
@@ -412,9 +406,9 @@
     <div class="section-head">
       <h2 class="section-title">最近项目</h2>
       <div class="source-tabs" aria-label="项目来源">
-        <button class="active">全部 12</button>
-        <button>默认项目 8</button>
-        <button>外部文件夹 4</button>
+        <button class="active">全部项目 12</button>
+        <button>新建项目 8</button>
+        <button>打开文件夹 4</button>
       </div>
     </div>
 
@@ -422,43 +416,43 @@
       <article class="project-card">
         <div class="thumb"><button class="continue">继续创作</button></div>
         <div class="body">
-          <div><h3 class="name">未命名项目 05_21...</h3><div class="time">15 天前</div><div class="source-line">默认项目</div></div>
+          <div><h3 class="name">未命名项目 05_21...</h3><div class="time">15 天前</div></div>
           <button class="folder-action" aria-label="打开项目文件夹"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg></button>
         </div>
       </article>
       <article class="project-card">
         <div class="thumb"><button class="continue">继续创作</button></div>
         <div class="body">
-          <div><h3 class="name">示例：30 秒产品介绍</h3><div class="time">51 分钟前</div><div class="source-line">默认项目</div></div>
+          <div><h3 class="name">示例：30 秒产品介绍</h3><div class="time">51 分钟前</div></div>
           <button class="folder-action" aria-label="打开项目文件夹"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg></button>
         </div>
       </article>
       <article class="project-card">
         <div class="thumb"><button class="continue">继续创作</button></div>
         <div class="body">
-          <div><h3 class="name">Movies/Videos 镜头测试</h3><div class="time">2 小时前</div><div class="source-line">外部文件夹</div></div>
+          <div><h3 class="name">Movies/Videos 镜头测试</h3><div class="time">2 小时前</div></div>
           <button class="folder-action" aria-label="打开项目文件夹"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg></button>
         </div>
       </article>
     </section>
-    <div class="why">推荐 A：切换器放在“最近项目”右侧，但只属于最近项目区域；卡片 metadata 轻量标来源。不在封面角标区分来源，避免污染作品图。</div>
+    <div class="why">推荐 A：切换器放在“最近项目”右侧，但只属于最近项目区域；卡片不重复标来源，只保留名称、更新时间和文件夹入口。</div>
   </main>
 
   <main id="screen-b" class="screen">
     <h1 class="brand"><span class="logo">N</span>Nomi 项目库</h1>
     <p class="sub">新建一个项目，开始把你的创意变成作品。</p>
     <section class="actions"><button class="button button-primary">＋ 新建空白项目</button><button class="button">▣ 打开已有文件夹</button><button class="button">⌁ 模型接入</button></section>
-    <div class="hint">最近项目按来源分组：默认项目和外部文件夹分别维护。</div>
+    <div class="hint">最近项目按入口分组：新建的项目和从文件夹打开的项目分别维护。</div>
     <section class="group-grid">
       <div class="group-block">
-        <h2 class="group-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg>默认项目</h2>
+        <h2 class="group-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg>新建项目</h2>
         <div class="stack">
           <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">未命名项目 05_21...</h3><div class="time">15 天前</div></div><button class="folder-action">▣</button></div></article>
           <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">示例：30 秒产品介绍</h3><div class="time">51 分钟前</div></div><button class="folder-action">▣</button></div></article>
         </div>
       </div>
       <div class="group-block">
-        <h2 class="group-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg>外部文件夹</h2>
+        <h2 class="group-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h6l2 2h8v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg>打开文件夹</h2>
         <div class="stack">
           <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">Movies/Videos 镜头测试</h3><div class="time">2 小时前</div></div><button class="folder-action">▣</button></div></article>
         </div>
@@ -472,13 +466,13 @@
     <p class="sub">新建一个项目，开始把你的创意变成作品。</p>
     <section class="actions"><button class="button button-primary">＋ 新建空白项目</button><button class="button">▣ 打开已有文件夹</button><button class="button">⌁ 模型接入</button></section>
     <section class="source-summary">
-      <div class="summary-item"><span class="summary-icon">▣</span><div><div class="summary-title">默认项目</div><div class="summary-sub">8 个 · Nomi Projects</div></div></div>
-      <div class="summary-item"><span class="summary-icon">▣</span><div><div class="summary-title">外部文件夹</div><div class="summary-sub">4 个 · 用户自选目录</div></div></div>
+      <div class="summary-item"><span class="summary-icon">▣</span><div><div class="summary-title">新建项目</div><div class="summary-sub">8 个 · Nomi Projects</div></div></div>
+      <div class="summary-item"><span class="summary-icon">▣</span><div><div class="summary-title">打开文件夹</div><div class="summary-sub">4 个 · 用户自选目录</div></div></div>
     </section>
     <h2 class="section-title">最近项目</h2>
     <section class="grid">
-      <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">未命名项目 05_21...</h3><div class="time">15 天前</div><div class="source-line">默认项目</div></div><button class="folder-action">▣</button></div></article>
-      <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">Movies/Videos 镜头测试</h3><div class="time">2 小时前</div><div class="source-line">外部文件夹</div></div><button class="folder-action">▣</button></div></article>
+      <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">未命名项目 05_21...</h3><div class="time">15 天前</div></div><button class="folder-action">▣</button></div></article>
+      <article class="project-card"><div class="thumb"><button class="continue">继续创作</button></div><div class="body"><div><h3 class="name">Movies/Videos 镜头测试</h3><div class="time">2 小时前</div></div><button class="folder-action">▣</button></div></article>
     </section>
     <div class="why">C 把来源说明变成统计卡，但对用户当前动作帮助弱，容易变成装饰信息。</div>
   </main>
