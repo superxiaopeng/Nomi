@@ -78,9 +78,9 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
       sourceFilter === 'folder' ? project.source === 'folder' : project.source !== 'folder'
     ))
   const sourceOptions: Array<{ id: 'all' | 'native' | 'folder'; label: string; count: number }> = [
-    { id: 'all', label: '全部', count: sourceCounts.all },
-    { id: 'native', label: '默认项目', count: sourceCounts.native },
-    { id: 'folder', label: '外部文件夹', count: sourceCounts.folder },
+    { id: 'all', label: '全部项目', count: sourceCounts.all },
+    { id: 'native', label: '新建项目', count: sourceCounts.native },
+    { id: 'folder', label: '打开文件夹', count: sourceCounts.folder },
   ]
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-nomi-bg text-nomi-ink font-nomi-sans text-[13px] leading-normal antialiased">
@@ -298,9 +298,6 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   <div className="min-w-0">
                     <div className="text-[13px] font-medium text-nomi-ink truncate mb-0.5">{project.name}</div>
                     <div className="text-micro text-nomi-ink-40">{formatUpdatedAt(project.updatedAt)}</div>
-                    <div className="text-micro text-nomi-ink-30 truncate">
-                      {project.source === 'folder' ? '外部文件夹' : '默认项目'}
-                    </div>
                   </div>
                   {onRevealProjectFolder && project.rootPath ? (
                     <button
