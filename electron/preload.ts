@@ -57,6 +57,13 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     run: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:run", payload),
     result: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:result", payload),
   },
+  review: {
+    onEvent: (callback: (payload: unknown) => void) => {
+      const listener = (_event: unknown, payload: unknown) => callback(payload);
+      ipcRenderer.on("nomi:review:event", listener as never);
+      return () => ipcRenderer.removeListener("nomi:review:event", listener as never);
+    },
+  },
   conversations: {
     read: (projectId: string) => ipcRenderer.invoke("nomi:conversations:read", { projectId }),
     write: (projectId: string, payload: { creationMessages: unknown; generationMessages: unknown }) =>

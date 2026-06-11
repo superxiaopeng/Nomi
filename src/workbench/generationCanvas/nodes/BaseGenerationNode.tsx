@@ -20,7 +20,7 @@ import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { useNodeImageEditing } from "./useNodeImageEditing";
 import { useNodeDragResize } from "./useNodeDragResize";
 import { useShotIndex } from "../hooks/useNodeRelationships";
-import { PendingGenerationPlaceholder } from "./render/CardCommon";
+import { PendingGenerationPlaceholder, Scene3DEditorLoading } from "./render/CardCommon";
 import { cn } from "../../../utils/cn";
 import { NomiImage } from "../../../design/media";
 import { persistNodeImageFile } from "../adapters/persistNodeImage";
@@ -47,6 +47,7 @@ import {
 import PanoramaViewer, { type PanoramaScreenshot } from "./PanoramaViewer";
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind } from "../model/generationNodeKinds";
 import { applyFixationMakeup } from "../fixation/buildFixationNode";
+import { TechnicalReviewBadge } from "./TechnicalReviewBadge";
 import {
     canDragGenerationNodeToTimeline,
     TIMELINE_DRAG_HANDLE_LABEL,
@@ -70,17 +71,6 @@ export type BaseGenerationNodeProps = {
     focusFlash?: boolean;
 };
 const Scene3DEditor = React.lazy(() => import("./Scene3DEditor"));
-
-function Scene3DEditorLoading(): JSX.Element {
-    return (
-        <div
-            className={cn(
-                "flex w-full h-full items-center justify-center bg-nomi-ink-05 text-[12px] text-nomi-ink-45",
-            )}>
-            3D 编辑器加载中
-        </div>
-    );
-}
 
 function BaseGenerationNodeImpl({
     node,
@@ -150,7 +140,6 @@ function BaseGenerationNodeImpl({
     // 让 handlePointerMove 与渲染期的尺寸计算用同一份 bounds。
     const sizeBounds = getNodeSizeBounds(node.kind);
 
-
     const handleTimelineDragStart = (event: React.DragEvent<HTMLElement>) => {
         event.stopPropagation();
         event.dataTransfer.effectAllowed = "copy";
@@ -183,7 +172,6 @@ function BaseGenerationNodeImpl({
                 startFrame,
             );
     };
-
 
     const updateMediaDimensions = (width: number, height: number) => {
         const nextSize = mediaNodeSize(width, height, node.size?.width);
@@ -622,6 +610,7 @@ function BaseGenerationNodeImpl({
                         {(isGenerating && node.progress?.message) || STATUS_LABEL[status] || status}
                     </span>
                 ) : null}
+                <TechnicalReviewBadge meta={node.meta} />
                 {/* E.2C-25 副本角标（spec §6.3）：跨分类独立副本永久显示。
             注：经 E.2C-16 migration 后，derivedFrom 仅承载跨分类独立副本语义；
             同分类内"基于此重生成"链路存到 regeneratedFrom 字段，不进此角标。 */}

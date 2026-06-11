@@ -113,6 +113,10 @@ export type DesktopBridge = {
     chatV2SessionAlive?: (sessionKey: string) => Promise<{ alive: boolean }>
     onChatV2Event: (sessionId: string, callback: (event: unknown) => void) => () => void
   }
+  /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
+  review?: {
+    onEvent: (callback: (payload: unknown) => void) => () => void
+  }
   /** S1b-3 对话持久化(conversation 域独立文件,不混画布 payload)。 */
   conversations?: {
     read: (projectId: string) => Promise<{ ok: boolean; conversations: { creationMessages: PersistedAiMessage[]; generationMessages: PersistedAiMessage[] } | null }>

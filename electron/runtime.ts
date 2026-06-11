@@ -8,6 +8,7 @@ import { endpoint } from "./vendorEndpoint";
 import { authQueryParams, requestJson } from "./vendor/vendorHttp";
 import { buildNormalizedRecipe, buildTaskProvenance } from "./vendor/provenance";
 import { traceVendorCompleted, traceVendorRequested } from "./events/vendorCallTrace";
+import { scheduleTechnicalReview } from "./review/reviewTrace";
 import {
   type AuthType,
   appendQueryParams,
@@ -435,7 +436,9 @@ async function localizeTaskAsset(projectId: string, assetUrl: string, type: "ima
     kind: "generated",
     ownerNodeId: nodeId || null,
     fileName: `${type}-${Date.now()}.${type === "image" ? "png" : "mp4"}`,
-  }) as { id?: string; name?: string; data?: { url?: string } };
+  }) as { id?: string; name?: string; data?: { url?: string; absolutePath?: string } };
+  // S4-2b V-a:落地后异步技术自检(黑帧/静音/解码),fire-and-forget 绝不挡结果呈现。
+  scheduleTechnicalReview({ projectId, nodeId, absolutePath: String(imported.data?.absolutePath || ""), assetUrl: String(imported.data?.url || assetUrl), type });
   return {
     type,
     url: String(imported.data?.url || assetUrl),
@@ -451,12 +454,8 @@ function findTaskMapping(vendorKey: string, taskKind: ProfileKind, modelKey?: st
   return selectTaskMapping(readCatalog().mappings, vendorKey, taskKind, modelKey);
 }
 
-// firstReferenceImage / taskTemplateParams 已抽到 electron/catalog/taskParams.ts（可测，见顶部 import）。
-
-// Adapter over the shared requestPipeline context builder. Production maps the
-// rich TaskRequest fields into normalized params via `taskTemplateParams`; the
-// canonical context shape (model/account/user_api_key/providerMeta) lives in the
-// shared module so the wizard test and production build identical contexts.
+// Adapter over the shared requestPipeline context builder(canonical context 形状在
+// shared 模块,wizard 测试与生产构建一致;params 经 taskTemplateParams 归一)。
 function templateContext(request: TaskRequest, model: Model, apiKey: string, providerMeta: JsonRecord = {}): JsonRecord {
   return buildTemplateContext({
     request: request as unknown as JsonRecord,

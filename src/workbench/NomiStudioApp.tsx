@@ -18,6 +18,7 @@ import { useWorkspaceEvents } from "./useWorkspaceEvents";
 import { useWorkbenchStore } from "./workbenchStore";
 import { swapGenerationAiProject } from "./generationCanvas/store/generationAiConversation";
 import { flushConversationsNow, initConversationPersistence, loadProjectConversations } from "./ai/conversationPersistence";
+import { initReviewEventBridge } from "./generationCanvas/reviewEventBridge";
 import { cn } from "../utils/cn";
 import { toast } from "../ui/toast";
 import { setDesktopActiveProjectId } from "../desktop/activeProject";
@@ -157,6 +158,8 @@ export default function NomiStudioApp(): JSX.Element {
 
     // S1b-3:对话消息变化 → 防抖落盘(projectId 在冲刷时刻取,防切换期错绑)。
     React.useEffect(() => initConversationPersistence(() => activeProjectIdRef.current ?? null), []);
+    // S4-2b:技术自检广播 → 节点 meta(⚠ 投影数据源)。
+    React.useEffect(() => initReviewEventBridge(), []);
 
     const hydrateProject = React.useCallback(
         async (projectId: string, options: { replaceUrl?: boolean } = {}) => {
