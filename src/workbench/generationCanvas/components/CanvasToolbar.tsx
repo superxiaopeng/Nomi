@@ -13,6 +13,8 @@ import { getQuickAddGenerationNodePlugins } from '../nodes/renderRegistry'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { sendStoryboardToTimeline } from '../agent/sendStoryboardToTimeline'
 import { runGenerationNodesBatch } from '../runner/generationRunController'
+import { buildDependencyWaves } from '../runner/dependencyWaves'
+import { useBatchPlanPreviewStore } from './batchPlanPreview'
 
 const QUICK_ADD_NODE_ITEMS = getQuickAddGenerationNodePlugins()
 
@@ -149,25 +151,19 @@ export default function CanvasToolbar({ getInsertionPosition, categoryId }: Canv
         disabled={selectedNodeIds.length === 0}
         onClick={() => {
           const ids = [...selectedNodeIds]
-          const total = ids.length
-          if (total === 0) return
-          toast(`开始批量生成 ${total} 个节点…`, 'info')
-          void runGenerationNodesBatch(ids)
-            .then((result) => {
-              const okCount = result.successes.length
-              const failCount = result.failures.length
-              if (failCount === 0) {
-                toast(`已完成 ${okCount}/${total} 个节点的生成`, 'success')
-              } else if (okCount === 0) {
-                toast(`批量生成失败：${failCount}/${total} 个节点未完成`, 'error')
-              } else {
-                toast(`已完成 ${okCount}/${total}，${failCount} 个失败 — 在画布上单独重试`, 'info')
-              }
+          if (ids.length === 0) return
+          // S2b:批量不直接跑——先建依赖波次计划给用户确认(确认前零调用零扣费)。
+          // 例外:单节点且无依赖关系,确认条是噪音(R2),沿用直接生成。
+          const state = useGenerationCanvasStore.getState()
+          const plan = buildDependencyWaves(ids, { nodes: state.nodes, edges: state.edges })
+          if (plan.blocked.length === 0 && plan.waves.flat().length <= 1 && plan.edgesUsed.length === 0) {
+            toast(`开始生成…`, 'info')
+            void runGenerationNodesBatch(ids).catch((error: unknown) => {
+              toast(error instanceof Error && error.message ? error.message : '生成异常', 'error')
             })
-            .catch((error: unknown) => {
-              const message = error instanceof Error && error.message ? error.message : '批量生成异常'
-              toast(message, 'error')
-            })
+            return
+          }
+          useBatchPlanPreviewStore.getState().open(plan)
         }}
       >
         <IconPlayerPlay size={15} />

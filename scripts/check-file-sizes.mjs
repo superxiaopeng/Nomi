@@ -28,7 +28,7 @@ const ALLOWLIST = {
   "src/workbench/generationCanvas/nodes/scene3d/Scene3DFullscreen.tsx": 3860,
   "electron/runtime.ts": 807,
   "src/workbench/generationCanvas/nodes/BaseGenerationNode.tsx": 948,
-  "src/workbench/generationCanvas/components/GenerationCanvas.tsx": 992,
+  "src/workbench/generationCanvas/components/GenerationCanvas.tsx": 991,
   "src/workbench/generationCanvas/store/generationCanvasStore.ts": 871,
   // NodeParameterControls.tsx 曾 1097 行（巨壳）；C2b 抽出 controls/parameterControlModel.ts +
   // archetypeMeta.ts + ModeBar.tsx 后缩到 605 < 800 硬上限，已出白名单（Rule 12：逐步清空白名单）。

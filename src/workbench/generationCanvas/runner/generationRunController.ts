@@ -4,6 +4,7 @@ import { persistActiveWorkbenchProjectNow } from '../../project/workbenchProject
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { generationNodeExecutor, type GenerationNodeExecutor } from './generationNodeExecutor'
 import { narrateProgress } from '../../observability/narrate'
+import type { DependencyWavePlan } from './dependencyWaves'
 import { resolveGenerationReferences } from './generationReferenceResolver'
 import { hasArchetypeArrayReferences, resolveArchetypeForModel } from '../nodes/controls/archetypeMeta'
 
@@ -291,6 +292,58 @@ export async function runGenerationNodesBatch(
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, () => worker())
   await Promise.all(workers)
   return { totalCount: queue.length, successes, failures }
+}
+
+/**
+ * 按拓扑波次执行批量生成(harness S2b,替代平铺 FIFO 的入口):
+ * - 波内并行(沿用 runGenerationNodesBatch 的并发池/重试语义);
+ * - 波间串行:依赖节点等到上游真完成才开跑——参考图不再"没出来就裸跑";
+ * - blocked(上游缺果/环)与"上游本批失败"的下游 → **显式失败**,人话原因,可单独重试。
+ */
+export async function runGenerationNodesByPlan(
+  plan: DependencyWavePlan,
+  options: RunGenerationNodesBatchOptions = {},
+): Promise<RunGenerationNodesBatchResult> {
+  const successes: RunGenerationNodesBatchResult['successes'] = []
+  const failures: RunGenerationNodesBatchResult['failures'] = []
+  const failNode = (nodeId: string, message: string) => {
+    const error = new Error(message)
+    useGenerationCanvasStore.getState().setNodeStatus(nodeId, 'error', message)
+    failures.push({ nodeId, error })
+    options.onNodeResult?.({ ok: false, nodeId, error })
+  }
+  for (const blocked of plan.blocked) failNode(blocked.nodeId, blocked.detail)
+
+  const plannedIds = new Set(plan.waves.flat())
+  const internalDeps = new Map<string, string[]>()
+  for (const edge of plan.edgesUsed) {
+    if (!plannedIds.has(edge.source) || !plannedIds.has(edge.target)) continue
+    internalDeps.set(edge.target, [...(internalDeps.get(edge.target) ?? []), edge.source])
+  }
+
+  const failedIds = new Set(plan.blocked.map((blocked) => blocked.nodeId))
+  for (const wave of plan.waves) {
+    // 上游本批失败 → 下游显式失败(不裸跑、不死等),其余照常并行。
+    const runnable: string[] = []
+    for (const nodeId of wave) {
+      const failedDep = (internalDeps.get(nodeId) ?? []).find((dep) => failedIds.has(dep))
+      if (failedDep) {
+        failedIds.add(nodeId)
+        const depTitle = useGenerationCanvasStore.getState().nodes.find((node) => node.id === failedDep)?.title || failedDep
+        failNode(nodeId, `上游「${depTitle}」本批生成失败,本节点未执行`)
+      } else {
+        runnable.push(nodeId)
+      }
+    }
+    if (runnable.length === 0) continue
+    const result = await runGenerationNodesBatch(runnable, options)
+    successes.push(...result.successes)
+    for (const failure of result.failures) {
+      failedIds.add(failure.nodeId)
+      failures.push(failure)
+    }
+  }
+  return { totalCount: plan.waves.flat().length + plan.blocked.length, successes, failures }
 }
 
 export async function rerunGenerationNodeAsNewNode(

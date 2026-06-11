@@ -46,6 +46,11 @@ const GenerationCanvas = React.lazy(
 const CanvasAssistantPanel = React.lazy(
     () => import("./generationCanvas/components/CanvasAssistantPanel"),
 );
+const BatchPlanOverlay = React.lazy(() =>
+    import("./generationCanvas/components/BatchPlanOverlay").then((module) => ({
+        default: module.BatchPlanOverlay,
+    })),
+);
 
 function GenerationCanvasLoading(): JSX.Element {
     return (
@@ -475,7 +480,11 @@ export default function NomiStudioApp(): JSX.Element {
             <WorkbenchShell
                 generation={
                     <React.Suspense fallback={<GenerationCanvasLoading />}>
-                        <GenerationCanvas />
+                        {/* relative 包一层:S2b 计划 overlay 与画布同坐标系,且不喂巨壳 */}
+                        <div className={cn("relative w-full h-full")}>
+                            <GenerationCanvas />
+                            <BatchPlanOverlay />
+                        </div>
                     </React.Suspense>
                 }
                 generationAiLayout={

@@ -119,10 +119,8 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const lastCategoryRef = React.useRef(activeCategoryId)
   React.useEffect(() => {
     if (lastCategoryRef.current === activeCategoryId) return
-    // save outgoing
-    rememberCategoryViewport(lastCategoryRef.current, { zoom, offset })
-    // load incoming
-    const next = categoryViewports[activeCategoryId] || initialViewport
+    rememberCategoryViewport(lastCategoryRef.current, { zoom, offset }) // save outgoing
+    const next = categoryViewports[activeCategoryId] || initialViewport // load incoming
     setViewport({ zoom: next.zoom, offset: next.offset })
     lastCategoryRef.current = activeCategoryId
     // eslint-disable-next-line react-hooks/exhaustive-deps
