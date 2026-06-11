@@ -113,6 +113,10 @@ export type DesktopBridge = {
     chatV2SessionAlive?: (sessionKey: string) => Promise<{ alive: boolean }>
     onChatV2Event: (sessionId: string, callback: (event: unknown) => void) => () => void
   }
+  /** S5-a 画布影子事件 → 单写者日志仓库(seq/脱敏/截断在主进程单点)。 */
+  events?: {
+    append: (projectId: string, events: unknown[]) => Promise<{ ok: boolean; count: number }>
+  }
   /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
   review?: {
     onEvent: (callback: (payload: unknown) => void) => () => void

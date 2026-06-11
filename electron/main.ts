@@ -40,6 +40,7 @@ import { registerExportJobIpc } from "./export/exportJobIpc";
 import { registerAgentChatV2Ipc } from "./ai/agentChatV2Ipc";
 import { registerConversationsIpc } from "./conversations/conversationsIpc";
 import { setEventLogSecretsProvider } from "./events/eventLogRepository";
+import { registerEventsIpc } from "./events/eventsIpc";
 import { catalogSecretsProvider } from "./events/secretsProvider";
 import { VendorRequestError, encodeVendorErrorMessage } from "./vendor/vendorHttp";
 import { traceVendorCompleted } from "./events/vendorCallTrace";
@@ -290,6 +291,7 @@ function registerIpc(): void {
   ipcMain.handle("nomi:tasks:result", (_event, payload) => runTaskIpcGuard(payload, () => fetchTaskResult(payload)));
   registerAgentChatV2Ipc();
   registerConversationsIpc();
+  registerEventsIpc();
   registerOnboardingIpc();
   // S4-1 评测安全铁律:事件落盘前,已配置的 vendor key 精确匹配脱敏(形态兜底之外的地基)。
   setEventLogSecretsProvider(catalogSecretsProvider);

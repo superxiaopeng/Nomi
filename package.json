@@ -93,6 +93,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "fast-check": "^4.8.0",
     "globals": "^17.6.0",
     "playwright": "^1.60.0",
     "postcss": "^8.5.15",

@@ -19,6 +19,7 @@ import { useWorkbenchStore } from "./workbenchStore";
 import { swapGenerationAiProject } from "./generationCanvas/store/generationAiConversation";
 import { flushConversationsNow, initConversationPersistence, loadProjectConversations } from "./ai/conversationPersistence";
 import { initReviewEventBridge } from "./generationCanvas/reviewEventBridge";
+import { setCanvasEventProjectIdProvider } from "./generationCanvas/events/canvasEventEmitter";
 import { cn } from "../utils/cn";
 import { toast } from "../ui/toast";
 import { setDesktopActiveProjectId } from "../desktop/activeProject";
@@ -160,6 +161,8 @@ export default function NomiStudioApp(): JSX.Element {
     React.useEffect(() => initConversationPersistence(() => activeProjectIdRef.current ?? null), []);
     // S4-2b:技术自检广播 → 节点 meta(⚠ 投影数据源)。
     React.useEffect(() => initReviewEventBridge(), []);
+    // S5-a:画布影子事件的 projectId(flush 时刻取值,防切换期错绑)。
+    React.useEffect(() => setCanvasEventProjectIdProvider(() => activeProjectIdRef.current ?? null), []);
 
     const hydrateProject = React.useCallback(
         async (projectId: string, options: { replaceUrl?: boolean } = {}) => {

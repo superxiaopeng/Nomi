@@ -3,6 +3,7 @@ import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { CLIPBOARD_OFFSET, createClipboardNodeId, createNodeId } from './canvasIds'
 import { bumpPersistRevision, isCategoryId, shouldPersistCanvasMutation } from './canvasGuards'
 import { getHistoryFlags, pushUndoSnapshot } from './canvasHistory'
+import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import type { CanvasNodeActions, CanvasSliceCreator } from './canvasStoreTypes'
 
 export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (set, get) => ({
@@ -27,6 +28,8 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
+    // S5-a 影子日志:nextNode 是 immer 外构造的 plain 对象,emit 内部再深拷贝一层
+    emitCanvasGesture([{ type: 'canvas.node.added', payload: { node: nextNode } }])
     return nextNode
   },
   commitPersistedChange: () => {
@@ -43,21 +46,26 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     })
   },
   updateNodePrompt: (nodeId, prompt) => {
+    if (!get().nodes.some((candidate) => candidate.id === nodeId)) return
     set((state) => {
       const node = state.nodes.find((candidate) => candidate.id === nodeId)
       if (!node) return
       node.prompt = prompt
       bumpPersistRevision(state)
     })
+    emitCanvasGesture([{ type: 'canvas.node.prompt-changed', payload: { nodeId, prompt } }])
   },
   moveNode: (nodeId, position, options) => {
+    // 守卫上移到 set 外(影子日志要与真实变更同真值;语义与原内嵌守卫等价)
+    const existing = get().nodes.find((candidate) => candidate.id === nodeId)
+    if (!existing || (existing.position.x === position.x && existing.position.y === position.y)) return
     set((state) => {
       const node = state.nodes.find((candidate) => candidate.id === nodeId)
       if (!node) return
-      if (node.position.x === position.x && node.position.y === position.y) return
       node.position = position
       if (shouldPersistCanvasMutation(options)) bumpPersistRevision(state)
     })
+    emitCanvasGesture([{ type: 'canvas.node.moved', payload: { nodeId, position } }])
   },
   moveSelectedNodes: (delta, options) => {
     set((state) => {
@@ -216,5 +224,6 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       bumpPersistRevision(state)
       Object.assign(state, getHistoryFlags())
     })
+    emitCanvasGesture([{ type: 'canvas.node.removed', payload: { nodeId } }])
   },
 })
