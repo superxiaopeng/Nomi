@@ -102,6 +102,20 @@
 
 **直接借鉴**:把 `loop.py` 的「TurnControl + transitions 状态机 + turn_record 落盘 + 抢先式压缩 + 死循环护栏」整套搬来当骨架;**唯独权限/预算闸门 + MCP 两格 ViMax 是空的,另补。**
 
+### 3.3 ViMax 论文层拆解(arXiv:2606.07649,2026-06-02;PDF 已读全文)
+
+§3.2 拆的是 ViMax 的 **runtime 层**(loop.py);论文讲的是它的**域机制层**(长视频一致性怎么保)。两层互补,域机制层对 Nomi 同样值钱:
+
+| 论文机制 | 一句话 | Nomi 现状(实测) | 可学点 |
+|---|---|---|---|
+| **依赖图 + 拓扑调度**(§2.3.1,Eq.7) | 规划期从镜头描述提取共享元素建依赖图;生成期拓扑排序——无依赖并行、有依赖等前置完成后做 reference-conditioned 生成。**消融:去掉它全局一致性 -8.7%**(论文最强结论) | **半套已有**:画布边(first_frame/style_ref/character_ref…)就是依赖图,`generationReferenceResolver.ts:61-90` 已做边→参考图解析(= Eq.7);**但 `runGenerationNodesBatch`(generationRunController.ts:249-284)是平铺 FIFO 不看边**——依赖节点和前置同时开跑,resolver 解析不到结果时 `continue` **静默丢参考**,裸跑 | ⭐**最高优先**:批量生成改拓扑调度(独立簇并行、依赖节点等前置),~100 行改在一个文件;丢参考时显式报错而非静默 |
+| **两步生成:文→关键图→视频**(§2.1.1) | 先生成角色立绘/场景图/关键帧,过质检后再 image-to-video——**在便宜的图像阶段拦住废片,贵的视频阶段不浪费** | 形态已支持(图节点 + first_frame 边喂视频节点;J2 定妆链路就是 character profiles),但拆镜 agent 不会主动按"先关键帧后视频"铺节点 | 拆镜 planner prompt + 工具 schema 引导两步铺法;与成本 gate(S7)叠加:贵的视频步前先确认关键帧 |
+| **VLM best-of-k 质检**(§2.1.2,RQ6) | 每任务并行采 k 个候选,VLM 评委按保真/叙事/规格打分取最优。**细节:k=2 最优,k≥3 反而引入选择噪声;质检在关键帧阶段做,不在视频阶段**(便宜)。消融:去掉 -3.8% | 无(参考池里 OpenMontage 的 ffprobe 自检是免费的技术检查,VLM 评审是花钱的审美检查,两层不同) | 作为可选 spend lever:关键帧 best-of-2 + VLM 评分;烧用户额度,**需拍板** |
+| **层级分解 + RAG**(§2.2) | 故事递归拆 事件→场景→镜头,每层只处理本层规模;RAG 检索原文给每个节点"补血"防分解丢信息。消融:去掉因果链,叙事忠实度 3.52→2.34 | 拆镜 planner 是单 pass(maxSteps 24),短文案够用;长剧本/小说(J2)会撞认知过载 | 长输入时分层拆+原文检索;backlog,等用户真喂长本子再做 |
+| **转场视频锚定空间**(§2.3.2) | 同场景多机位先生成一段 A→B 运镜视频,抽两端帧当"空间锚",借单段视频内部天然 3D 一致性焊住正反打 | 无 | 高级特性,backlog(镜头组空间锚) |
+
+**论文 Limitations 给 Nomi 的定位确认**(原文):ViMax "does not yet address … **interactive revision**"——交互式修订正是它没有、Nomi 全部设计(提议事务/计划卡/整笔撤销)所在的位置。**ViMax 是一键流水线,Nomi 是人在回路的画布**;它的域机制(依赖调度/两步生成/质检)可搬,它的"全自动"形态不可搬。另一条:"future harnesses could shift toward **long-horizon visual memory management** across scenes"——与我们簇 E(项目记忆)方向一致。
+
 ---
 
 ## 4. 创作 harness vs 编码 harness 的本质不同(多三道 gate)
