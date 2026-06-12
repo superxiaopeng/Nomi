@@ -43,13 +43,13 @@ describe('applyCanvasToolCall clientId 翻译', () => {
   it('create_canvas_nodes 随计划携带 edges → 节点+边一次落地（用户拍板：不分两步）', async () => {
     const result = (await applyCanvasToolCall('create_canvas_nodes', {
       nodes: [
-        { clientId: 'a1', kind: 'image', title: '镜头 1', prompt: 'p1' },
-        { clientId: 'a2', kind: 'image', title: '镜头 2', prompt: 'p2' },
-        { clientId: 'a3', kind: 'video', title: '镜头 3', prompt: 'p3' },
+        { clientId: 'a1', kind: 'character', title: '男主', prompt: 'p0' },
+        { clientId: 'a2', kind: 'image', title: '镜头 1 关键帧', prompt: 'p2' },
+        { clientId: 'a3', kind: 'video', title: '镜头 1 视频', prompt: 'p3' },
       ],
       edges: [
-        { sourceClientId: 'a1', targetClientId: 'a2' },
-        { sourceClientId: 'a2', targetClientId: 'a3' },
+        { sourceClientId: 'a1', targetClientId: 'a2', mode: 'character_ref' },
+        { sourceClientId: 'a2', targetClientId: 'a3', mode: 'first_frame' },
       ],
     })) as { createdNodeIds: string[]; clientIdToNodeId: Record<string, string>; connectedCount?: number }
     expect(result.createdNodeIds).toHaveLength(3)
@@ -58,8 +58,23 @@ describe('applyCanvasToolCall clientId 翻译', () => {
     const state = useGenerationCanvasStore.getState()
     expect(state.edges).toHaveLength(2)
     expect(state.edges[0].source).toBe(result.clientIdToNodeId.a1)
+    // T1：边语义随计划原样落 store（生成期参考槽分流依赖它）
+    expect(state.edges.map((e) => e.mode)).toEqual(['character_ref', 'first_frame'])
     // 吊边绝不入 store（clientId 已全部翻译成真实 id）
     expect(state.edges.some((e) => /^a\d$/.test(e.source) || /^a\d$/.test(e.target))).toBe(false)
+  })
+
+  it('非法 mode 按通用参考处理（不抛、不静默改语义）', async () => {
+    const created = (await applyCanvasToolCall('create_canvas_nodes', {
+      nodes: [
+        { clientId: 'b1', kind: 'image', title: 'x', prompt: 'p' },
+        { clientId: 'b2', kind: 'image', title: 'y', prompt: 'p' },
+      ],
+      edges: [{ sourceClientId: 'b1', targetClientId: 'b2', mode: 'made_up_mode' }],
+    })) as { connectedCount?: number }
+    expect(created.connectedCount).toBe(1)
+    // store 对缺省 mode 落 'reference'（通用参考）——非法值不得伪装成任何具体语义
+    expect(useGenerationCanvasStore.getState().edges[0].mode ?? 'reference').toBe('reference')
   })
 
   it('端点不存在的边被跳过并如实回报,不入 store', async () => {

@@ -33,7 +33,7 @@ type NodeLike = {
   meta?: Record<string, unknown>
 }
 
-type EdgeLike = { source: string; target: string }
+type EdgeLike = { source: string; target: string; mode?: string }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
@@ -62,9 +62,16 @@ export function reconcileProposal(input: {
       const source = resolveId(String(edge.sourceClientId || edge.source || '').trim())
       const target = resolveId(String(edge.targetClientId || edge.target || '').trim())
       if (!source || !target) continue
-      const exists = input.edges.some((candidate) => candidate.source === source && candidate.target === target)
-      if (!exists) {
+      const match = input.edges.find((candidate) => candidate.source === source && candidate.target === target)
+      if (!match) {
         deviations.push({ where: `${source} → ${target}`, field: '引用边', expected: '已连接', actual: '未连接' })
+        continue
+      }
+      // T1：批准的边语义（mode）必须原样落地；计划未指定 mode 则通配（向后兼容旧轨迹）；
+      // 落地侧 mode 缺省视作通用参考（'reference'），与计划里的显式 reference 等价。
+      const plannedMode = typeof edge.mode === 'string' && edge.mode ? edge.mode : undefined
+      if (plannedMode && (match.mode ?? 'reference') !== plannedMode) {
+        deviations.push({ where: `${source} → ${target}`, field: '边语义', expected: plannedMode, actual: match.mode ?? '(通用参考)' })
       }
     }
   }

@@ -35,7 +35,7 @@ export type GenerationCanvasToolAction =
   | { tool: 'read_selected_nodes' }
   | { tool: 'read_node_context'; nodeId: string }
   | { tool: 'create_nodes'; nodes: CreateGenerationNodeToolInput[] }
-  | { tool: 'connect_nodes'; edges: Array<Pick<GenerationCanvasEdge, 'source' | 'target'>> }
+  | { tool: 'connect_nodes'; edges: Array<Pick<GenerationCanvasEdge, 'source' | 'target' | 'mode'>> }
   | { tool: 'delete_nodes'; nodeIds: string[] }
   | { tool: 'update_node_prompt'; nodeId: string; prompt: string }
   | { tool: 'set_node_references'; nodeId: string; references: string[] }
@@ -73,14 +73,16 @@ export const generationCanvasTools = {
       return created
     })
   },
-  connect_nodes(edges: Array<Pick<GenerationCanvasEdge, 'source' | 'target'>>) {
+  connect_nodes(edges: Array<Pick<GenerationCanvasEdge, 'source' | 'target' | 'mode'>>) {
     // 端点必须真实存在——吊边一旦入 store 会被持久化且永不渲染(连线静默丢失)。
     const existing = new Set(useGenerationCanvasStore.getState().nodes.map((node) => node.id))
     const skipped: Array<Pick<GenerationCanvasEdge, 'source' | 'target'>> = []
     let connected = 0
     for (const edge of edges) {
       if (existing.has(edge.source) && existing.has(edge.target)) {
-        useGenerationCanvasStore.getState().connectNodes(edge.source, edge.target)
+        // T1 轨迹语义:mode(first_frame/character_ref/…)随边落 store,
+        // 生成期 generationReferenceResolver 按它分流参考槽。
+        useGenerationCanvasStore.getState().connectNodes(edge.source, edge.target, edge.mode)
         connected += 1
       } else {
         skipped.push(edge)

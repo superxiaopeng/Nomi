@@ -1,4 +1,4 @@
-import type { GenerationNodeKind } from '../model/generationCanvasTypes'
+import type { GenerationCanvasEdgeMode, GenerationNodeKind } from '../model/generationCanvasTypes'
 import { getDefaultCategoryForNodeKind, getGenerationNodeDefaultTitle } from '../model/generationNodeKinds'
 import { generationCanvasTools, type CreateGenerationNodeToolInput } from './generationCanvasTools'
 import { listAvailableModelsForAgent, type AgentModelEntry } from './availableModels'
@@ -44,6 +44,32 @@ const clientIdRegistry = new Map<string, string>()
 
 function resolveNodeId(id: string): string {
   return clientIdRegistry.get(id) ?? id
+}
+
+const EDGE_MODES: ReadonlySet<string> = new Set([
+  'reference',
+  'first_frame',
+  'last_frame',
+  'style_ref',
+  'character_ref',
+  'composition_ref',
+])
+
+/** LLM 给的边 mode 只认白名单内的值，非法值按通用参考处理（不抛、不静默改语义）。 */
+function normalizeEdgeMode(raw: unknown): GenerationCanvasEdgeMode | undefined {
+  return typeof raw === 'string' && EDGE_MODES.has(raw) ? (raw as GenerationCanvasEdgeMode) : undefined
+}
+
+/** create 携带边 / connect_canvas_edges 共用的边参数归一（clientId→真实 id + mode 白名单）。 */
+function normalizePlannedEdges(rawEdges: unknown[]): Array<{ source: string; target: string; mode?: GenerationCanvasEdgeMode }> {
+  return rawEdges
+    .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
+    .map((edge) => ({
+      source: resolveNodeId(String(edge.sourceClientId || edge.source || '').trim()),
+      target: resolveNodeId(String(edge.targetClientId || edge.target || '').trim()),
+      ...(normalizeEdgeMode(edge.mode) ? { mode: normalizeEdgeMode(edge.mode) } : {}),
+    }))
+    .filter((edge) => edge.source && edge.target)
 }
 
 /** S6-4 锁求值要把 LLM 口中的 clientId 翻译成真实节点 id 再查锁面(gate 调用方用)。 */
@@ -122,14 +148,7 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
     let connectedCount = 0
     let skippedEdges: unknown[] = []
     if (rawPlanEdges.length) {
-      const planEdges = rawPlanEdges
-        .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
-        .map((edge) => ({
-          source: resolveNodeId(String(edge.sourceClientId || edge.source || '').trim()),
-          target: resolveNodeId(String(edge.targetClientId || edge.target || '').trim()),
-        }))
-        .filter((edge) => edge.source && edge.target)
-      const outcome = inCtx(() => generationCanvasTools.connect_nodes(planEdges))
+      const outcome = inCtx(() => generationCanvasTools.connect_nodes(normalizePlannedEdges(rawPlanEdges)))
       connectedCount = outcome.connected
       skippedEdges = outcome.skipped
     }
@@ -143,13 +162,7 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
 
   if (toolName === 'connect_canvas_edges') {
     const rawEdges = Array.isArray(record.edges) ? record.edges : []
-    const edges = rawEdges
-      .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
-      .map((edge) => ({
-        source: resolveNodeId(String(edge.sourceClientId || edge.source || '').trim()),
-        target: resolveNodeId(String(edge.targetClientId || edge.target || '').trim()),
-      }))
-      .filter((edge) => edge.source && edge.target)
+    const edges = normalizePlannedEdges(rawEdges)
     const { connected, skipped } = inCtx(() => generationCanvasTools.connect_nodes(edges))
     // 诚实回报:被跳过的吊边如实告诉 LLM(它可以纠正),不静默吞。
     return { connectedCount: connected, ...(skipped.length > 0 ? { skippedEdges: skipped } : {}) }

@@ -147,6 +147,40 @@ describe('reconcileProposal — S6-3 对账纯函数(N12)', () => {
     expect(bad.deviations[0].field).toBe('引用边')
   })
 
+  it('边语义(mode)对账：批准的语义被换 → 偏差;计划未指定 → 通配兼容', () => {
+    const modeEdges = [{ source: 'real-1', target: 'real-2', mode: 'character_ref' }]
+    const ok = reconcileProposal({
+      steps: [
+        { toolName: 'connect_canvas_edges', effectiveArgs: { edges: [{ sourceClientId: 'c1', targetClientId: 'c2', mode: 'character_ref' }] }, result: null },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges: modeEdges,
+    })
+    expect(ok).toEqual({ ok: true, deviations: [] })
+
+    const swapped = reconcileProposal({
+      steps: [
+        { toolName: 'connect_canvas_edges', effectiveArgs: { edges: [{ sourceClientId: 'c1', targetClientId: 'c2', mode: 'first_frame' }] }, result: null },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges: modeEdges,
+    })
+    expect(swapped.ok).toBe(false)
+    expect(swapped.deviations[0]).toMatchObject({ field: '边语义', expected: 'first_frame', actual: 'character_ref' })
+
+    const wildcard = reconcileProposal({
+      steps: [
+        { toolName: 'connect_canvas_edges', effectiveArgs: { edges: [{ sourceClientId: 'c1', targetClientId: 'c2' }] }, result: null },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges: modeEdges,
+    })
+    expect(wildcard.ok).toBe(true)
+  })
+
   it('跨提议 clientId 经 resolveExternalId 回退解析 → 不再误报「未连接」(2026-06-12 bug A)', () => {
     // 模拟 connect 在独立提议执行:本批 clientIdToNodeId 为空,真实映射只在全局 registry。
     const registry = new Map([['n1', 'real-1'], ['n2', 'real-2']])

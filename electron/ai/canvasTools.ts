@@ -52,6 +52,15 @@ export const plannedNodeSchema = z.object({
 export const plannedEdgeSchema = z.object({
   sourceClientId: z.string().min(1),
   targetClientId: z.string().min(1),
+  // T1 轨迹语义：边的参考槽语义。character_ref=角色定妆参考、style_ref=场景/风格参考、
+  // composition_ref=构图参考、first_frame=源图像作为目标视频首帧（源为视频节点时＝
+  // 用源视频尾帧接力，须用户在计划卡单独勾选）、last_frame=尾帧约束、reference=通用参考。
+  mode: z
+    .enum(["reference", "first_frame", "last_frame", "style_ref", "character_ref", "composition_ref"])
+    .optional()
+    .describe(
+      "Reference-slot semantics: character_ref (cast sheet feeds keyframe), style_ref (scene/style feeds keyframe), composition_ref, first_frame (keyframe image feeds the video's first frame; when the source is a VIDEO node this means last-frame relay and must be opted-in by the user), last_frame, reference (generic). Omit for a generic reference edge.",
+    ),
 });
 
 export const canvasToolNames = [
