@@ -102,6 +102,7 @@ const stats = {
   events: 0,
   agent: { turns: 0, errors: 0, toolProposed: 0, toolFailed: 0, rejected: 0, tokens: 0 },
   vendor: { requested: 0, succeeded: 0, failed: 0, latenciesMs: [], byModel: new Map() },
+  review: { ok: 0, suspect: 0 },
 };
 
 const projectDirs = discoverProjectDirs();
@@ -162,6 +163,10 @@ for (const projectDir of projectDirs) {
           }
           break;
         }
+        case "review.technical.completed":
+          if (p.verdict === "suspect") stats.review.suspect += 1;
+          else stats.review.ok += 1;
+          break;
         default:
           break;
       }
@@ -194,6 +199,11 @@ const summary = {
     inFlightOrLost: stats.vendor.requested - completed,
     byModel: Object.fromEntries(stats.vendor.byModel),
   },
+  review: {
+    checked: stats.review.ok + stats.review.suspect,
+    suspect: stats.review.suspect,
+    suspectRate: stats.review.ok + stats.review.suspect > 0 ? +(stats.review.suspect / (stats.review.ok + stats.review.suspect)).toFixed(3) : null,
+  },
   cost: null, // harness S7 cost 写回后从 vendor.call.completed.cost 聚合
 };
 
@@ -209,6 +219,7 @@ if (asJson) {
     console.log(`[按模型]`);
     for (const [key, m] of models) console.log(`  ${key}: 发起 ${m.requested} · 成功 ${m.succeeded} · 失败 ${m.failed}`);
   }
+  console.log(`[技术自检] 检查 ${summary.review.checked} · 可疑 ${summary.review.suspect} · 可疑率 ${fmt(summary.review.suspectRate)}`);
   console.log(`[成本]    —(harness S7 cost 写回后出现)`);
   if (summary.totalEvents === 0) console.log(`\n提示:还没有任何轨迹。真实使用一次 app(或跑一轮 eval)后再来。`);
 }
