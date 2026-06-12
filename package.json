@@ -40,6 +40,7 @@
     "eval:diff": "node ./scripts/eval-diff.mjs",
     "eval:view": "node ./scripts/eval-trace-viewer.mjs",
     "eval:judge-calibrate": "node ./scripts/eval-judge-calibrate.mjs",
+    "eval:review-images": "node ./scripts/eval-review-images.mjs",
     "dist": "electron-builder",
     "dist:mac:dir": "electron-builder --mac dir --arm64",
     "postinstall": "node ./scripts/install-git-hooks.cjs",
