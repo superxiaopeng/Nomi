@@ -43,10 +43,31 @@ export function reconcileProposal(input: {
   clientIdToNodeId: Record<string, string>
   nodes: readonly NodeLike[]
   edges: readonly EdgeLike[]
+  /**
+   * clientId 跨提议解析回退（注入保持纯函数）：connect/set_prompt/delete 若在独立提议里
+   * 引用前序提议的 clientId，本批 clientIdToNodeId 查不到 → 必须回退到执行侧同一个全局
+   * registry（applyCanvasToolCall.resolveCanvasToolNodeId），否则对账拿计划 id 找不到
+   * 真实边/节点，必然误报「执行与批准有出入」（2026-06-12 真机走查 bug A）。
+   */
+  resolveExternalId?: (raw: string) => string
 }): ReconcileResult {
   const deviations: ReconcileDeviation[] = []
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]))
-  const resolveId = (raw: string): string => input.clientIdToNodeId[raw] ?? raw
+  const resolveId = (raw: string): string =>
+    input.clientIdToNodeId[raw] ?? input.resolveExternalId?.(raw) ?? raw
+
+  const reconcileEdges = (planned: unknown[]): void => {
+    for (const raw of planned) {
+      const edge = asRecord(raw)
+      const source = resolveId(String(edge.sourceClientId || edge.source || '').trim())
+      const target = resolveId(String(edge.targetClientId || edge.target || '').trim())
+      if (!source || !target) continue
+      const exists = input.edges.some((candidate) => candidate.source === source && candidate.target === target)
+      if (!exists) {
+        deviations.push({ where: `${source} → ${target}`, field: '引用边', expected: '已连接', actual: '未连接' })
+      }
+    }
+  }
 
   for (const step of input.steps) {
     if (step.toolName === 'create_canvas_nodes') {
@@ -85,21 +106,13 @@ export function reconcileProposal(input: {
           }
         }
       })
+      // 同计划携带的边（节点+边一次批准）：与节点同步对账。
+      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [])
       continue
     }
 
     if (step.toolName === 'connect_canvas_edges') {
-      const planned = Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : []
-      for (const raw of planned) {
-        const edge = asRecord(raw)
-        const source = resolveId(String(edge.sourceClientId || edge.source || '').trim())
-        const target = resolveId(String(edge.targetClientId || edge.target || '').trim())
-        if (!source || !target) continue
-        const exists = input.edges.some((candidate) => candidate.source === source && candidate.target === target)
-        if (!exists) {
-          deviations.push({ where: `${source} → ${target}`, field: '引用边', expected: '已连接', actual: '未连接' })
-        }
-      }
+      reconcileEdges(Array.isArray(step.effectiveArgs.edges) ? step.effectiveArgs.edges : [])
       continue
     }
 

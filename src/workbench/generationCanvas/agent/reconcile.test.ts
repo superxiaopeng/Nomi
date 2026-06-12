@@ -107,6 +107,80 @@ describe('reconcileProposal — S6-3 对账纯函数(N12)', () => {
     expect(result.deviations[0].field).toBe('引用边')
   })
 
+  it('create 步随计划携带的边（节点+边一次批准）→ 与节点同步对账', () => {
+    const ok = reconcileProposal({
+      steps: [
+        {
+          toolName: 'create_canvas_nodes',
+          effectiveArgs: {
+            nodes: [
+              { clientId: 'c1', kind: 'image', title: '镜头 1', prompt: 'sunrise', modelKey: 'm1', params: { aspect_ratio: '16:9' } },
+              { clientId: 'c2', kind: 'video', title: '镜头 2', prompt: 'sunset' },
+            ],
+            edges: [{ sourceClientId: 'c1', targetClientId: 'c2' }],
+          },
+          result: null,
+        },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges,
+    })
+    expect(ok).toEqual({ ok: true, deviations: [] })
+
+    const bad = reconcileProposal({
+      steps: [
+        {
+          toolName: 'create_canvas_nodes',
+          effectiveArgs: {
+            nodes: [{ clientId: 'c1', kind: 'image', title: '镜头 1', prompt: 'sunrise', modelKey: 'm1', params: { aspect_ratio: '16:9' } }],
+            edges: [{ sourceClientId: 'c2', targetClientId: 'c1' }], // 反向边不存在
+          },
+          result: null,
+        },
+      ],
+      clientIdToNodeId,
+      nodes,
+      edges,
+    })
+    expect(bad.ok).toBe(false)
+    expect(bad.deviations[0].field).toBe('引用边')
+  })
+
+  it('跨提议 clientId 经 resolveExternalId 回退解析 → 不再误报「未连接」(2026-06-12 bug A)', () => {
+    // 模拟 connect 在独立提议执行:本批 clientIdToNodeId 为空,真实映射只在全局 registry。
+    const registry = new Map([['n1', 'real-1'], ['n2', 'real-2']])
+    const withFallback = reconcileProposal({
+      steps: [
+        {
+          toolName: 'connect_canvas_edges',
+          effectiveArgs: { edges: [{ sourceClientId: 'n1', targetClientId: 'n2' }] },
+          result: null,
+        },
+      ],
+      clientIdToNodeId: {},
+      nodes,
+      edges,
+      resolveExternalId: (raw) => registry.get(raw) ?? raw,
+    })
+    expect(withFallback).toEqual({ ok: true, deviations: [] })
+
+    // 不带回退(旧行为)→ 拿计划 id 找边必然误报——锁住回退是必需的。
+    const withoutFallback = reconcileProposal({
+      steps: [
+        {
+          toolName: 'connect_canvas_edges',
+          effectiveArgs: { edges: [{ sourceClientId: 'n1', targetClientId: 'n2' }] },
+          result: null,
+        },
+      ],
+      clientIdToNodeId: {},
+      nodes,
+      edges,
+    })
+    expect(withoutFallback.ok).toBe(false)
+  })
+
   it('set_node_prompt / delete 的后态核对', () => {
     const ok = reconcileProposal({
       steps: [

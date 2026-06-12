@@ -109,7 +109,12 @@ export async function applyProposalBatch(steps: ProposalStep[]): Promise<Proposa
         }
         Object.assign(clientIdToNodeId, record.clientIdToNodeId ?? {})
       }
-      if (step.toolName === 'connect_canvas_edges') {
+      // 新边补偿：connect 步，或 create 步随计划携带的边（节点+边一次批准）。删已建节点
+      // 会连带删其边，但边可能连接两个既有节点 → disconnect 补偿仍需单独捕获。
+      if (
+        step.toolName === 'connect_canvas_edges' ||
+        (step.toolName === 'create_canvas_nodes' && Array.isArray(step.effectiveArgs.edges) && step.effectiveArgs.edges.length)
+      ) {
         const had = new Set(before.edges.map((edge) => `${edge.source}→${edge.target}`))
         const pairs = generationCanvasTools
           .read_canvas()
@@ -159,6 +164,8 @@ export async function applyProposalBatch(steps: ProposalStep[]): Promise<Proposa
     clientIdToNodeId,
     nodes: snapshot.nodes,
     edges: snapshot.edges,
+    // 跨提议 clientId 回退：与执行侧同一个全局 registry（修对账误报「未连接」，bug A）。
+    resolveExternalId: resolveCanvasToolNodeId,
   })
   withCanvasGestureContext(ctx, () =>
     emitCanvasGesture([

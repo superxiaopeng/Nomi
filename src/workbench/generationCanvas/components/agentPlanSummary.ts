@@ -75,20 +75,27 @@ export function summarizeAgentPlan(calls: readonly PendingToolCallLike[]): Agent
     }
   })
 
-  const connectCall = calls.find((call) => call.toolName === 'connect_canvas_edges')
-  let edges: PlannedEdge[] = []
-  if (connectCall) {
-    const connectArgs = (connectCall.args && typeof connectCall.args === 'object')
-      ? connectCall.args as Record<string, unknown>
-      : {}
-    const rawEdges = Array.isArray(connectArgs.edges) ? connectArgs.edges : []
-    edges = rawEdges
+  const normalizeEdges = (rawEdges: unknown[]): PlannedEdge[] =>
+    rawEdges
       .map((raw) => (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {})
       .map((edge) => ({
         sourceClientId: String(edge.sourceClientId || edge.source || '').trim(),
         targetClientId: String(edge.targetClientId || edge.target || '').trim(),
       }))
       .filter((edge) => edge.sourceClientId && edge.targetClientId)
+
+  // 主路径：边随 create 一起提交（节点+边一个计划一次批准）；
+  // 兼容旧轨迹/模型仍分轮发 connect 的情况，两处合并去重。
+  const edges: PlannedEdge[] = normalizeEdges(Array.isArray(createArgs.edges) ? createArgs.edges : [])
+  const connectCall = calls.find((call) => call.toolName === 'connect_canvas_edges')
+  if (connectCall) {
+    const connectArgs = (connectCall.args && typeof connectCall.args === 'object')
+      ? connectCall.args as Record<string, unknown>
+      : {}
+    const seen = new Set(edges.map((edge) => `${edge.sourceClientId}→${edge.targetClientId}`))
+    for (const edge of normalizeEdges(Array.isArray(connectArgs.edges) ? connectArgs.edges : [])) {
+      if (!seen.has(`${edge.sourceClientId}→${edge.targetClientId}`)) edges.push(edge)
+    }
   }
 
   const summary = typeof createArgs.summary === 'string' && createArgs.summary.trim()

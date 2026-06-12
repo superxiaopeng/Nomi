@@ -268,15 +268,16 @@ function buildCanvasToolsForV2(hooks: AgentChatV2Hooks) {
     ),
     create_canvas_nodes: makeTool(
       "create_canvas_nodes",
-      "Propose a batch of new canvas nodes for user confirmation.",
+      "Propose a batch of new canvas nodes AND their reference edges in this one call (never split edges into a separate connect_canvas_edges call).",
       z.object({
         summary: z.string(),
         nodes: z.array(plannedNodeSchema).min(1).max(24),
+        edges: z.array(plannedEdgeSchema).max(48).optional(),
       }),
     ),
     connect_canvas_edges: makeTool(
       "connect_canvas_edges",
-      "Connect nodes with reference edges (source feeds target).",
+      "Connect EXISTING nodes with reference edges (follow-up edits only; new plans carry edges inside create_canvas_nodes).",
       z.object({
         edges: z.array(plannedEdgeSchema).min(1).max(48),
       }),

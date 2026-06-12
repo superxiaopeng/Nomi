@@ -72,17 +72,24 @@ export const canvasTools = {
   }),
   create_canvas_nodes: tool({
     description:
-      "Propose a batch of new canvas nodes for the user to confirm. Nodes are NOT auto-executed; they appear on the canvas as idle/draft and the user manually clicks generate. Use `clientId` to reference these nodes from edges in the same plan.",
+      "Propose a batch of new canvas nodes AND the reference edges between them, in this ONE call. Nodes are NOT auto-executed; they appear on the canvas as idle/draft and the user manually clicks generate. Always include the plan's edges via the `edges` field — never split them into a separate connect_canvas_edges call (the user approves the whole plan once).",
     parameters: z.object({
       summary: z
         .string()
         .describe("One-sentence summary of the plan, shown to the user before confirmation."),
       nodes: z.array(plannedNodeSchema).min(1).max(24),
+      edges: z
+        .array(plannedEdgeSchema)
+        .max(48)
+        .optional()
+        .describe(
+          "Reference edges between this plan's nodes (use their clientId) and/or existing real node ids. Submit together with nodes in this same call.",
+        ),
     }),
   }),
   connect_canvas_edges: tool({
     description:
-      "Connect two nodes with a reference edge (source feeds context into target). Use the clientId values you supplied in a prior create_canvas_nodes call, or real node ids returned from read_canvas_state.",
+      "Connect EXISTING canvas nodes with reference edges (source feeds context into target). Only for follow-up edits to nodes already on the canvas — when proposing new nodes, put their edges in create_canvas_nodes instead.",
     parameters: z.object({
       edges: z.array(plannedEdgeSchema).min(1).max(48),
     }),

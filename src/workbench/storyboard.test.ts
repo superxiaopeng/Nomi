@@ -52,6 +52,57 @@ describe('Phase C storyboard happy path', () => {
       expect(plan!.connectCallId).toBe('connect-1')
     })
 
+    it('edges carried inside create_canvas_nodes fold into the same plan (atomic, no second approval)', () => {
+      const plan = summarizeAgentPlan([
+        {
+          toolCallId: 'create-1',
+          toolName: 'create_canvas_nodes',
+          args: {
+            summary: '原子计划',
+            nodes: [
+              { clientId: 'n1', kind: 'image', title: '开场', prompt: 'p1' },
+              { clientId: 'n2', kind: 'image', title: '收尾', prompt: 'p2' },
+            ],
+            edges: [{ sourceClientId: 'n1', targetClientId: 'n2' }],
+          },
+        },
+      ])
+      expect(plan!.edges).toEqual([{ sourceClientId: 'n1', targetClientId: 'n2' }])
+      expect(plan!.connectCallId).toBeNull()
+    })
+
+    it('create-carried edges merge & dedupe with a trailing connect call (legacy traces)', () => {
+      const plan = summarizeAgentPlan([
+        {
+          toolCallId: 'create-1',
+          toolName: 'create_canvas_nodes',
+          args: {
+            nodes: [
+              { clientId: 'n1', kind: 'image', title: 'a', prompt: 'p1' },
+              { clientId: 'n2', kind: 'image', title: 'b', prompt: 'p2' },
+              { clientId: 'n3', kind: 'image', title: 'c', prompt: 'p3' },
+            ],
+            edges: [{ sourceClientId: 'n1', targetClientId: 'n2' }],
+          },
+        },
+        {
+          toolCallId: 'connect-1',
+          toolName: 'connect_canvas_edges',
+          args: {
+            edges: [
+              { sourceClientId: 'n1', targetClientId: 'n2' }, // 与 create 内重复 → 去重
+              { sourceClientId: 'n2', targetClientId: 'n3' },
+            ],
+          },
+        },
+      ])
+      expect(plan!.edges).toEqual([
+        { sourceClientId: 'n1', targetClientId: 'n2' },
+        { sourceClientId: 'n2', targetClientId: 'n3' },
+      ])
+      expect(plan!.connectCallId).toBe('connect-1')
+    })
+
     it('synthesises a summary when the agent did not provide one', () => {
       const plan = summarizeAgentPlan([
         {

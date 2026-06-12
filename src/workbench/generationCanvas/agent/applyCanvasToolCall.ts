@@ -116,7 +116,29 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
         clientIdRegistry.set(clientId, created[index].id)
       }
     })
-    return { createdNodeIds: created.map((node) => node.id), clientIdToNodeId }
+    // 节点和边是一个计划、一次批准、一次落地（不许把连边拆成第二次审批——用户拍板）。
+    // 边在节点注册进 registry 之后解析，clientId / 真实 id 混用都能落对。
+    const rawPlanEdges = Array.isArray(record.edges) ? record.edges : []
+    let connectedCount = 0
+    let skippedEdges: unknown[] = []
+    if (rawPlanEdges.length) {
+      const planEdges = rawPlanEdges
+        .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
+        .map((edge) => ({
+          source: resolveNodeId(String(edge.sourceClientId || edge.source || '').trim()),
+          target: resolveNodeId(String(edge.targetClientId || edge.target || '').trim()),
+        }))
+        .filter((edge) => edge.source && edge.target)
+      const outcome = inCtx(() => generationCanvasTools.connect_nodes(planEdges))
+      connectedCount = outcome.connected
+      skippedEdges = outcome.skipped
+    }
+    return {
+      createdNodeIds: created.map((node) => node.id),
+      clientIdToNodeId,
+      ...(rawPlanEdges.length ? { connectedCount } : {}),
+      ...(skippedEdges.length > 0 ? { skippedEdges } : {}),
+    }
   }
 
   if (toolName === 'connect_canvas_edges') {

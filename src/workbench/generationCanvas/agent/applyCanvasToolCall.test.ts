@@ -40,6 +40,28 @@ describe('applyCanvasToolCall clientId 翻译', () => {
     expect(edges.some((e) => e.source === 'n1' || e.target === 'n2')).toBe(false)
   })
 
+  it('create_canvas_nodes 随计划携带 edges → 节点+边一次落地（用户拍板：不分两步）', async () => {
+    const result = (await applyCanvasToolCall('create_canvas_nodes', {
+      nodes: [
+        { clientId: 'a1', kind: 'image', title: '镜头 1', prompt: 'p1' },
+        { clientId: 'a2', kind: 'image', title: '镜头 2', prompt: 'p2' },
+        { clientId: 'a3', kind: 'video', title: '镜头 3', prompt: 'p3' },
+      ],
+      edges: [
+        { sourceClientId: 'a1', targetClientId: 'a2' },
+        { sourceClientId: 'a2', targetClientId: 'a3' },
+      ],
+    })) as { createdNodeIds: string[]; clientIdToNodeId: Record<string, string>; connectedCount?: number }
+    expect(result.createdNodeIds).toHaveLength(3)
+    expect(result.connectedCount).toBe(2)
+
+    const state = useGenerationCanvasStore.getState()
+    expect(state.edges).toHaveLength(2)
+    expect(state.edges[0].source).toBe(result.clientIdToNodeId.a1)
+    // 吊边绝不入 store（clientId 已全部翻译成真实 id）
+    expect(state.edges.some((e) => /^a\d$/.test(e.source) || /^a\d$/.test(e.target))).toBe(false)
+  })
+
   it('端点不存在的边被跳过并如实回报,不入 store', async () => {
     const result = (await applyCanvasToolCall('connect_canvas_edges', {
       edges: [{ sourceClientId: 'ghost-a', targetClientId: 'ghost-b' }],
