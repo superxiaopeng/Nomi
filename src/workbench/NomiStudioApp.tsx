@@ -89,6 +89,9 @@ export default function NomiStudioApp(): JSX.Element {
     React.useEffect(() => {
         if (!modelCatalogOpened) refreshModelStatus();
     }, [modelCatalogOpened, refreshModelStatus]);
+    // 「30 秒体验」缺文本模型时挂起的示例：接完模型自动续跑（spec D 屏衔接）。
+    const [pendingTryExample, setPendingTryExample] =
+        React.useState<TryNowExample | null>(null);
     const hydratingProjectRef = React.useRef(false);
     const activeProjectIdRef = React.useRef<string | null>(null);
     const initialHydrationAttemptedRef = React.useRef(false);
@@ -277,18 +280,15 @@ export default function NomiStudioApp(): JSX.Element {
     const tryExample = React.useCallback(
         async (example: TryNowExample) => {
             // 模型预检（P0-9 / I-2）：示例靠 Agent「拆镜头」跑起来，需要文本模型。
-            // 没配就先引导去模型接入，别让最显眼的「30 秒体验」静默失败在 Agent 调用上。
+            // 没配 → 挂起本次体验，打开带上下文条的模型接入 wizard；保存成功后
+            // 经 nomi-model-catalog-changed 自动续跑（不让「30 秒体验」死在第 0 步）。
             const textModels = await listWorkbenchModelCatalogModels({
                 kind: "text",
                 enabled: true,
             }).catch(() => []);
             if (textModels.length === 0) {
-                toast("先接入一个文本模型，就能一键体验示例", "info");
-                window.dispatchEvent(
-                    new CustomEvent("nomi-open-model-catalog", {
-                        detail: { intent: "model-integration" },
-                    }),
-                );
+                setPendingTryExample(example);
+                setModelCatalogOpened(true);
                 return;
             }
             // 示例同样不强迫选文件夹：直接在默认位置建项目（桌面端落
@@ -316,6 +316,56 @@ export default function NomiStudioApp(): JSX.Element {
         },
         [hydrateProject, refreshProjects],
     );
+
+    // 接完模型（目录变更广播）→ 状态重查；有挂起的体验且文本模型就位 → 关面板自动续跑。
+    React.useEffect(() => {
+        const handleCatalogChanged = () => {
+            refreshModelStatus();
+            if (!pendingTryExample) return;
+            void listWorkbenchModelCatalogModels({
+                kind: "text",
+                enabled: true,
+            })
+                .catch(() => [])
+                .then((models) => {
+                    if (models.length === 0) return;
+                    setPendingTryExample(null);
+                    setModelCatalogOpened(false);
+                    void tryExample(pendingTryExample);
+                });
+        };
+        window.addEventListener(
+            "nomi-model-catalog-changed",
+            handleCatalogChanged,
+        );
+        return () =>
+            window.removeEventListener(
+                "nomi-model-catalog-changed",
+                handleCatalogChanged,
+            );
+    }, [pendingTryExample, refreshModelStatus, tryExample]);
+
+    // 体验流程衔接（上下文条 + 稍后再说退路）。引用随 pendingTryExample 稳定，
+    // Drawer 的「直达 wizard」effect 才不会在用户手动关掉后反复重开。
+    const experienceHandoff = React.useMemo(
+        () =>
+            pendingTryExample
+                ? {
+                      label: "30 秒体验 · 先连接一个 AI 服务，完成后自动继续",
+                      onDefer: () => {
+                          setPendingTryExample(null);
+                          setModelCatalogOpened(false);
+                      },
+                  }
+                : undefined,
+        [pendingTryExample],
+    );
+
+    const closeModelCatalog = React.useCallback(() => {
+        setModelCatalogOpened(false);
+        // 手动关面板 = 放弃本次体验挂起（下次点 CTA 重新进入）
+        setPendingTryExample(null);
+    }, []);
 
     const deleteProject = React.useCallback(
         (project: LocalProjectSummary) => {
@@ -495,7 +545,8 @@ export default function NomiStudioApp(): JSX.Element {
                 <React.Suspense fallback={null}>
                     <OnboardingFloatingPanel
                         opened={modelCatalogOpened}
-                        onClose={() => setModelCatalogOpened(false)}
+                        onClose={closeModelCatalog}
+                        experience={experienceHandoff}
                     />
                 </React.Suspense>
                 <ToastHost />
@@ -537,11 +588,7 @@ export default function NomiStudioApp(): JSX.Element {
 
             <OnboardingFloatingPanel
                 opened={modelCatalogOpened}
-                onClose={() => setModelCatalogOpened(false)}
-                // position='right'
-                // size={560}
-                // zIndex={4000}
-                // withinPortal
+                onClose={closeModelCatalog}
             />
 
             <React.Suspense fallback={null}>

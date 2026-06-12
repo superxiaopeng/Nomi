@@ -20,6 +20,9 @@ export function useHasTextModel(): { hasTextModel: boolean | null; refresh: () =
   }, [])
   React.useEffect(() => {
     refresh()
+    // 模型目录变更（OnboardingDrawer.refresh 广播）→ 立即重查，状态条/弱入口当场翻面
+    window.addEventListener('nomi-model-catalog-changed', refresh)
+    return () => window.removeEventListener('nomi-model-catalog-changed', refresh)
   }, [refresh])
   return { hasTextModel, refresh }
 }

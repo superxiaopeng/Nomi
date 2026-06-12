@@ -11,7 +11,7 @@
  */
 import React from 'react'
 import { IconStack2 } from '@tabler/icons-react'
-import { OnboardingWizard } from './OnboardingWizard'
+import { OnboardingWizard, type OnboardingExperienceHandoff } from './OnboardingWizard'
 import { FoldableModelCard } from './FoldableModelCard'
 import { VendorOnboardCard } from './VendorOnboardCard'
 import { ModelChipGroups, type ChipModel } from './ModelChipGroups'
@@ -26,8 +26,14 @@ type VendorMeta = {
   baseUrl: string
 }
 
-export function OnboardingDrawer(): JSX.Element {
+export function OnboardingDrawer({ experience }: { experience?: OnboardingExperienceHandoff }): JSX.Element {
   const [wizardOpen, setWizardOpen] = React.useState(false)
+
+  // 体验流程（30 秒体验缺模型）直达 wizard，少一跳；用户关掉 wizard 后不强行重开
+  // （experience 引用稳定时本 effect 只触发一次）。
+  React.useEffect(() => {
+    if (experience) setWizardOpen(true)
+  }, [experience])
   const [models, setModels] = React.useState<ChipModel[]>([])
   const [vendorMeta, setVendorMeta] = React.useState<Map<string, VendorMeta>>(new Map())
   const [version, setVersion] = React.useState(0) // bump to refetch
@@ -63,6 +69,8 @@ export function OnboardingDrawer(): JSX.Element {
   const refresh = React.useCallback(() => {
     notifyModelOptionsRefresh('all')
     setVersion((v) => v + 1)
+    // 广播目录变更：库页状态条重查、「30 秒体验」缺模型续跑都靠它（单一信号源）。
+    window.dispatchEvent(new CustomEvent('nomi-model-catalog-changed'))
   }, [])
 
   const handleDelete = React.useCallback((row: ChipModel) => {
@@ -135,6 +143,7 @@ export function OnboardingDrawer(): JSX.Element {
         opened={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onCommitted={refresh}
+        experience={experience}
       />
     </div>
   )
