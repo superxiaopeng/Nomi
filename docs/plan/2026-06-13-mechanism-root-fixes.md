@@ -90,3 +90,22 @@ S1 → S2 → S3（P0 链）→ S6 → S4 → S5 → S7。每切片独立 commit
 ## 回滚
 
 全部切片纯前向 commit、互相独立，按 commit revert 即可；S1 的 schema 新字段 `seedKey` 为可选字段，旧数据零影响；S2 的 shotIndex 回填只增字段不删数据。
+
+---
+
+## 执行结果回填（2026-06-13）
+
+| 切片 | commit | 状态 | 结构保证 |
+|---|---|---|---|
+| S1 契约统一（A4/A8/A11）| 5cae327 | ✅ 完成 | 不变量测试「默认 payload 过迁移必 alreadyMigrated」；seedKey 穿透 Electron manifest 链路；addNode 总闸兜底 categoryId |
+| S2 编号身份化（A2）| 653c13a | ✅ 完成 | 「加无关节点不改号 / 回填幂等 / kind 收窄」3 组测试；顺手删了 canvasSnapshotNormalizer 里默认画布第二份拷贝（A4 又一入口）|
+| S3 布局 derive（A3）| 2d81fc1 | ✅ 完成 | 19 节点混合批 AABB 零重叠断言（审计实测场景复刻）；gridPosition 常数步距删除 |
+| S6 可见性（A1/A6/A15/A16）| 69c0dd1 | ✅ 完成 | 回执随 conversations.json 落盘 + parse 校验；逐节点明细 / 分类跳转 chip / CategoryTree 自动展开 / video 占位双态 |
+| S4 容错域（A5）| 208a6bd | ✅ 完成 | lazyWithChunkBoundary 原语，12 个 lazy 点位全迁；importWithRetry 测试 |
+| S5a 确认框（A7）| adf058d | ✅ 完成 | 11 处 window.confirm/alert/prompt grep 归零；设计系统 §3.5 落禁用规范 |
+| S5b 锚定弹层（A9）| — | ⏸ 待复验 | 现版 OnboardingFloatingPanel 已有 maxHeight+内滚+zIndex 4000（与审计采样的 T2 版不同），**需真机复验是否仍溢出**再决定是否抽 AnchoredPopover；当前并行会话占着工作树+dist，按 R13 清场要求押后 |
+| S7 P2 收尾（A10/A12/A13/A14）| 3391514 | ✅ 完成 | humanizeModelKey 测试；过滤空态 data-library-filter-empty 可断言 |
+
+**未做（按计划留拍板）**：A1 跨分类边可视化（三方案对比表见上）；A18 prompt 语言；存量重复示例项目清理（删用户数据）。A17 根因已定位（缩略图只来自生成结果 url，无截图机制），独立产品决策。
+
+**欠的验证**：R13 真机走查（确认框/回执 chip/占位文案/空态的体感 + A9 复验 + A3 在真实 19 节点批上的视觉确认）——并行会话在同一工作树持续 commit+重建 dist，现在跑常驻驱动必踩 stale-chunk 伪 bug（审计干扰声明同款），待工作树安静后执行。
