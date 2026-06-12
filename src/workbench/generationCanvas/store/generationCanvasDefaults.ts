@@ -29,6 +29,8 @@ export function createDefaultGenerationCanvasSnapshot(): GenerationCanvasSnapsho
     status: 'idle',
     meta: {},
     categoryId: getDefaultCategoryForNodeKind('image'),
+    // 镜头编号是出生即分配的存储身份（见 model/shotNumbering.ts，审计 A2）。
+    shotIndex: 1,
   }
   return {
     nodes: [textNode, imageNode],

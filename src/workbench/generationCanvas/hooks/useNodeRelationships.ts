@@ -96,33 +96,18 @@ export function useNodeVariantCount(nodeId: string): number {
   return useGenerationCanvasStore((state) => buildVariantMap(state.nodes).get(nodeId) || 0)
 }
 
-// shotId → 1-based index（按 y 排序，y 相同按 id 排序）
-type ShotIndexMap = Map<string, number>
-const shotIndexCache = new WeakMap<readonly GenerationCanvasNode[], ShotIndexMap>()
-
-function buildShotIndexMap(nodes: readonly GenerationCanvasNode[]): ShotIndexMap {
-  const cached = shotIndexCache.get(nodes)
-  if (cached) return cached
-  const shots = nodes
-    .filter((n) => n.categoryId === 'shots')
-    .sort((a, b) => {
-      const ay = a.position?.y ?? 0
-      const by = b.position?.y ?? 0
-      if (ay !== by) return ay - by
-      return a.id.localeCompare(b.id)
-    })
-  const map: ShotIndexMap = new Map()
-  shots.forEach((shot, idx) => map.set(shot.id, idx + 1))
-  shotIndexCache.set(nodes, map)
-  return map
-}
-
 /**
- * 当前 shots 节点的 1-based 编号（按位置排序）。非 shots 返回 null。
+ * 当前分镜节点的 1-based 镜头编号。
+ *
+ * 编号 = 节点上的存储身份 `shotIndex`（创建时一次性分配，hydrate 时为存量回填，
+ * 见 model/shotNumbering.ts），不再按 position.y + 随机 id 实时重排——旧实现下
+ * 同行编号实质随机、加一个无关节点会改写所有既有编号（审计 A2）。
+ * 非 shots 分类或未编号 kind（text/panorama 等）返回 null（不显徽标）。
  */
 export function useShotIndex(nodeId: string, categoryId: string | undefined): number | null {
   return useGenerationCanvasStore((state) => {
     if (categoryId !== 'shots') return null
-    return buildShotIndexMap(state.nodes).get(nodeId) ?? null
+    const node = state.nodes.find((candidate) => candidate.id === nodeId)
+    return typeof node?.shotIndex === 'number' ? node.shotIndex : null
   })
 }

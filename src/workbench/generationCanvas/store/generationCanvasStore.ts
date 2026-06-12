@@ -17,7 +17,9 @@ import {
   getClipboard,
   setClipboard,
 } from './canvasClipboard'
-import { normalizeStoreSnapshot, seedNodes } from './canvasSnapshotNormalizer'
+import { normalizeStoreSnapshot } from './canvasSnapshotNormalizer'
+import { createDefaultGenerationCanvasSnapshot } from './generationCanvasDefaults'
+import { isShotNumberedNode, nextShotIndex } from '../model/shotNumbering'
 import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import { applyCanvasEvent } from '../events/canvasEventReducer'
 import type { GenerationCanvasState } from './canvasStoreTypes'
@@ -30,9 +32,8 @@ export { __resetCanvasUndoJournalForTests as __resetGenerationCanvasHistoryForTe
 export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscribeWithSelector(immer((set, get, store) => ({
   isReady: false,
   persistRevision: 0,
-  nodes: seedNodes,
-  edges: [{ id: 'edge-gen-v2-text-1-gen-v2-image-1', source: 'gen-v2-text-1', target: 'gen-v2-image-1' }],
-  groups: [],
+  // 初始画布走默认快照单一真相源（勿再内联一份节点/边，见审计 A4）。
+  ...createDefaultGenerationCanvasSnapshot(),
   selectedNodeIds: [],
   pendingConnectionSourceId: '',
   canvasZoom: 1,
@@ -95,13 +96,18 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
     if (!clipboardPayload) return
     const cloned = cloneClipboardPayload(clipboardPayload)
     if (!cloned.nodes.length) return
+    // 粘贴产物是新身份：镜头节点逐个领新编号，不复制原号（编号唯一，审计 A2）。
+    let nextIndex = nextShotIndex(currentState.nodes)
+    const pastedNodes = cloned.nodes.map((node) =>
+      isShotNumberedNode(node) ? { ...node, shotIndex: nextIndex++ } : node,
+    )
     pushUndoSnapshot(currentState)
     setClipboard({
-      nodes: cloned.nodes,
+      nodes: pastedNodes,
       edges: cloned.edges,
     })
     set((state) => {
-      state.nodes = [...state.nodes, ...cloned.nodes]
+      state.nodes = [...state.nodes, ...pastedNodes]
       state.edges = [...state.edges, ...cloned.edges]
       state.selectedNodeIds = cloned.selectedNodeIds
       state.pendingConnectionSourceId = ''
@@ -109,7 +115,7 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
       Object.assign(state, getHistoryFlags())
     })
     emitCanvasGesture([
-      ...cloned.nodes.map((node) => ({ type: 'canvas.node.added', payload: { node } })),
+      ...pastedNodes.map((node) => ({ type: 'canvas.node.added', payload: { node } })),
       ...cloned.edges.map((edge) => ({ type: 'canvas.edge.added', payload: { edge } })),
     ])
   },

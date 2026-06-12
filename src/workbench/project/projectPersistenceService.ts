@@ -10,6 +10,7 @@ import {
 import type { WorkbenchProjectPayload, WorkbenchProjectRecordV1 } from './projectRecordSchema'
 import { migrateProjectRecord, type CategoryMigrationDiagnostic } from './projectCategoryMigration'
 import { migrateProjectV51ToV60 } from './projectV51ToV60Migration'
+import { backfillShotIndexes } from '../generationCanvas/model/shotNumbering'
 
 let lastCategoryMigrationDiagnostic: CategoryMigrationDiagnostic | null = null
 
@@ -83,7 +84,22 @@ export function createWorkbenchProjectPersistenceService(deps: Dependencies): Wo
     const { record: catUpgraded, diagnostic } = migrateProjectRecord(mediaUpgraded)
     const { record: v60Upgraded } = migrateProjectV51ToV60(catUpgraded)
     // A1.5：历史导入/切图/裁剪/截图的 image 节点改判为 asset（素材卡）。
-    const upgraded = normalizeLegacyImageAssetKinds(v60Upgraded)
+    const assetUpgraded = normalizeLegacyImageAssetKinds(v60Upgraded)
+    // 镜头编号存储身份化（审计 A2）：存量项目缺 shotIndex 的镜头节点按
+    // (y, x, id) 确定性回填一次；此后编号不再随布局/添加节点漂移。
+    const shotBackfill = backfillShotIndexes(assetUpgraded.payload.generationCanvas.nodes)
+    const upgraded = shotBackfill.changed
+      ? {
+          ...assetUpgraded,
+          payload: {
+            ...assetUpgraded.payload,
+            generationCanvas: {
+              ...assetUpgraded.payload.generationCanvas,
+              nodes: shotBackfill.nodes,
+            },
+          },
+        }
+      : assetUpgraded
     const changed = upgraded !== project
     if (!diagnostic.alreadyMigrated && (diagnostic.migratedNodes > 0 || diagnostic.removedNodes > 0 || diagnostic.categoriesSeeded)) {
       lastCategoryMigrationDiagnostic = diagnostic

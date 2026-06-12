@@ -1,10 +1,10 @@
 // 画布快照归一化 + 种子节点。从 generationCanvasStore.ts 抽出。
 // 注意：这是 store 专用的深度归一化（过滤未知 kind、position 兜底、groups 走 zod、edges 校验端点），
 // 与 workbenchPersistence.ts 的轻量直通版 normalizeGenerationCanvasSnapshot 行为不同，故改名 normalizeStoreSnapshot。
-import { createGenerationNode } from '../model/graphOps'
 import { isGenerationNodeKind } from '../model/generationNodeKinds'
 import { nodeGroupSchema } from '../model/generationCanvasSchema'
 import { isCategoryId } from './canvasGuards'
+import { createDefaultGenerationCanvasSnapshot } from './generationCanvasDefaults'
 import type {
   GenerationCanvasEdge,
   GenerationCanvasNode,
@@ -12,33 +12,11 @@ import type {
   NodeGroup,
 } from '../model/generationCanvasTypes'
 
-export const seedNodes = [
-  createGenerationNode({
-    id: 'gen-v2-text-1',
-    kind: 'text',
-    title: '剧本片段',
-    x: 96,
-    y: 360,
-    prompt: '写下镜头、角色或画面提示词。',
-  }),
-  createGenerationNode({
-    id: 'gen-v2-image-1',
-    kind: 'image',
-    title: '关键画面',
-    x: 440,
-    y: 380,
-    prompt: '',
-  }),
-]
-
 export function normalizeStoreSnapshot(input: unknown): GenerationCanvasSnapshot {
   if (!input || typeof input !== 'object') {
-    return {
-      nodes: seedNodes,
-      edges: [{ id: 'edge-gen-v2-text-1-gen-v2-image-1', source: 'gen-v2-text-1', target: 'gen-v2-image-1' }],
-      groups: [],
-      selectedNodeIds: [],
-    }
+    // 默认画布单一真相源：此前这里自持一份不带 categoryId 的 seedNodes 拷贝，
+    // 是「新建项目触发 legacy 迁移」的又一入口（审计 A4）。
+    return createDefaultGenerationCanvasSnapshot()
   }
   const raw = input as Record<string, unknown>
   const nodes = Array.isArray(raw.nodes)

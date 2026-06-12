@@ -1,5 +1,6 @@
 import { createGenerationNode, removeNodes, upsertNode } from '../model/graphOps'
 import { getDefaultCategoryForNodeKind, type GenerationCanvasNode } from '../model/generationCanvasTypes'
+import { isShotNumberedNode, nextShotIndex } from '../model/shotNumbering'
 import { CLIPBOARD_OFFSET, createClipboardNodeId, createNodeId } from './canvasIds'
 import { bumpPersistRevision, isCategoryId, shouldPersistCanvasMutation } from './canvasGuards'
 import { getHistoryFlags, pushUndoSnapshot } from '../events/canvasUndoJournal'
@@ -36,7 +37,14 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       x: input.position?.x ?? 120 + existingCount * 34,
       y: input.position?.y ?? 360 + existingCount * 30,
     })
-    const nextNode = { ...baseNode, categoryId }
+    // 镜头编号是出生即分配的存储身份（max+1），之后移动/加无关节点不再改号（审计 A2）。
+    const nextNode = {
+      ...baseNode,
+      categoryId,
+      ...(isShotNumberedNode({ kind: input.kind, categoryId })
+        ? { shotIndex: nextShotIndex(currentState.nodes) }
+        : {}),
+    }
     pushUndoSnapshot(currentState)
     set((state) => {
       state.nodes = upsertNode(state.nodes, nextNode)
@@ -193,6 +201,8 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       categoryId: node.categoryId,
       groupId: node.groupId,
       derivedFrom: node.id,
+      // 变体是新身份：领自己的镜头编号，不继承原节点的号。
+      ...(isShotNumberedNode(node) ? { shotIndex: nextShotIndex(state.nodes) } : {}),
     }
     pushUndoSnapshot(state)
     set((current) => {
@@ -229,6 +239,13 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
       if (!node) return
       if (node.categoryId === id) return
       node.categoryId = id
+      // 编号跟随分镜成员身份：离开分镜清号，进入分镜领新号（不复用旧号——
+      // 旧号可能已被后续节点顶替语义）。
+      if (isShotNumberedNode(node)) {
+        node.shotIndex = nextShotIndex(state.nodes)
+      } else if (typeof node.shotIndex === 'number') {
+        delete node.shotIndex
+      }
       bumpPersistRevision(state)
     })
     emitCanvasGesture([{ type: 'canvas.node.updated', payload: { nodeId, patch: { categoryId: id } } }])
@@ -238,7 +255,7 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     if (!isCategoryId(id)) return null
     const source = get().nodes.find((candidate) => candidate.id === nodeId)
     if (!source) return null
-    const { id: _sourceId, categoryId: _sourceCategoryId, groupId: _sourceGroupId, ...rest } = source
+    const { id: _sourceId, categoryId: _sourceCategoryId, groupId: _sourceGroupId, shotIndex: _sourceShotIndex, ...rest } = source
     const copiedNode: GenerationCanvasNode = {
       ...rest,
       id: createClipboardNodeId(source.id),
@@ -248,6 +265,10 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
         y: source.position.y + CLIPBOARD_OFFSET,
       },
       categoryId: id,
+      // 跨分类副本是新身份：落分镜则领新号，不复制原号（编号唯一）。
+      ...(isShotNumberedNode({ kind: source.kind, categoryId: id })
+        ? { shotIndex: nextShotIndex(get().nodes) }
+        : {}),
       derivedFrom: source.id,
       references: source.references ? [...source.references] : undefined,
       history: source.history ? [...source.history] : undefined,
