@@ -44,6 +44,8 @@ export type ToolCallEvent = {
 export type RunWorkbenchAgentInput = {
   /** Full prompt handed to the model (system context is added by the backend skill). */
   prompt: string
+  /** T2 token 优化:会话内稳定的静态段(身份/规则/模型清单/记忆),走 system 槽吃 vendor 前缀缓存。 */
+  systemPrompt?: string
   /** Short text shown in the user's chat bubble / thread history. */
   displayPrompt: string
   /** Shared backend memory key. Both areas use `nomi:workbench:<projectId|local>`. */
@@ -71,6 +73,7 @@ export async function runWorkbenchAgent(input: RunWorkbenchAgentInput): Promise<
   const pref = getAssistantModelPref()
   const request = {
     prompt: input.prompt,
+    ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
     displayPrompt: input.displayPrompt,
     sessionKey: input.sessionKey,
     projectId: input.projectId || '',

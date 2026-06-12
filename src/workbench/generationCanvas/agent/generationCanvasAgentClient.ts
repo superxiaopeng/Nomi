@@ -8,6 +8,7 @@ import { evaluateGate } from './gate'
 import { buildLockGateContext } from './lockGateContext'
 import { listAvailableModelsForAgent, formatAvailableModelsForPrompt } from './availableModels'
 import { fetchProjectMemoryFacts, formatMemoryForPrompt } from './projectMemoryClient'
+import { formatCanvasForAgent } from './canvasPromptContext'
 
 export type { ToolCallEvent } from '../../ai/workbenchAgentRunner'
 
@@ -50,16 +51,16 @@ export type GenerationCanvasAgentResponse = {
   response: AgentsChatResponseDto
 }
 
-function stringifyForPrompt(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
-
-function buildGenerationCanvasAgentPrompt(input: SendGenerationCanvasAgentMessageInput): string {
+/**
+ * 静态系统段(token 优化 T2):身份/模式/工具说明/硬约束——会话内 byte 级稳定,
+ * 走 systemPrompt 槽让 vendor 自动前缀缓存命中(动态画布快照在用户消息里,见下)。
+ */
+function buildStaticAgentSystemPrompt(mode: SendGenerationCanvasAgentMessageInput['mode']): string {
   const creatableKinds = getAgentCreatableGenerationNodeKinds().join('|')
   const modeInstruction =
-    input.mode === 'chat'
+    mode === 'chat'
       ? '当前模式：问答。只用自然语言回答用户问题，不要调用任何工具。'
-      : input.mode === 'refine'
+      : mode === 'refine'
         ? '当前模式：润色。只能调用 set_node_prompt 改写选中节点的提示词，不要创建或删除节点。'
         : '当前模式：Agent。你应当主动调用工具来达成用户的目标。'
 
@@ -69,10 +70,10 @@ function buildGenerationCanvasAgentPrompt(input: SendGenerationCanvasAgentMessag
     modeInstruction,
     '',
     '你可以调用以下工具（详细 schema 由系统注入）：',
-    '- read_canvas_state：读取当前画布所有节点和边。',
+    '- read_canvas_state：读取当前画布（紧凑行格式：id | 类型 | 标题 | 状态 | prompt 摘要，附引用边与选中）。',
     `- create_canvas_nodes：在画布上创建一批待用户确认的节点（每个节点必须给定 clientId、kind=${creatableKinds} 之一、title、prompt、position；建议再给 modelKey + 可选 modeId + params 以指定模型和比例/清晰度等参数，取值见下方「可用模型」清单）。`,
-    '- connect_canvas_edges：把多个节点之间用引用边连起来；sourceClientId / targetClientId 引用同一轮 create_canvas_nodes 里的 clientId，或 read_canvas_state 返回的真实节点 id。',
-    '- run_generation_batch：为已有节点启动真实生成（花费额度，用户必须确认）。nodeIds 用 read_canvas_state 的真实 id 或本轮 create 的 clientId；系统按依赖波次调度（参考先生成）。返回受理回执，生成进度用户在画布上看。',
+    '- connect_canvas_edges：把多个节点之间用引用边连起来；sourceClientId / targetClientId 引用同一轮 create_canvas_nodes 里的 clientId，或画布上下文里的真实节点 id。',
+    '- run_generation_batch：为已有节点启动真实生成（花费额度，用户必须确认）。nodeIds 用画布上下文里的真实 id 或本轮 create 的 clientId；系统按依赖波次调度（参考先生成）。返回受理回执，生成进度用户在画布上看。',
     '- set_node_prompt：改写一个已有节点的 prompt（润色模式专用）。',
     '- delete_canvas_nodes：删除一个或多个已有节点（破坏性，需要用户确认）。',
     '',
@@ -82,12 +83,16 @@ function buildGenerationCanvasAgentPrompt(input: SendGenerationCanvasAgentMessag
     '- 节点创建出来默认是 idle 状态，用户会自己点生成按钮，不要假定节点会立即出图。',
     '- 节点的 prompt 字段必须是高质量提示词，语言与用户保持一致。',
     '- 在调用工具之前，可以先用自然语言简短说明你的计划。',
-    '',
-    '当前生成画布快照：',
-    stringifyForPrompt(input.snapshot),
-    '',
-    '当前选中节点：',
-    stringifyForPrompt(input.selectedNodes),
+  ].join('\n')
+}
+
+/** 动态用户消息(每轮重建):紧凑画布上下文 + 模型清单 + 用户请求。
+ *  模型清单必须贴着请求(实测挪进 system 前部后 modelKey 服从性掉穿,smoke 0/5)。 */
+function buildGenerationCanvasUserMessage(input: SendGenerationCanvasAgentMessageInput, modelsBlock: string): string {
+  return [
+    '当前画布：',
+    formatCanvasForAgent(input.snapshot, input.selectedNodes),
+    ...(modelsBlock ? ['', modelsBlock] : []),
     '',
     '用户请求：',
     input.message,
@@ -132,28 +137,26 @@ async function defaultExecuteToolCall(event: ToolCallEvent): Promise<void> {
 export async function sendGenerationCanvasAgentMessage(
   input: SendGenerationCanvasAgentMessageInput,
 ): Promise<GenerationCanvasAgentResponse> {
-  const basePrompt = input.buildPrompt
+  // bug①:可用模型清单——必须留在用户消息里贴着请求(见 buildGenerationCanvasUserMessage 注)。
+  let modelsBlock = ''
+  try {
+    modelsBlock = formatAvailableModelsForPrompt(await listAvailableModelsForAgent())
+  } catch { /* 静默退回无清单 */ }
+  const prompt = input.buildPrompt
     ? input.buildPrompt({ message: input.message, snapshot: input.snapshot, selectedNodes: input.selectedNodes })
-    : buildGenerationCanvasAgentPrompt(input)
-  // bug①：注入「可用模型清单」，让 agent 能为每个节点建议 modelKey/modeId/params。
-  // 失败（catalog 未就绪等）不阻断对话——退回无清单的基础 prompt。
-  let prompt = basePrompt
+    : buildGenerationCanvasUserMessage(input, modelsBlock)
+  // T2:静态段(身份/规则)+ 低频段(记忆,放末尾——变了只击穿后缀)进 system,
+  // 会话内 byte 稳定 → vendor 自动前缀缓存命中。注入失败不阻断。
+  const systemParts: string[] = [buildStaticAgentSystemPrompt(input.mode)]
   try {
-    const modelsBlock = formatAvailableModelsForPrompt(await listAvailableModelsForAgent())
-    if (modelsBlock) prompt = `${basePrompt}\n\n${modelsBlock}`
-  } catch {
-    // 静默退回 basePrompt
-  }
-  // S9：注入项目记忆段（≤1.5k token 预算内裁剪;无记忆/取数失败零注入零阻断）。
-  try {
+    // S9:项目记忆(≤1.5k token 预算内裁剪)。
     const memoryBlock = formatMemoryForPrompt(await fetchProjectMemoryFacts())
-    if (memoryBlock) prompt = `${prompt}\n\n${memoryBlock}`
-  } catch {
-    // 静默退回
-  }
+    if (memoryBlock) systemParts.push(memoryBlock)
+  } catch { /* 静默 */ }
 
   const response = await runWorkbenchAgent({
     prompt,
+    ...(input.buildPrompt ? {} : { systemPrompt: systemParts.join('\n\n') }),
     displayPrompt: input.message,
     sessionKey: workbenchSessionKey(),
     skillKey: input.skill?.key || 'workbench.generation.canvas-planner',

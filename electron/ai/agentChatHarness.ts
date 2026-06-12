@@ -24,11 +24,54 @@ function estimateMessageTokens(message: CoreMessage): number {
   return Math.ceil((content?.length ?? 0) / 4);
 }
 
+// T3 token 优化:最近一轮之外的工具载荷(tool-call args / tool-result)把长字符串
+// 截到 120 字——旧轮的 3 节点长提示词全文回放是每请求 ~2-3k token 的洞;
+// 模型对旧轮只需要"做过什么",不需要逐字原文。保结构(配对/类型不动),只缩字符串值。
+const COMPACT_KEEP_TAIL = 8;
+const COMPACT_STRING_MAX = 120;
+
+function truncateDeepStrings(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.length > COMPACT_STRING_MAX ? `${value.slice(0, COMPACT_STRING_MAX)}…[截断]` : value;
+  }
+  if (Array.isArray(value)) return value.map(truncateDeepStrings);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) out[key] = truncateDeepStrings(item);
+    return out;
+  }
+  return value;
+}
+
+export function compactOldToolPayloads(messages: CoreMessage[]): CoreMessage[] {
+  if (messages.length <= COMPACT_KEEP_TAIL) return messages;
+  const cutoff = messages.length - COMPACT_KEEP_TAIL;
+  return messages.map((message, index) => {
+    if (index >= cutoff) return message;
+    if (typeof message.content === "string" || !Array.isArray(message.content)) return message;
+    let touched = false;
+    const content = message.content.map((part) => {
+      const record = part as { type?: string; args?: unknown; result?: unknown };
+      if (record.type === "tool-call" && record.args !== undefined) {
+        touched = true;
+        return { ...part, args: truncateDeepStrings(record.args) };
+      }
+      if (record.type === "tool-result" && record.result !== undefined) {
+        touched = true;
+        return { ...part, result: truncateDeepStrings(record.result) };
+      }
+      return part;
+    });
+    return touched ? ({ ...message, content } as CoreMessage) : message;
+  });
+}
+
 export function capAgentHistory(messages: CoreMessage[]): CoreMessage[] {
+  const compacted = compactOldToolPayloads(messages);
   let trimmed =
-    messages.length > AGENT_HISTORY_MAX_MESSAGES
-      ? messages.slice(messages.length - AGENT_HISTORY_MAX_MESSAGES)
-      : messages;
+    compacted.length > AGENT_HISTORY_MAX_MESSAGES
+      ? compacted.slice(compacted.length - AGENT_HISTORY_MAX_MESSAGES)
+      : compacted;
   let total = trimmed.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
   while (trimmed.length > 1 && total > AGENT_HISTORY_TOKEN_BUDGET) {
     total -= estimateMessageTokens(trimmed[0]);

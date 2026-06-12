@@ -4,6 +4,7 @@ import { generationCanvasTools, type CreateGenerationNodeToolInput } from './gen
 import { listAvailableModelsForAgent, type AgentModelEntry } from './availableModels'
 import { buildPlannedNodeMeta } from './plannedNodeMeta'
 import { withCanvasGestureContext, type CanvasGestureContext } from '../events/canvasGestureContext'
+import { formatCanvasForAgent } from './canvasPromptContext'
 import { buildDependencyWaves } from '../runner/dependencyWaves'
 import { runPlanWithToasts } from '../components/batchPlanPreview'
 
@@ -58,7 +59,12 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
   const inCtx = <T,>(fn: () => T): T => (gesture ? withCanvasGestureContext(gesture, fn) : fn())
 
   if (toolName === 'read_canvas_state') {
-    return generationCanvasTools.read_canvas()
+    // T1 token 优化:回包用紧凑行格式(与 system prompt 的画布段同源),
+    // 不再把全字段快照 JSON 回灌进对话历史(那是每请求 2-3k token 的洞)。
+    const snapshot = generationCanvasTools.read_canvas()
+    const selectedIds = new Set(snapshot.selectedNodeIds ?? [])
+    const selected = snapshot.nodes.filter((node) => selectedIds.has(node.id))
+    return formatCanvasForAgent(snapshot, selected)
   }
 
   if (toolName === 'create_canvas_nodes') {
