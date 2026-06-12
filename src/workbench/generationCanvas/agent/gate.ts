@@ -32,6 +32,8 @@ const TOOL_META: Record<string, ToolMeta> = {
   connect_canvas_edges: { writes: true },
   set_node_prompt: { writes: true },
   delete_canvas_nodes: { writes: true, destructive: true },
+  // S6b 受理语义:不写画布投影,但花真钱——costy 必问,确认前零网络调用。
+  run_generation_batch: { writes: false, costy: true },
 }
 
 /**
@@ -43,8 +45,8 @@ export function evaluateGate(intent: GateIntent, ctx: GateContext = {}): GateDec
     const meta = TOOL_META[intent.toolName]
     // ② invariant(校验):不认识的工具 = 注定失败的计划,不让用户批准(§6.5)。
     if (!meta) return { outcome: 'deny', reason: `不支持的操作「${intent.toolName}」` }
-    // ① policy:只读直通,零摩擦(M1)。
-    if (!meta.writes) return { outcome: 'allow' }
+    // ① policy:只读直通,零摩擦(M1)。花钱的(costy)即使不写画布也必问(S6b 受理语义)。
+    if (!meta.writes && !meta.costy) return { outcome: 'allow' }
     // ② invariant(锁):写操作命中锁住的节点 → deny(N11:AI 硬禁,用户软门)。
     const denied = evaluateLock(intent.toolName, intent.args, ctx)
     if (denied) return denied
@@ -84,6 +86,15 @@ function evaluateLock(toolName: string, args: unknown, ctx: GateContext): GateDe
     for (const raw of nodeIds) {
       const nodeId = resolve(String(raw || '').trim())
       if (locked.has(nodeId)) return denyFor(nodeId, '删除它')
+    }
+    return null
+  }
+  if (toolName === 'run_generation_batch') {
+    // 重新生成会覆盖 result——锁住的定妆卡不许被批量重跑(引用它当参考照常,那是出边)。
+    const nodeIds = Array.isArray(record.nodeIds) ? record.nodeIds : []
+    for (const raw of nodeIds) {
+      const nodeId = resolve(String(raw || '').trim())
+      if (locked.has(nodeId)) return denyFor(nodeId, '重新生成它(会覆盖已锁定的结果)')
     }
     return null
   }

@@ -71,6 +71,7 @@ function buildGenerationCanvasAgentPrompt(input: SendGenerationCanvasAgentMessag
     '- read_canvas_state：读取当前画布所有节点和边。',
     `- create_canvas_nodes：在画布上创建一批待用户确认的节点（每个节点必须给定 clientId、kind=${creatableKinds} 之一、title、prompt、position；建议再给 modelKey + 可选 modeId + params 以指定模型和比例/清晰度等参数，取值见下方「可用模型」清单）。`,
     '- connect_canvas_edges：把多个节点之间用引用边连起来；sourceClientId / targetClientId 引用同一轮 create_canvas_nodes 里的 clientId，或 read_canvas_state 返回的真实节点 id。',
+    '- run_generation_batch：为已有节点启动真实生成（花费额度，用户必须确认）。nodeIds 用 read_canvas_state 的真实 id 或本轮 create 的 clientId；系统按依赖波次调度（参考先生成）。返回受理回执，生成进度用户在画布上看。',
     '- set_node_prompt：改写一个已有节点的 prompt（润色模式专用）。',
     '- delete_canvas_nodes：删除一个或多个已有节点（破坏性，需要用户确认）。',
     '',
