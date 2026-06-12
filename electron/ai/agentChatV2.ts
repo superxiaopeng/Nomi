@@ -1,13 +1,13 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { tool, type CoreMessage, type CoreUserMessage, type LanguageModelV1 } from "ai";
+import { tool, type CoreMessage, type CoreUserMessage } from "ai";
 import { z } from "zod";
 import { capAgentHistory, createLinkedAbortController } from "./agentChatHarness";
 import { runAgentLoop } from "./agentLoop";
 import { traceContextCapped } from "../events/agentChatTrace";
 import { consumeAgentStreamWithTimeout } from "./agentStreamConsumer";
-import { buildAiSdkModel } from "./buildAiSdkModel";
+import { buildLanguageModelForVendor } from "./vendorLanguageModel";
 import { sanitizeForBroadCompat } from "./promptSanitize";
 import {
   canvasNodeKindSchema,
@@ -19,11 +19,10 @@ import {
   documentTools,
   type DocumentToolName,
 } from "./documentTools";
-import { endpoint } from "../vendorEndpoint";
 import { readNestedRecord, trim, type JsonRecord } from "../jsonUtils";
 import { getSkillsRoots, readText } from "../runtimePaths";
 import { decryptApiKeyRecord } from "../catalog/secrets";
-import { extractVendorExtraHeaders, normalizeProviderKind, readCatalog } from "../catalog/catalogStore";
+import { normalizeProviderKind, readCatalog } from "../catalog/catalogStore";
 import type { Model, Vendor } from "../catalog/types";
 import { readNomiLocalAsset } from "../assets/localAssetFile";
 import { extractTextFromLocalAsset } from "../files/extractText";
@@ -167,26 +166,7 @@ function chooseTextModel(prefModelKey?: string, preferImageInput = false): { ven
   throw new Error("No local text model is configured. Open model settings and add an API key.");
 }
 
-/**
- * Single vendor→LanguageModel construction path. runAgentChatV2 (and any future
- * caller) goes through here so provider-kind, baseURL shaping, and custom headers
- * stay consistent (Rule 1: no parallel versions). anthropic uses the vendor's
- * baseUrlHint verbatim (or the SDK default when blank); openai-compatible appends /v1.
- */
-function buildLanguageModelForVendor(vendor: Vendor, model: Model, apiKey: string): LanguageModelV1 {
-  const providerKind = normalizeProviderKind(vendor.providerKind);
-  const baseURL = providerKind === "anthropic"
-    ? (vendor.baseUrlHint || "").trim()
-    : endpoint(vendor, "/v1");
-  const headers = extractVendorExtraHeaders(vendor);
-  return buildAiSdkModel({
-    kind: providerKind,
-    baseURL,
-    apiKey,
-    modelId: model.modelAlias || model.modelKey,
-    ...(headers ? { headers } : {}),
-  });
-}
+// vendor→LanguageModel 构造已抽到 ./vendorLanguageModel（单一真相,与文本任务引擎共用）。
 
 // ---------------------------------------------------------------------------
 // runAgentChatV2 — Phase B: tool-calling + real streaming

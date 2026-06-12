@@ -10,7 +10,7 @@ import { buildNormalizedRecipe, buildTaskProvenance } from "./vendor/provenance"
 import { traceVendorCompleted, traceVendorRequested } from "./events/vendorCallTrace";
 import { scheduleTechnicalReview } from "./review/reviewTrace";
 import { type AuthType, appendQueryParams, authHeaders as buildAuthHeaders, buildHttpRequest, buildTemplateContext, extractTaskId as extractTaskIdShared } from "./ai/requestPipeline";
-import { sanitizeForBroadCompat } from "./ai/promptSanitize";
+import { streamTextTask } from "./ai/streamTextTask";
 import { firstString, isJsonRecord, nowIso, readNestedRecord, trim, type JsonRecord } from "./jsonUtils";
 import { collectAssetUrls, firstMappedString, providerMetaFromResponse, taskStatusFromResponse, valuesFromMapping } from "./tasks/responseParsing";
 import { TtlLruCache } from "./tasks/taskCache";
@@ -613,21 +613,21 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   }
 
   if (wantedKind === "text") {
+    // 路径 B 文本任务统一走 AI SDK streamTextTask（方案 A）。runTask 这条不传 onDelta
+    // → 收集最终文本返回，对外契约（TaskResult.raw 形状）不变；逐字流式由独立 IPC 通道消费。
     const imageUrl = kind === "image_to_prompt" ? firstReferenceImage(request) : "";
-    // 收口 sanitize（P0-6）：聊天/文本 LLM 调用的 prompt 统一 ASCII 可移植化。
-    const promptText = sanitizeForBroadCompat(request.prompt);
-    const userContent: unknown = imageUrl
-      ? [{ type: "text", text: promptText }, { type: "image_url", image_url: { url: imageUrl } }]
-      : promptText;
     const maxTokensValue = Number(request.extras?.maxTokens ?? request.extras?.max_tokens);
     const temperatureValue = Number(request.extras?.temperature);
-    const response = await postJson(endpoint(vendor, "/v1/chat/completions"), apiKey, vendor, {
-      model: model.modelAlias || model.modelKey,
-      messages: [{ role: "user", content: userContent }],
-      temperature: Number.isFinite(temperatureValue) ? temperatureValue : 0.7,
-      ...(Number.isFinite(maxTokensValue) && maxTokensValue > 0 ? { max_tokens: maxTokensValue } : {}),
+    const { raw } = await streamTextTask({
+      vendor,
+      model,
+      apiKey,
+      prompt: request.prompt,
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(Number.isFinite(temperatureValue) ? { temperature: temperatureValue } : {}),
+      ...(Number.isFinite(maxTokensValue) && maxTokensValue > 0 ? { maxTokens: maxTokensValue } : {}),
     });
-    return { id: taskId, kind, status: "succeeded", assets: [], raw: response };
+    return { id: taskId, kind, status: "succeeded", assets: [], raw };
   }
 
   const suffix = wantedKind === "video" ? "/v1/videos/generations" : "/v1/images/generations";
