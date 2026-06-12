@@ -1,6 +1,11 @@
 # Nomi 评测体系总体方案（Eval-Driven Iteration Loop）
 
-> 状态：v2（6 角色评审回填完毕），待用户拍板 D1–D6
+> 状态：v3（已施工完毕，2026-06-12）。D1–D6 全按推荐拍板。
+> **施工回填**：S0（由 harness 并行会话交付，验收通过）/ S0.5 / S1 / S1.5 / S2 / S4 / S5 / S6 全部完成并 push；S3 机制层完成，校准待用户两项输入（judge key + ≥10 条标注）。
+> 命令族：`eval:run / eval:score / eval:diff / eval:view / eval:ops / eval:judge-calibrate / eval:review-images / test:journeys`，节奏提醒并入 `check:audit`。
+> 循环已实证转通：施工期抓出并修掉 2 个真 bug（prod projectId 解析、agent 连线 clientId 吊边），各配回归锁；基线 15 case 行为分全绿（饱和 = 扩容信号，扩容来源限定真实失败 + Q1/Q2 拍板）。
+> 实测账（回填 D2）：单 trial 26–50s / 1.6–2.8 万 tokens；冒烟档 5 case ≈3 分钟 ≈11 万 tokens；全量 15 case ≈10 分钟 ≈31 万 tokens。
+> 待用户三件事：① `evals/judge.config.json` 填便宜档 key；② 查看器标注 ≥10 条导出；③ 拍板 Q1（默认连线？）/ Q2（宣传片默认 image 还是 video？）——见 `docs/audit/2026-06-12-eval-error-analysis-v1.md`。
 > 关系：本方案是 `2026-06-11-nomi-harness-master-plan.md`（ETCSLV）的**姊妹件**——评测体系是 EventLog（S）的读侧第四消费者，复用 V 层的 NormalizedRecipe / V-a 自检结果，不另造日志格式。施工顺序关系见 D3。
 
 ---
