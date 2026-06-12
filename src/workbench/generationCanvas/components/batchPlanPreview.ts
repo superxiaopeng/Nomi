@@ -22,18 +22,23 @@ export const useBatchPlanPreviewStore = create<BatchPlanPreviewState>()((set, ge
     const { plan, running } = get()
     if (!plan || running) return
     set({ running: true })
-    const total = plan.waves.flat().length + plan.blocked.length
-    toast(`按计划开始生成 ${total} 个节点(${plan.waves.length} 波)…`, 'info')
     set({ plan: null, running: false })
-    try {
-      const result = await runGenerationNodesByPlan(plan)
-      const okCount = result.successes.length
-      const failCount = result.failures.length
-      if (failCount === 0) toast(`已完成 ${okCount}/${total} 个节点的生成`, 'success')
-      else if (okCount === 0) toast(`批量生成失败：${failCount}/${total} 个节点未完成`, 'error')
-      else toast(`已完成 ${okCount}/${total}，${failCount} 个失败 — 在画布上单独重试`, 'info')
-    } catch (error: unknown) {
-      toast(error instanceof Error && error.message ? error.message : '批量生成异常', 'error')
-    }
+    await runPlanWithToasts(plan)
   },
 }))
+
+/** 按计划真实生成 + 进度人话 toast。「全部生成」确认条与 S6b agent 受理路径共用(单一执行口)。 */
+export async function runPlanWithToasts(plan: DependencyWavePlan): Promise<void> {
+  const total = plan.waves.flat().length + plan.blocked.length
+  toast(`按计划开始生成 ${total} 个节点(${plan.waves.length} 波)…`, 'info')
+  try {
+    const result = await runGenerationNodesByPlan(plan)
+    const okCount = result.successes.length
+    const failCount = result.failures.length
+    if (failCount === 0) toast(`已完成 ${okCount}/${total} 个节点的生成`, 'success')
+    else if (okCount === 0) toast(`批量生成失败：${failCount}/${total} 个节点未完成`, 'error')
+    else toast(`已完成 ${okCount}/${total}，${failCount} 个失败 — 在画布上单独重试`, 'info')
+  } catch (error: unknown) {
+    toast(error instanceof Error && error.message ? error.message : '批量生成异常', 'error')
+  }
+}

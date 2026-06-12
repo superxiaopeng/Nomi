@@ -77,13 +77,14 @@ describe("canvasTools schemas", () => {
   });
 
   describe("canvasToolNames", () => {
-    it("enumerates all 5 tools", () => {
+    it("enumerates all 6 tools", () => {
       expect(canvasToolNames).toEqual([
         "read_canvas_state",
         "create_canvas_nodes",
         "connect_canvas_edges",
         "set_node_prompt",
         "delete_canvas_nodes",
+        "run_generation_batch", // S6b 受理语义
       ]);
     });
 

@@ -4,6 +4,8 @@ import { generationCanvasTools, type CreateGenerationNodeToolInput } from './gen
 import { listAvailableModelsForAgent, type AgentModelEntry } from './availableModels'
 import { buildPlannedNodeMeta } from './plannedNodeMeta'
 import { withCanvasGestureContext, type CanvasGestureContext } from '../events/canvasGestureContext'
+import { buildDependencyWaves } from '../runner/dependencyWaves'
+import { runPlanWithToasts } from '../components/batchPlanPreview'
 
 // 批量创建节点的布局由渲染层 derive，而不是信任 LLM 发来的像素坐标（prompt 里硬编码
 // 单行坐标会让 6+ 节点横向溢出视口、适应视图后节点变得极小）。按节点数算近似正方网格，
@@ -139,6 +141,33 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
       : []
     const deleted = inCtx(() => generationCanvasTools.delete_nodes(nodeIds))
     return { deletedNodeIds: deleted }
+  }
+
+  if (toolName === 'run_generation_batch') {
+    // S6b 受理语义:本分支只在用户批准后到达(确认前零网络调用)。受理 = 按依赖波次
+    // 规划(显示的≡执行的,S2b 纯函数)并启动;立即返回受理回执——生成进度走 run 域
+    // 事件给用户看,不阻塞 LLM 回合。approved nodeIds ≡ requested:只跑请求里解析
+    // 出来的真实节点,一个不多。
+    const requested = Array.isArray(record.nodeIds)
+      ? record.nodeIds.map((id) => resolveNodeId(String(id || '').trim())).filter(Boolean)
+      : []
+    const existing = new Set(generationCanvasTools.read_canvas().nodes.map((node) => node.id))
+    const nodeIds = requested.filter((id) => existing.has(id))
+    if (!nodeIds.length) throw new Error('node_not_found:请求生成的节点都不存在')
+    const state = generationCanvasTools.read_canvas()
+    const plan = buildDependencyWaves(nodeIds, { nodes: state.nodes, edges: state.edges })
+    const accepted = plan.waves.flat()
+    if (!accepted.length) {
+      const reasons = plan.blocked.map((item) => item.detail).join(';')
+      throw new Error(`批量被拦:${reasons || '没有可执行节点'}`)
+    }
+    void runPlanWithToasts(plan).catch(() => {}) // 进度/结果全走 toast+run 域事件,此处不再有未处理拒绝
+    return {
+      accepted: true,
+      acceptedNodeIds: accepted,
+      waves: plan.waves.length,
+      blocked: plan.blocked.map((item) => ({ nodeId: item.nodeId, detail: item.detail })),
+    }
   }
 
   throw new Error(`unknown tool ${toolName}`)

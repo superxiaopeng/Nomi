@@ -319,6 +319,14 @@ function buildCanvasToolsForV2(hooks: AgentChatV2Hooks) {
         reason: z.string().optional(),
       }),
     ),
+    // S6b:受理语义——批准前零网络调用,批准即受理并启动,回执不含生成结果。
+    run_generation_batch: makeTool(
+      "run_generation_batch",
+      "Start real generation for existing canvas nodes (costs credits; user must confirm). Returns an acceptance receipt.",
+      z.object({
+        nodeIds: z.array(z.string().min(1)).min(1).max(24),
+      }),
+    ),
     // Silence unused-import warning for canvasNodeKindSchema by re-exporting
     // it through the tool registry shape (it's enforced via plannedNodeSchema).
     _kindSchema: canvasNodeKindSchema,

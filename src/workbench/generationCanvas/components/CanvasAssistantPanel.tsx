@@ -76,6 +76,10 @@ function summarizeToolCall(toolName: string, args: unknown): string {
     const ids = Array.isArray(record.nodeIds) ? record.nodeIds : []
     return `删除 ${ids.length} 个节点`
   }
+  if (toolName === 'run_generation_batch') {
+    const ids = Array.isArray(record.nodeIds) ? record.nodeIds : []
+    return `批量生成 ${ids.length} 个节点（将产生生成费用）`
+  }
   if (toolName === 'read_canvas_state') {
     return '读取画布当前状态'
   }
@@ -261,16 +265,19 @@ export default function CanvasAssistantPanel({
           // S6-3 对账(N12):执行 ≠ 批准 → 弹偏差卡(per-field diff+一键整笔撤销);一致则零可见。
           if (!outcome.reconciliation.ok) setDeviationReport(outcome.reconciliation.deviations)
           // S6-5 整笔撤销:committed 卡(约束①,存活到下一笔)+ 画布 toast 第二入口(约束②)。
-          const record = {
-            proposalId: outcome.proposalId,
-            summary: steps.map((step) => summarizeToolCall(step.toolName, step.effectiveArgs)).join(' · '),
-            stepLabels: steps.map((step) => summarizeToolCall(step.toolName, step.effectiveArgs)),
-            compensation: outcome.compensation,
-            watchNodes: outcome.watchNodes,
-            reconciliationOk: outcome.reconciliation.ok,
+          // 无可补偿的提议(如 run_generation_batch 受理——网络调用收不回)不出撤销入口,不误导。
+          if (outcome.compensation.length > 0) {
+            const record = {
+              proposalId: outcome.proposalId,
+              summary: steps.map((step) => summarizeToolCall(step.toolName, step.effectiveArgs)).join(' · '),
+              stepLabels: steps.map((step) => summarizeToolCall(step.toolName, step.effectiveArgs)),
+              compensation: outcome.compensation,
+              watchNodes: outcome.watchNodes,
+              reconciliationOk: outcome.reconciliation.ok,
+            }
+            setCommittedProposal(record)
+            toastAction(`AI 已应用：${record.summary}`, { label: '整笔撤销', onClick: () => runProposalUndo(record) })
           }
-          setCommittedProposal(record)
-          toastAction(`AI 已应用：${record.summary}`, { label: '整笔撤销', onClick: () => runProposalUndo(record) })
           for (let index = 0; index < steps.length; index += 1) {
             const step = steps[index]
             await step.transport({

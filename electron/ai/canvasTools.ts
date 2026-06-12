@@ -60,6 +60,7 @@ export const canvasToolNames = [
   "connect_canvas_edges",
   "set_node_prompt",
   "delete_canvas_nodes",
+  "run_generation_batch",
 ] as const;
 export type CanvasToolName = (typeof canvasToolNames)[number];
 
@@ -97,6 +98,15 @@ export const canvasTools = {
   delete_canvas_nodes: tool({
     description:
       "Delete one or more existing canvas nodes by id. Always destructive — the user must confirm.",
+    parameters: z.object({
+      nodeIds: z.array(z.string().min(1)).min(1).max(24),
+    }),
+  }),
+  // S6b 受理语义:确认前零网络调用零扣费;批准 = 受理并启动,返回受理回执,
+  // 生成进度走画布 run 域事件给用户看,不回喂 LLM(长生成不阻塞对话回合)。
+  run_generation_batch: tool({
+    description:
+      "Start real generation for a batch of existing canvas nodes (costs credits — the user must confirm). Provide real node ids from read_canvas_state, or clientIds from this turn's create_canvas_nodes. Nodes are scheduled in dependency waves (references generate first). Returns an acceptance receipt; generation progress is shown to the user on the canvas, not returned to you.",
     parameters: z.object({
       nodeIds: z.array(z.string().min(1)).min(1).max(24),
     }),
