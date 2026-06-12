@@ -6,6 +6,20 @@ import { getHistoryFlags, pushUndoSnapshot } from '../events/canvasUndoJournal'
 import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import type { CanvasNodeActions, CanvasSliceCreator } from './canvasStoreTypes'
 
+// 编辑突发(burst)粒度的撤销点:提示词/参数是逐键连续写入,原先完全不打 barrier →
+// Cmd+Z 一撤直接跳回上一个结构操作,把整段输入连带丢掉(「回退不到我之前的地方」,
+// 2026-06-12 用户复现)。同一节点的连续编辑算一步;换节点或停顿 >3s 开新一步。
+const EDIT_BURST_WINDOW_MS = 3000
+let lastEditBurst = { nodeId: '', at: 0 }
+
+function pushEditBurstBarrier(nodeId: string, state: unknown): void {
+  const now = Date.now()
+  if (lastEditBurst.nodeId !== nodeId || now - lastEditBurst.at > EDIT_BURST_WINDOW_MS) {
+    pushUndoSnapshot(state)
+  }
+  lastEditBurst = { nodeId, at: now }
+}
+
 export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (set, get) => ({
   addNode: (input) => {
     const currentState = get()
@@ -39,6 +53,8 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
   },
   updateNode: (nodeId, patch, options) => {
     if (!get().nodes.some((candidate) => candidate.id === nodeId)) return
+    // 用户态内容编辑(prompt/meta/标题)按 burst 打撤销点;其余 patch(状态机等)不打。
+    if ('prompt' in patch || 'meta' in patch || 'title' in patch) pushEditBurstBarrier(nodeId, get())
     set((state) => {
       const node = state.nodes.find((candidate) => candidate.id === nodeId)
       if (!node) return
@@ -49,6 +65,7 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
   },
   updateNodePrompt: (nodeId, prompt) => {
     if (!get().nodes.some((candidate) => candidate.id === nodeId)) return
+    pushEditBurstBarrier(nodeId, get())
     set((state) => {
       const node = state.nodes.find((candidate) => candidate.id === nodeId)
       if (!node) return

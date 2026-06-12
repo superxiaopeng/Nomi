@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Editor } from '@tiptap/react'
+import { NomiLoadingMark } from '../../../design'
 import { cn } from '../../../utils/cn'
 import PromptEditor from '../../assets/PromptEditor'
 import { readArchetypeArray } from './controls/archetypeMeta'
@@ -92,6 +93,28 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     }
   }
 
+  // 遮挡防线（audit 2026-06-12 bug C）：composer 写死朝下展开时，靠近画布底部的节点
+  // 会把参数行/生成钮伸进时间轴的屏幕区域，被盖住点不到（elementFromPoint 实证）。
+  // 屏幕坐标下实测节点上下可用空间：下方放不下且上方更宽裕 → 翻转朝上。
+  // 订阅 zoom/offset/node.position：平移、缩放、拖节点都会重算；composer 高度用实测
+  // （anchor.offsetHeight 是画布布局 px，×zoom 才是屏幕高）。
+  const canvasZoom = useGenerationCanvasStore((state) => state.canvasZoom)
+  const canvasOffset = useGenerationCanvasStore((state) => state.canvasOffset)
+  const anchorRef = React.useRef<HTMLDivElement>(null)
+  const [flipUp, setFlipUp] = React.useState(false)
+  React.useLayoutEffect(() => {
+    const anchor = anchorRef.current
+    const stage = anchor?.closest('.generation-canvas-v2__stage')
+    const nodeEl = anchor?.parentElement
+    if (!anchor || !stage || !nodeEl) return
+    const stageRect = stage.getBoundingClientRect()
+    const nodeRect = nodeEl.getBoundingClientRect()
+    const neededScreenHeight = (anchor.offsetHeight || 280) * canvasZoom + composerLayout.gap * canvasZoom
+    const spaceBelow = stageRect.bottom - nodeRect.bottom
+    const spaceAbove = nodeRect.top - stageRect.top
+    setFlipUp(spaceBelow < neededScreenHeight && spaceAbove > spaceBelow)
+  }, [canvasZoom, canvasOffset, node.position?.x, node.position?.y, visualSize.width, visualSize.height, composerLayout.gap])
+
   // 卡宽 = 底栏「参数行」的真实一行宽度（实测）。确定宽度下 tile/提示词/参数都正常布局——不写死常数。
   // ⚠ 关键：footerRef 必须是 `w-max`（width:max-content）的元素，盒子尺寸 = 内容宽、**与卡宽脱钩**。
   // 否则 footer 作为 flex-col 子项会被拉伸到卡宽，scrollWidth 反读回卡宽 → 成环：任何一次过宽测量
@@ -115,8 +138,14 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   return (
     // 外层只做定位锚（不裁剪），宽度跟随内层卡（w-fit 包住确定宽度的卡，便于 -translate-x-1/2 居中）。
     <div
+      ref={anchorRef}
       className={cn('generation-canvas-v2-node__composer', 'absolute left-1/2 z-[8] -translate-x-1/2 w-fit')}
-      style={{ top: `calc(100% + ${composerLayout.gap}px)` }}
+      data-flipped={flipUp ? 'true' : 'false'}
+      style={
+        flipUp
+          ? { bottom: `calc(100% + ${composerLayout.gap}px)` }
+          : { top: `calc(100% + ${composerLayout.gap}px)` }
+      }
       onPointerDown={(event) => event.stopPropagation()}
       {...(acceptsDrop ? dropHandlers : {})}
     >
@@ -218,7 +247,11 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
           )}
           aria-hidden="true"
         >
-          <span className={cn('text-caption text-nomi-ink-60')}>{isUploading ? '上传中…' : '松手添加为参考'}</span>
+          {/* pending 规范 #1:上传中统一品牌转圈,不再纯文字 */}
+          <span className={cn('inline-flex items-center gap-1.5 text-caption text-nomi-ink-60')}>
+            {isUploading ? <NomiLoadingMark size={14} label="上传中" /> : null}
+            {isUploading ? '上传中…' : '松手添加为参考'}
+          </span>
         </div>
       ) : null}
     </div>

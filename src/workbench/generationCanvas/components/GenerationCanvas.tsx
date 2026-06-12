@@ -15,6 +15,7 @@ import { notifyModelOptionsRefresh, useModelOptionsState } from '../../../config
 import { useWorkbenchStore } from '../../workbenchStore'
 import { GroupFrameList } from './GroupFrame'
 import { useAutoFitOnLoad } from './useAutoFitOnLoad'
+import { useCanvasShortcuts } from './useCanvasShortcuts'
 import {
   centerNodeOffset,
   clampNumber,
@@ -409,89 +410,23 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     }
   }, [captureHistory, readOnly])
 
-  React.useEffect(() => {
-    if (readOnly) return undefined
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
-      const key = event.key.toLowerCase()
-      const mod = event.metaKey || event.ctrlKey
-      if (event.key === 'Escape') {
-        setActiveEdge(null)
-        cancelConnection()
-        return
-      }
-      if (event.key === 'Backspace' || event.key === 'Delete') {
-        if (!selectedNodeIds.length) return
-        event.preventDefault()
-        deleteSelectedNodes()
-        return
-      }
-      if (!mod) return
-      if (key === 'g' && event.shiftKey) {
-        if (!selectedGroupIds.length) return
-        event.preventDefault()
-        handleUngroupSelectedNodes()
-        return
-      }
-      if (key === 'g') {
-        if (selectedNodeIds.length < 2) return
-        event.preventDefault()
-        handleGroupSelectedNodes()
-        return
-      }
-      // v0.7.5: Cmd+A 全选当前分类
-      if (key === 'a') {
-        event.preventDefault()
-        useGenerationCanvasStore.getState().selectAllNodes(activeCategoryId)
-        return
-      }
-      if (key === 'c') {
-        event.preventDefault()
-        copySelectedNodes()
-        return
-      }
-      if (key === 'x') {
-        event.preventDefault()
-        cutSelectedNodes()
-        return
-      }
-      if (key === 'v') {
-        event.preventDefault()
-        pasteNodes()
-        return
-      }
-      if (key === 'z' && event.shiftKey) {
-        event.preventDefault()
-        redo()
-        return
-      }
-      if (key === 'z') {
-        event.preventDefault()
-        undo()
-        return
-      }
-      if (key === 'y') {
-        event.preventDefault()
-        redo()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
+  useCanvasShortcuts({
+    readOnly,
+    stageRef,
+    selectedNodeCount: selectedNodeIds.length,
+    selectedGroupCount: selectedGroupIds.length,
+    activeCategoryId,
+    setActiveEdge,
     cancelConnection,
+    deleteSelectedNodes,
+    groupSelectedNodes: handleGroupSelectedNodes,
+    ungroupSelectedNodes: handleUngroupSelectedNodes,
     copySelectedNodes,
     cutSelectedNodes,
-    deleteSelectedNodes,
-    handleGroupSelectedNodes,
-    handleUngroupSelectedNodes,
     pasteNodes,
-    readOnly,
-    redo,
-    selectedGroupIds.length,
-    selectedNodeIds.length,
     undo,
-  ])
+    redo,
+  })
 
   React.useEffect(() => {
     const handleOpenSettings = () => {

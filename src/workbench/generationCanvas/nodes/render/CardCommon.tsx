@@ -88,7 +88,12 @@ export function PendingGenerationPlaceholder({
       ) : null}
       {title ? <span className="text-[13px] font-semibold text-nomi-ink-80 truncate">{title}</span> : null}
       {prompt ? (
-        <span className="text-caption text-nomi-ink-60 leading-snug overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+        // 提示词是用户最常想复制的内容：穿透容器的 pointer-events-none + 覆盖 stage 的
+        // user-select:none（select-text），并 stopPropagation 防节点拖拽吃掉划选手势。
+        <span
+          className="text-caption text-nomi-ink-60 leading-snug overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] select-text cursor-text pointer-events-auto"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           {prompt}
         </span>
       ) : null}

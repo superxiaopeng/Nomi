@@ -50,12 +50,15 @@ export function NodeErrorReport({ message, onRetry }: { message: string; onRetry
         'bg-[color-mix(in_oklch,var(--workbench-danger)_5%,var(--nomi-paper))]',
         'border border-[color-mix(in_oklch,var(--workbench-danger)_24%,transparent)]',
       )}
+      // 错误文案要能划选复制去搜/反馈：stage 全局 user-select:none 下逐元素放开,
+      // 并拦下 pointer-down 防止划选手势被节点拖拽吃掉。
+      onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="flex items-start gap-2">
         <IconAlertTriangle size={16} stroke={1.7} className="mt-[1px] shrink-0 text-workbench-danger" />
-        <span className="text-[14px] font-bold leading-snug text-nomi-ink">{report.reason}</span>
+        <span className="select-text cursor-text text-[14px] font-bold leading-snug text-nomi-ink">{report.reason}</span>
       </div>
-      {report.hint ? <p className="mt-2 text-caption leading-relaxed text-nomi-ink-60">{report.hint}</p> : null}
+      {report.hint ? <p className="mt-2 select-text cursor-text text-caption leading-relaxed text-nomi-ink-60">{report.hint}</p> : null}
 
       <div className="min-h-0 flex-1" />
 
