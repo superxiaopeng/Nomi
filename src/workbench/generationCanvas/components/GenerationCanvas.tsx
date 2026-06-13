@@ -17,15 +17,14 @@ import { useWorkbenchStore } from '../../workbenchStore'
 import { GroupFrameList } from './GroupFrame'
 import { useAutoFitOnLoad } from './useAutoFitOnLoad'
 import { useCanvasShortcuts } from './useCanvasShortcuts'
+import { useCanvasViewportGestures } from './useCanvasViewportGestures'
 import {
   centerNodeOffset,
   clampNumber,
   createInitialViewport,
   getCanvasGroupBoxes,
   getSelectedBounds,
-  getWheelZoomFactor,
 } from './generationCanvasGeometry'
-import { findScrollableAncestor } from './canvasScroll'
 import { GENERATION_DEFAULT_BASE_URL, GENERATION_PROVIDER, readProviderSetting, writeProviderSettings } from '../services/providerSettings'
 import CanvasEdgeLayer, { type ActiveEdge } from './CanvasEdgeLayer'
 import '../styles/generationCanvas.css'
@@ -127,10 +126,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     lastCategoryRef.current = activeCategoryId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategoryId])
-  const isPanningRef = React.useRef(false)
-  const panStartRef = React.useRef<{ clientX: number; clientY: number; offsetX: number; offsetY: number } | null>(null)
-  const offsetFrameRef = React.useRef<number | null>(null)
-  const pendingOffsetRef = React.useRef<{ x: number; y: number } | null>(null)
   const stageRef = React.useRef<HTMLDivElement>(null)
   // E8 P0 G1: viewport-aware virtualization.
   // When node count exceeds the threshold, we filter the render list to only
@@ -176,7 +171,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     canvasY: number
   } | null>(null)
   const [pendingCursorPos, setPendingCursorPos] = React.useState<{ x: number; y: number } | null>(null)
-  const [isPanning, setIsPanning] = React.useState(false)
   const [activeEdge, setActiveEdge] = React.useState<ActiveEdge | null>(null)
   const activeEdgeId = activeEdge?.id ?? null
   const [focusFlashNodeId, setFocusFlashNodeId] = React.useState<string | null>(null)
@@ -204,45 +198,21 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const stageSizeRef = React.useRef(stageSize)
   stageSizeRef.current = stageSize
 
-  const scheduleOffset = React.useCallback((nextOffset: { x: number; y: number }) => {
-    offsetRef.current = nextOffset
-    pendingOffsetRef.current = nextOffset
-    if (offsetFrameRef.current !== null) return
-    offsetFrameRef.current = window.requestAnimationFrame(() => {
-      offsetFrameRef.current = null
-      const pending = pendingOffsetRef.current
-      pendingOffsetRef.current = null
-      if (pending) setViewport((current) => ({ ...current, offset: pending }))
-    })
-  }, [])
-
-  const setViewportTransform = React.useCallback((nextZoom: number, nextOffset: { x: number; y: number }) => {
-    if (offsetFrameRef.current !== null) {
-      window.cancelAnimationFrame(offsetFrameRef.current)
-      offsetFrameRef.current = null
-    }
-    pendingOffsetRef.current = null
-    zoomRef.current = nextZoom
-    offsetRef.current = nextOffset
-    setViewport({ zoom: nextZoom, offset: nextOffset })
-  }, [])
-
-  const zoomAtStagePoint = React.useCallback((nextZoom: number, point: { x: number; y: number }) => {
-    const currentZoom = zoomRef.current || 1
-    const currentOffset = offsetRef.current
-    const zoomRatio = nextZoom / currentZoom
-    setViewportTransform(nextZoom, {
-      x: point.x - (point.x - currentOffset.x) * zoomRatio,
-      y: point.y - (point.y - currentOffset.y) * zoomRatio,
-    })
-  }, [setViewportTransform])
-
-  React.useEffect(() => () => {
-    if (offsetFrameRef.current !== null) {
-      window.cancelAnimationFrame(offsetFrameRef.current)
-      offsetFrameRef.current = null
-    }
-  }, [])
+  const gestures = useCanvasViewportGestures({
+    readOnly,
+    stageRef,
+    offsetRef,
+    zoomRef,
+    setViewport,
+    clearSelection,
+    cancelConnection,
+    pendingConnectionSourceId,
+    setContextNodeMenu,
+    setActiveEdge,
+    activeEdgeId,
+    allowLeftDragPan: true,
+  })
+  const { isPanning, isSpaceHeld, setViewportTransform, zoomAtStagePoint } = gestures
 
   React.useEffect(() => {
     const handleFocusNode = (event: Event) => {
@@ -499,76 +469,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     void importImageFilesToGenerationCanvas(files, { basePosition, categoryId: activeCategoryId })
   }, [activeCategoryId, offset, readOnly, zoom])
 
-  const handleStagePanStart = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    setContextNodeMenu(null)
-    setActiveEdge(null)
-    const target = event.target instanceof Element ? event.target : null
-    if (target?.closest(
-      '.generation-canvas-v2-node, .generation-canvas-v2-toolbar, .generation-canvas-v2__zoom-bar, .generation-canvas-v2__selection-toolbar, .generation-canvas-v2__edge-hit, .generation-canvas-v2__edge-cut, button, input, textarea, select, [role="menu"], [role="menuitem"]',
-    )) {
-      return
-    }
-    if (pendingConnectionSourceId && !readOnly) {
-      cancelConnection()
-    }
-    // Left drag on empty canvas = pan
-    isPanningRef.current = true
-    setIsPanning(true)
-    panStartRef.current = {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      offsetX: offset.x,
-      offsetY: offset.y,
-    }
-    if (typeof event.currentTarget.setPointerCapture === 'function') {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    }
-  }
-
-  const handleStagePanMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isPanningRef.current || !panStartRef.current) return
-    scheduleOffset({
-      x: panStartRef.current.offsetX + (event.clientX - panStartRef.current.clientX),
-      y: panStartRef.current.offsetY + (event.clientY - panStartRef.current.clientY),
-    })
-  }
-
-  const handleStagePanEnd = (event?: React.PointerEvent<HTMLDivElement>) => {
-    if (isPanningRef.current && panStartRef.current && event) {
-      const dx = Math.abs(event.clientX - panStartRef.current.clientX)
-      const dy = Math.abs(event.clientY - panStartRef.current.clientY)
-      // Pure click (no drag) on empty canvas = clear selection
-      if (dx < 4 && dy < 4) clearSelection()
-    }
-    isPanningRef.current = false
-    setIsPanning(false)
-    panStartRef.current = null
-    if (offsetFrameRef.current !== null) {
-      window.cancelAnimationFrame(offsetFrameRef.current)
-      offsetFrameRef.current = null
-    }
-    if (pendingOffsetRef.current) {
-      const pending = pendingOffsetRef.current
-      setViewport((current) => ({ ...current, offset: pending }))
-      pendingOffsetRef.current = null
-    }
-    if (event &&
-      typeof event.currentTarget.hasPointerCapture === 'function' &&
-      typeof event.currentTarget.releasePointerCapture === 'function' &&
-      event.currentTarget.hasPointerCapture(event.pointerId)
-    ) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
-
-  const handleStagePointerDownCapture = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!activeEdgeId) return
-    const target = event.target instanceof Element ? event.target : null
-    if (target?.closest('.generation-canvas-v2__edge-hit, .generation-canvas-v2__edge-cut')) return
-    setActiveEdge(null)
-  }
-
   const getCanvasPointFromClientPoint = React.useCallback((clientX: number, clientY: number) => {
     if (!stageRef.current) return null
     const rect = stageRef.current.getBoundingClientRect()
@@ -578,26 +478,12 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     }
   }, [])
 
-  const handleWheel = React.useCallback((event: WheelEvent) => {
-    // 滚轮命中卡内可滚区（提示词编辑器等）时交给原生滚动，别被 stage 的缩放监听吞掉（一处覆盖所有入口，P2）。
-    if (event.target instanceof Element && findScrollableAncestor(event.target, stageRef.current, event.deltaY)) return
-    event.preventDefault()
-    setContextNodeMenu(null)
-    if (!stageRef.current) return
-    const rect = stageRef.current.getBoundingClientRect()
-    const nextZoom = clampNumber(zoomRef.current * getWheelZoomFactor(event), 0.2, 3)
-    zoomAtStagePoint(nextZoom, { x: event.clientX - rect.left, y: event.clientY - rect.top })
-  }, [zoomAtStagePoint])
-
-  React.useEffect(() => {
-    const stage = stageRef.current
-    if (!stage) return undefined
-    stage.addEventListener('wheel', handleWheel, { passive: false })
-    return () => stage.removeEventListener('wheel', handleWheel)
-  }, [handleWheel])
-
   const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     if (readOnly || !stageRef.current) return
+    if (gestures.shouldSuppressContextMenu()) {
+      event.preventDefault()
+      return
+    }
     const target = event.target instanceof Element ? event.target : null
     if (target?.closest(
       '.generation-canvas-v2-node, .generation-canvas-v2-toolbar, .generation-canvas-v2__zoom-bar, .generation-canvas-v2__selection-toolbar, .generation-canvas-v2__edge, .generation-canvas-v2__edge-preview, button, input, textarea, select, [role="menu"], [role="menuitem"]',
@@ -760,10 +646,11 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
           className="generation-canvas-v2__stage"
           ref={stageRef}
           data-panning={isPanning ? 'true' : undefined}
-          onPointerDownCapture={handleStagePointerDownCapture}
-          onPointerDown={handleStagePanStart}
-          onPointerMove={handleStagePanMove}
-          onPointerUp={handleStagePanEnd}
+          data-space-pan={isSpaceHeld ? 'true' : undefined}
+          onPointerDownCapture={gestures.handlePointerDownCapture}
+          onPointerDown={gestures.handlePointerDown}
+          onPointerMove={gestures.handlePointerMove}
+          onPointerUp={gestures.handlePointerUp}
           onContextMenu={handleStageContextMenu}
           onDragOver={(event) => {
             if (readOnly) return
