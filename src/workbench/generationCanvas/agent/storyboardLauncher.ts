@@ -1,24 +1,10 @@
 /**
- * Story → Storyboard demo launcher.
+ * 分镜规划师的技能标识 + 用户消息构造。
  *
- * The creation AI panel's "🎬 拆镜头" chip / natural-language trigger calls
- * `requestStoryboardPlanning(text)`; the generation-canvas assistant
- * panel listens on the same global event channel and runs the storyboard
- * planner skill against the supplied story text.
- *
- * We intentionally route through a CustomEvent on `window` rather than a
- * shared zustand slice so that the launcher works across React lifecycles
- * (e.g. the panel may be remounted when the user switches workspace mode).
+ * 触发入口在创作区 AI 助手（说「拆镜头」）→ 调 runStoryboardPlanner 就地跑（流程 A：不切区）。
+ * 原先经 window CustomEvent 把请求甩到生成区助手面板的「事件桥」已删除——规划改在创作区原地完成，
+ * 产出 propose_storyboard_plan 落创作 store，编辑器随即在创作区主列展开。
  */
-
-export const STORYBOARD_PLANNING_EVENT = 'nomi:generation:storyboard:request' as const
-
-export type StoryboardPlanningRequest = {
-  /** The full story text the user wrote in the creation editor. */
-  storyText: string
-  /** Optional source label for analytics or UI ("creation-editor", "library-try-now"). */
-  source?: string
-}
 
 export const STORYBOARD_PLANNER_SKILL = {
   key: 'workbench.storyboard.planner',
@@ -26,30 +12,16 @@ export const STORYBOARD_PLANNER_SKILL = {
 } as const
 
 /**
- * Build the user-facing message we send to the storyboard planner agent.
- * The skill body already contains the full methodology, so we just hand
- * the agent the story text and one short instruction.
+ * 构造交给分镜规划师的用户消息。技能体（SKILL.md）已含完整方法论，这里只把剧本正文
+ * 包好递进去，附一句指令。
  */
 export function buildStoryboardPlanningMessage(storyText: string): string {
   const trimmed = storyText.trim()
   return [
-    '请把下面这段故事规划成可生成的轨迹（共享角色/场景定妆 → 每镜关键帧 → 每镜视频），节点与边一次提交，写入生成画布。',
+    '请把下面这段故事规划成一份「分镜方案」（跨镜头要一致的角色/场景/道具/风格 + 每个镜头），通过 propose_storyboard_plan 产出结构化方案对象——先给用户在创作区审阅、修改，不要直接写画布。',
     '',
     '--- 故事正文 ---',
     trimmed,
     '--- 故事正文结束 ---',
   ].join('\n')
-}
-
-/**
- * Dispatch a storyboard planning request. Returns true if at least one
- * listener (i.e. the canvas assistant panel) is mounted; callers may use
- * the return value to decide whether to show a fallback toast.
- */
-export function requestStoryboardPlanning(request: StoryboardPlanningRequest): boolean {
-  if (typeof window === 'undefined') return false
-  const event = new CustomEvent<StoryboardPlanningRequest>(STORYBOARD_PLANNING_EVENT, {
-    detail: request,
-  })
-  return window.dispatchEvent(event)
 }

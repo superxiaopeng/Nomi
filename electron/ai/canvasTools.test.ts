@@ -77,9 +77,10 @@ describe("canvasTools schemas", () => {
   });
 
   describe("canvasToolNames", () => {
-    it("enumerates all 7 tools", () => {
+    it("enumerates all 8 tools", () => {
       expect(canvasToolNames).toEqual([
         "read_canvas_state",
+        "propose_storyboard_plan", // 分镜方案：产出结构化方案对象落创作区，确认后才落画布
         "create_canvas_nodes",
         "connect_canvas_edges",
         "set_node_prompt",

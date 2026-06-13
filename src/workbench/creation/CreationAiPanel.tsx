@@ -13,7 +13,7 @@ import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
 import { AssistantToolsFold } from '../ai/AssistantToolsFold'
 import { useWorkbenchStore } from '../workbenchStore'
-import { requestStoryboardPlanning } from '../generationCanvas/agent/storyboardLauncher'
+import { runStoryboardPlanner } from '../generationCanvas/agent/runStoryboardPlanner'
 import { requestFixationPlanning } from '../generationCanvas/agent/fixationLauncher'
 import {
   buildCreationAiPrompt,
@@ -151,20 +151,46 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
       return
     }
     const now = Date.now()
+    const assistantId = `creation_ai_assistant_${now + 1}`
     setMessages((prev) => [
       ...prev,
       { id: `creation_ai_user_${now}`, role: 'user', content: displayPrompt },
-      { id: `creation_ai_assistant_${now + 1}`, role: 'assistant', content: '已切到生成区，正在让 AI 拆镜头。' },
+      { id: assistantId, role: 'assistant', content: '正在拆镜头，整理分镜方案…' },
     ])
     setDraft('')
     setError('')
-    setWorkspaceMode('generation')
-    // Allow the generation workspace + assistant panel to mount before
-    // dispatching the CustomEvent it listens for.
-    window.setTimeout(() => {
-      requestStoryboardPlanning({ storyText, source: 'creation-ai-panel' })
-    }, 60)
-  }, [documentText, selectedText, setDraft, setError, setMessages, setWorkspaceMode])
+    // 流程 A：就地跑规划师（不切到生成区）。产出 propose_storyboard_plan 落创作 store →
+    // 主列展开分镜方案编辑器；规划阶段全程免费、不碰画布（runStoryboardPlanner 的 onToolCall 守卫）。
+    setSending(true)
+    void (async () => {
+      try {
+        const { text } = await runStoryboardPlanner({
+          storyText,
+          onContent: (streamed) =>
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: streamed || '正在拆镜头…' } : m))),
+          onCancelReady: (cancel) => {
+            cancelRef.current = cancel
+          },
+        })
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: text || '分镜方案已生成，请在左侧审阅、修改后确认落画布。' } : m,
+          ),
+        )
+      } catch (error: unknown) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: `拆镜头失败：${error instanceof Error && error.message ? error.message : '未知错误'}` }
+              : m,
+          ),
+        )
+      } finally {
+        setSending(false)
+        cancelRef.current = null
+      }
+    })()
+  }, [documentText, selectedText, setDraft, setError, setMessages])
 
   // Tier2 定妆：把剧本交给 AI，按剧本为主要角色/场景建卡 + 注入身份板提示词（与拆镜头同构）。
   const launchFixationPlanning = React.useCallback((displayPrompt = '🎭 立角色卡') => {

@@ -71,6 +71,7 @@ function buildStaticAgentSystemPrompt(mode: SendGenerationCanvasAgentMessageInpu
     '',
     '你可以调用以下工具（详细 schema 由系统注入）：',
     '- read_canvas_state：读取当前画布（紧凑行格式：id | 类型 | 标题 | 状态 | prompt 摘要，附引用边与选中）。',
+    '- propose_storyboard_plan：把一段故事规划成结构化「分镜方案」（跨镜头一致的锚 + 镜头），先给用户在创作区审阅/修改，不碰画布、不花钱（分镜规划师技能用；确认后才由系统落画布）。',
     `- create_canvas_nodes：在画布上创建一批待用户确认的节点，并用 edges 字段一并提交这些节点之间的引用边（每个节点必须给定 clientId、kind=${creatableKinds} 之一、title、prompt；建议再给 modelKey + 可选 modeId + params 以指定模型和比例/清晰度等参数，取值见下方「可用模型」清单）。`,
     '- connect_canvas_edges：仅用于给画布上已有节点补连引用边（后续编辑场景）；新计划的边必须放在 create_canvas_nodes 的 edges 字段里，不要拆成两次调用。',
     '- run_generation_batch：为已有节点启动真实生成（花费额度，用户必须确认）。nodeIds 用画布上下文里的真实 id 或本轮 create 的 clientId；系统按依赖波次调度（参考先生成）。返回受理回执，生成进度用户在画布上看。',

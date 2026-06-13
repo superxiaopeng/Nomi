@@ -73,8 +73,41 @@ export const plannedEdgeSchema = z.object({
     ),
 });
 
+// ── 分镜方案 schema（propose_storyboard_plan 的参数；镜像渲染层 StoryboardPlan，
+// electron/renderer 进程隔离故两处各一份，与 plannedNodeSchema 同例）。──
+const storyboardAnchorSchema = z.object({
+  id: z.string().min(1).describe("Stable id; used as the clientId when the plan lands on the canvas (e.g. 'anchor-1')."),
+  kind: z.enum(["character", "scene", "prop", "style"]),
+  name: z.string().describe("Display name & shot-reference key ('林夏' / '天台' / '红书包' / '全片风格')."),
+  description: z
+    .string()
+    .describe(
+      "Standard description. Visual anchor (carrier=visual) → reference-card / cast-sheet prompt (stable appearance/environment, neutral). Text anchor (carrier=text) → folded into the prompt of every shot that references it.",
+    ),
+  carrier: z
+    .enum(["visual", "text"])
+    .describe(
+      "visual = generate a reference image and hang it on the shot's reference slot (faces / specific scenes / props that prompt words can't pin down). text = describe in words only, folded into shot prompts (tone / brand color / wardrobe words). character/scene/prop default visual; style defaults text.",
+    ),
+  scope: z.enum(["all", "selective"]).optional().describe("all = every shot (style/brand); selective = only named shots."),
+})
+
+const storyboardShotSchema = z.object({
+  index: z.number().int().describe("1-based shot number in script order."),
+  durationSec: z.number().describe("Shot duration in seconds (clamped to the chosen model's max when it lands)."),
+  anchorIds: z.array(z.string()).describe("Which anchors this shot uses (by anchor.id) → visual anchors become reference edges, text anchors fold into the prompt."),
+  prompt: z.string().describe("Directly-generatable prompt: camera move + action progression; do NOT restate the anchors' static descriptions."),
+})
+
+export const storyboardPlanParamsSchema = z.object({
+  title: z.string().describe("Short plan title in the user's language."),
+  anchors: z.array(storyboardAnchorSchema).max(24),
+  shots: z.array(storyboardShotSchema).min(1).max(24),
+})
+
 export const canvasToolNames = [
   "read_canvas_state",
+  "propose_storyboard_plan",
   "create_canvas_nodes",
   "connect_canvas_edges",
   "set_node_prompt",
@@ -89,6 +122,12 @@ export const canvasTools = {
     description:
       "Read the current generation canvas: returns all nodes (id, kind, title, prompt, position) and all edges (source, target). Use this first when you need to know what is already on the canvas before planning new work.",
     parameters: z.object({}),
+  }),
+  // 分镜方案规划专用:产出结构化方案对象,落创作区给用户审/改(不碰画布、不花钱),用户确认后才落画布。
+  propose_storyboard_plan: tool({
+    description:
+      "Produce a STRUCTURED storyboard plan (cross-shot anchors + shots) for the user to review and edit in the creation area BEFORE anything is created on the canvas. Does NOT touch the canvas and costs nothing — planning is free and editable; the user confirms later to land it. Use this (not create_canvas_nodes) when planning a story into a consistent multi-shot video. Emit exactly ONE call with the whole plan.",
+    parameters: storyboardPlanParamsSchema,
   }),
   create_canvas_nodes: tool({
     description:

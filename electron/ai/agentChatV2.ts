@@ -19,6 +19,7 @@ import {
   canvasNodeKindSchema,
   plannedEdgeSchema,
   plannedNodeSchema,
+  storyboardPlanParamsSchema,
   type CanvasToolName,
 } from "./canvasTools";
 import {
@@ -271,6 +272,11 @@ function buildCanvasToolsForV2(hooks: AgentChatV2Hooks) {
       "read_canvas_state",
       "Read the current generation canvas (nodes + edges).",
       z.object({}),
+    ),
+    propose_storyboard_plan: makeTool(
+      "propose_storyboard_plan",
+      "Produce a structured storyboard plan (cross-shot anchors + shots) for the user to review/edit in the creation area before anything lands on the canvas. Does not touch the canvas and costs nothing. Emit exactly one call.",
+      storyboardPlanParamsSchema,
     ),
     create_canvas_nodes: makeTool(
       "create_canvas_nodes",

@@ -190,7 +190,8 @@ describe('Phase C storyboard happy path', () => {
   describe('buildStoryboardPlanningMessage', () => {
     it('wraps the story with delimiter markers and the planner instruction', () => {
       const message = buildStoryboardPlanningMessage('  Once upon a time...  ')
-      expect(message).toContain('请把下面这段故事规划成可生成的轨迹')
+      expect(message).toContain('propose_storyboard_plan')
+      expect(message).toContain('分镜方案')
       expect(message).toContain('--- 故事正文 ---')
       expect(message).toContain('--- 故事正文结束 ---')
       expect(message).toContain('Once upon a time...')
