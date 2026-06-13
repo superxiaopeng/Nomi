@@ -8,6 +8,7 @@ import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { canRunGenerationNode, rerunGenerationNodeAsNewNode, runGenerationNode } from '../runner/generationRunController'
 import NodeParameterControls from './NodeParameterControls'
+import { NodeLockBadge } from './NodeLockBadge'
 import { useNodeAssetDrop } from './useNodeAssetDrop'
 import { persistActiveWorkbenchProjectNow } from '../../project/workbenchProjectSession'
 import {
@@ -29,6 +30,9 @@ const TEXT_MODE_PLACEHOLDER: Record<TextGenMode, string> = {
   rewrite: '改写要求…（先在正文里选中要改的文字）',
   replace: '重写要求…（替换整篇）',
 }
+
+// 翻转滞回带（屏幕 px）：已翻上后要等下方明显够放才切回朝下，杜绝边界反复横跳（用户反馈①）。
+const FLIP_HYSTERESIS = 48
 
 // 生成节点的浮动 composer：references + 提示词 + 参数 + 生成/重新生成按钮。
 // 从 BaseGenerationNode 抽出（A1.5 接缝）：只有「生成类」节点挂它，素材节点不挂。
@@ -93,11 +97,13 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     }
   }
 
-  // 遮挡防线（audit 2026-06-12 bug C）：composer 写死朝下展开时，靠近画布底部的节点
+  // 遮挡防线（audit 2026-06-12 bug C）：composer 默认朝下展开时，靠近画布底部的节点
   // 会把参数行/生成钮伸进时间轴的屏幕区域，被盖住点不到（elementFromPoint 实证）。
-  // 屏幕坐标下实测节点上下可用空间：下方放不下且上方更宽裕 → 翻转朝上。
-  // 订阅 zoom/offset/node.position：平移、缩放、拖节点都会重算；composer 高度用实测
-  // （anchor.offsetHeight 是画布布局 px，×zoom 才是屏幕高）。
+  // 屏幕坐标下实测节点上下可用空间，决定是否翻转朝上。
+  // 订阅 zoom/offset/node.position：平移、缩放、拖节点都会重算。
+  // 用户反馈①：默认稳定朝下，仅「下方真放不下且上方更宽裕」才翻上；已翻上后要等下方
+  // 明显够放（+滞回带 FLIP_HYSTERESIS）才切回 → 杜绝节点贴边界时反复横跳。
+  // 面板已反向缩放成恒定屏幕尺寸（见 anchor transform），故所需高度≈ offsetHeight（不再 ×zoom）。
   const canvasZoom = useGenerationCanvasStore((state) => state.canvasZoom)
   const canvasOffset = useGenerationCanvasStore((state) => state.canvasOffset)
   const anchorRef = React.useRef<HTMLDivElement>(null)
@@ -109,10 +115,14 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     if (!anchor || !stage || !nodeEl) return
     const stageRect = stage.getBoundingClientRect()
     const nodeRect = nodeEl.getBoundingClientRect()
-    const neededScreenHeight = (anchor.offsetHeight || 280) * canvasZoom + composerLayout.gap * canvasZoom
+    const neededScreenHeight = (anchor.offsetHeight || 280) + composerLayout.gap * canvasZoom
     const spaceBelow = stageRect.bottom - nodeRect.bottom
     const spaceAbove = nodeRect.top - stageRect.top
-    setFlipUp(spaceBelow < neededScreenHeight && spaceAbove > spaceBelow)
+    setFlipUp((prev) =>
+      prev
+        ? !(spaceBelow > neededScreenHeight + FLIP_HYSTERESIS)
+        : spaceBelow < neededScreenHeight && spaceAbove > spaceBelow,
+    )
   }, [canvasZoom, canvasOffset, node.position?.x, node.position?.y, visualSize.width, visualSize.height, composerLayout.gap])
 
   // 卡宽 = 底栏「参数行」的真实一行宽度（实测）。确定宽度下 tile/提示词/参数都正常布局——不写死常数。
@@ -139,13 +149,18 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     // 外层只做定位锚（不裁剪），宽度跟随内层卡（w-fit 包住确定宽度的卡，便于 -translate-x-1/2 居中）。
     <div
       ref={anchorRef}
-      className={cn('generation-canvas-v2-node__composer', 'absolute left-1/2 z-[8] -translate-x-1/2 w-fit')}
+      className={cn('generation-canvas-v2-node__composer', 'absolute left-1/2 z-[8] w-fit')}
       data-flipped={flipUp ? 'true' : 'false'}
-      style={
-        flipUp
+      style={{
+        // 用户反馈③：反向缩放抵消画布 scale(zoom) → 面板恒定屏幕尺寸（缩小画布只缩上面的卡片框，
+        // 不缩这个参数框）。横向居中的 -translate-x-1/2 改写进 transform（否则被 scale 覆盖）。
+        // transform-origin 贴住与节点相连的那条边（默认朝下=顶边、翻上=底边），缩放时锚点不漂移。
+        transform: `translateX(-50%) scale(${1 / (canvasZoom || 1)})`,
+        transformOrigin: flipUp ? 'bottom center' : 'top center',
+        ...(flipUp
           ? { bottom: `calc(100% + ${composerLayout.gap}px)` }
-          : { top: `calc(100% + ${composerLayout.gap}px)` }
-      }
+          : { top: `calc(100% + ${composerLayout.gap}px)` }),
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       {...(acceptsDrop ? dropHandlers : {})}
     >
@@ -204,6 +219,9 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
         />
       </div>
       <div ref={footerRef} className={cn('flex items-center gap-2 mt-auto pt-1 shrink-0 w-max')}>
+        {/* 锁从节点卡片移到这里（编辑面板底栏）：卡片预览保持干净，锁定/解锁在选中编辑时就近可达。
+            selected 恒为真（composer 只在选中时挂载）→ 始终可见：未锁=描边开锁、已锁=实心锁。 */}
+        <NodeLockBadge nodeId={node.id} locked={node.locked} selected />
         <NodeParameterControls node={node} section="parameters" />
         {(() => {
           const disabledReason = !canGenerate && !isGenerating

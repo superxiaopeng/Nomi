@@ -46,7 +46,6 @@ import PanoramaViewer, { type PanoramaScreenshot } from "./PanoramaViewer";
 import { getGenerationNodeExecutionKind, isImageLikeGenerationNodeKind } from "../model/generationNodeKinds";
 import { applyFixationMakeup } from "../fixation/buildFixationNode";
 import { TechnicalReviewBadge } from "./TechnicalReviewBadge";
-import { NodeLockBadge } from "./NodeLockBadge";
 import {
     canDragGenerationNodeToTimeline,
     TIMELINE_DRAG_HANDLE_LABEL,
@@ -612,7 +611,8 @@ function BaseGenerationNodeImpl({
                     </span>
                 ) : null}
                 <TechnicalReviewBadge meta={node.meta} />
-                <NodeLockBadge nodeId={node.id} locked={node.locked} selected={selected} />
+                {/* 锁徽标已从卡片移到 NodeGenerationComposer 底栏（编辑面板）——卡片预览保持干净，
+                    锁定/解锁在选中节点时就近可达（用户反馈②）。 */}
                 {/* E.2C-25 副本角标（spec §6.3）：跨分类独立副本永久显示。derivedFrom 仅承载跨分类独立副本语义(经 E.2C-16 migration);同分类重生成在 regeneratedFrom,不进此角标。 */}
                 {node.derivedFrom ? (
                     <button
