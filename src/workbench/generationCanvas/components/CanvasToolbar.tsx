@@ -82,8 +82,8 @@ export function NodeAddMenu({
 }
 
 type CanvasToolbarProps = {
-  // 传 kind：落点避让按该节点真实尺寸做 AABB（审计 A4）。
-  getInsertionPosition: (kind: GenerationNodeKind) => { x: number; y: number }
+  // 只给「期望落点」（视口锚换算的画布坐标）；真实 AABB 碰撞避让统一收口在 store.addNode。
+  getInsertionPosition: () => { x: number; y: number }
   categoryId?: string
 }
 
@@ -94,7 +94,7 @@ export default function CanvasToolbar({ getInsertionPosition, categoryId }: Canv
   const cutSelectedNodes = useGenerationCanvasStore((state) => state.cutSelectedNodes)
 
   const handleAddNode = (kind: GenerationNodeKind) => {
-    addNode({ kind, position: getInsertionPosition(kind), categoryId })
+    addNode({ kind, position: getInsertionPosition(), categoryId })
   }
 
   return (

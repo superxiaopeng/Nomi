@@ -17,6 +17,7 @@ import {
   getClipboard,
   setClipboard,
 } from './canvasClipboard'
+import { resolveGroupInsertionDelta } from './resolveInsertionPosition'
 import { normalizeStoreSnapshot } from './canvasSnapshotNormalizer'
 import { createDefaultGenerationCanvasSnapshot } from './generationCanvasDefaults'
 import { isShotNumberedNode, nextShotIndex } from '../model/shotNumbering'
@@ -98,9 +99,21 @@ export const useGenerationCanvasStore = create<GenerationCanvasState>()(subscrib
     if (!cloned.nodes.length) return
     // 粘贴产物是新身份：镜头节点逐个领新编号，不复制原号（编号唯一，审计 A2）。
     let nextIndex = nextShotIndex(currentState.nodes)
-    const pastedNodes = cloned.nodes.map((node) =>
+    const numberedNodes = cloned.nodes.map((node) =>
       isShotNumberedNode(node) ? { ...node, shotIndex: nextIndex++ } : node,
     )
+    // 整簇避让：粘贴簇（已 +OFFSET）拿相关分类的已有卡求一个统一位移，整体挪开不遮挡，
+    // 保住簇内相对排布（刚体平移不变形）。只比簇内出现过的分类——跨分类不同屏、不遮挡。
+    const clusterCategories = new Set(numberedNodes.map((node) => node.categoryId || 'shots'))
+    const relevantExisting = currentState.nodes.filter((node) => clusterCategories.has(node.categoryId || 'shots'))
+    const delta = resolveGroupInsertionDelta(numberedNodes, relevantExisting)
+    const pastedNodes =
+      delta.x === 0 && delta.y === 0
+        ? numberedNodes
+        : numberedNodes.map((node) => ({
+            ...node,
+            position: { x: node.position.x + delta.x, y: node.position.y + delta.y },
+          }))
     pushUndoSnapshot(currentState)
     setClipboard({
       nodes: pastedNodes,

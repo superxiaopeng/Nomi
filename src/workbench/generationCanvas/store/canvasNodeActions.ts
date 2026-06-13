@@ -1,4 +1,5 @@
 import { createGenerationNode, removeNodes, upsertNode } from '../model/graphOps'
+import { resolveInsertionPosition } from './resolveInsertionPosition'
 import { getDefaultCategoryForNodeKind, type GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { isShotNumberedNode, nextShotIndex } from '../model/shotNumbering'
 import { CLIPBOARD_OFFSET, createClipboardNodeId, createNodeId } from './canvasIds'
@@ -24,18 +25,25 @@ function pushEditBurstBarrier(nodeId: string, state: unknown): void {
 export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (set, get) => ({
   addNode: (input) => {
     const currentState = get()
-    const existingCount = currentState.nodes.filter((node) => node.kind === input.kind).length
     // 节点出生必带 categoryId：调用方没给就按 kind 推断（与迁移共用同一映射）。
     // 这是「无分类节点」的总闸——漏传 categoryId 的创建入口曾在下次打开项目时
     // 触发 legacy 迁移 toast 甚至删节点（审计 A4 的入口集）。
     const categoryId = isCategoryId(input.categoryId) ? input.categoryId : getDefaultCategoryForNodeKind(input.kind)
+    // 落点真碰撞避让总闸：所有交互式建卡入口都经此 addNode——工具栏 / 定妆 / 素材导入 /
+    // agent 单建 / 裁剪截图等派生卡。任一传进来的落点（或缺省落点）都拿「同分类」已有卡做
+    // 真实 AABB 避让，挪到第一个不遮挡的空位 → 卡片之间不再相互遮挡（用户报障的根因：
+    // 旧版除工具栏外各入口都信任原始落点、零避让）。只比同分类：画布按 activeCategoryId
+    // 分屏渲染，跨分类卡不同屏、不会遮挡，拿它们避让只会把新卡无谓推远。批量建卡（create_nodes）
+    // 与项目加载直接 set nodes、不走这里，故其自有的紧凑布局不受影响。
+    const siblings = currentState.nodes.filter((node) => (node.categoryId || 'shots') === (categoryId || 'shots'))
+    const position = resolveInsertionPosition(input.kind, input.position ?? { x: 120, y: 360 }, siblings)
     const baseNode = createGenerationNode({
       id: createNodeId(input.kind),
       kind: input.kind,
       title: input.title,
       prompt: input.prompt,
-      x: input.position?.x ?? 120 + existingCount * 34,
-      y: input.position?.y ?? 360 + existingCount * 30,
+      x: position.x,
+      y: position.y,
     })
     // 镜头编号是出生即分配的存储身份（max+1），之后移动/加无关节点不再改号（审计 A2）。
     const nextNode = {
@@ -201,13 +209,16 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     const state = get()
     const node = state.nodes.find((candidate) => candidate.id === nodeId)
     if (!node) return null
+    // 变体落点经同分类避让：默认贴在原卡右下 +40，被占则螺旋挪开，不压住原卡或邻卡。
+    const dupSiblings = state.nodes.filter((candidate) => (candidate.categoryId || 'shots') === (node.categoryId || 'shots'))
+    const dupPosition = resolveInsertionPosition(node.kind, { x: node.position.x + 40, y: node.position.y + 40 }, dupSiblings)
     const nextNode = createGenerationNode({
       id: createNodeId(node.kind),
       kind: node.kind,
       title: node.title,
       prompt: node.prompt,
-      x: node.position.x + 40,
-      y: node.position.y + 40,
+      x: dupPosition.x,
+      y: dupPosition.y,
     })
     const history = node.history ? [...node.history] : []
     const result = node.result
@@ -287,14 +298,19 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     const source = get().nodes.find((candidate) => candidate.id === nodeId)
     if (!source) return null
     const { id: _sourceId, categoryId: _sourceCategoryId, groupId: _sourceGroupId, shotIndex: _sourceShotIndex, ...rest } = source
+    // 副本落进目标分类：默认 +OFFSET，再拿目标分类已有卡避让（目标分类可能已塞满，
+    // 固定偏移会直接压上去）。比同分类——目标分类 id，不是源分类。
+    const copySiblings = get().nodes.filter((candidate) => (candidate.categoryId || 'shots') === (id || 'shots'))
+    const copyPosition = resolveInsertionPosition(
+      source.kind,
+      { x: source.position.x + CLIPBOARD_OFFSET, y: source.position.y + CLIPBOARD_OFFSET },
+      copySiblings,
+    )
     const copiedNode: GenerationCanvasNode = {
       ...rest,
       id: createClipboardNodeId(source.id),
       title: source.title ? `${source.title} 副本` : source.title,
-      position: {
-        x: source.position.x + CLIPBOARD_OFFSET,
-        y: source.position.y + CLIPBOARD_OFFSET,
-      },
+      position: copyPosition,
       categoryId: id,
       // 跨分类副本是新身份：落分镜则领新号，不复制原号（编号唯一）。
       ...(isShotNumberedNode({ kind: source.kind, categoryId: id })

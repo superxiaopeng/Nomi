@@ -8,7 +8,6 @@ import { importImageFilesToGenerationCanvas } from '../adapters/assetImportAdapt
 import { getDesktopBridge } from '../../../desktop/bridge'
 import { WORKSPACE_FILE_DRAG_MIME, buildWorkspaceFileUrl, parseWorkspaceFileDrag } from '../../explorer/workspaceFileDrag'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
-import { resolveInsertionPosition } from './resolveInsertionPosition'
 import { getGenerationNodeComponent } from '../nodes/renderRegistry'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { notifyModelOptionsRefresh, useModelOptionsState } from '../../../config/useModelOptions'
@@ -519,21 +518,21 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   // 防止图都在视口外、用户误以为「图消失」）。逻辑抽到 useAutoFitOnLoad（防巨壳）。
   useAutoFitOnLoad({ nodes, activeCategoryId, categoryViewports, fitView, stageRef, zoomRef, offsetRef })
 
-  // 落点：视口锚换回画布坐标得 basePosition，再交给 resolveInsertionPosition 做真实 AABB
-  // 碰撞避让（审计 A4：旧版整数点等值「假避让」几乎总返回中心、压住已有节点）。
+  // 落点：把视口锚换回画布坐标，作为「期望落点」交给 store.addNode——真实 AABB 碰撞避让
+  // 统一收口在 addNode（落点总闸，见 canvasNodeActions），这里不再各自算避让（否则就是
+  // 第二份避让真相源，正是本类 bug 的来源）。kind 入参已无用（避让按落点+同分类在闸内做）。
   const getToolbarInsertionPosition = React.useCallback(
-    (kind: GenerationNodeKind = 'image') => {
+    () => {
       const rect = stageRef.current?.getBoundingClientRect()
       const viewportAnchor = rect
         ? { x: rect.width * 0.38, y: rect.height * 0.42 }
         : { x: 360, y: 280 }
-      const basePosition = {
+      return {
         x: Math.round((viewportAnchor.x - offset.x) / zoom),
         y: Math.round((viewportAnchor.y - offset.y) / zoom),
       }
-      return resolveInsertionPosition(kind, basePosition, nodes)
     },
-    [nodes, offset.x, offset.y, zoom],
+    [offset.x, offset.y, zoom],
   )
 
   const zoomPercent = Math.round(zoom * 100)
