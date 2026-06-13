@@ -54,7 +54,18 @@ export function applyCanvasEvent(projection: CanvasProjection, event: Replayable
       if (!nodeId || !patch) return projection
       return {
         ...projection,
-        nodes: projection.nodes.map((node) => (node.id === nodeId ? Object.assign({ ...node }, patch) : node)),
+        nodes: projection.nodes.map((node) => {
+          if (node.id !== nodeId) return node
+          // patch 里 value===null = 「清除该字段」(如离开分镜清 shotIndex)——store 用 delete,
+          // 重放必须等价删键才 ≡ snapshot。null 是 JSON-safe 的删除信号(undefined 会被
+          // EventLog 的 JSON 序列化吞掉,过不了持久化)。
+          const next: Record<string, unknown> = { ...node }
+          for (const [key, value] of Object.entries(patch)) {
+            if (value === null) delete next[key]
+            else next[key] = value
+          }
+          return next as GenerationCanvasNode
+        }),
       }
     }
     case 'canvas.node.locked':

@@ -234,21 +234,29 @@ export const createCanvasNodeActions: CanvasSliceCreator<CanvasNodeActions> = (s
     if (!isCategoryId(id)) return
     const existing = get().nodes.find((candidate) => candidate.id === nodeId)
     if (!existing || existing.categoryId === id) return
+    // 完整 patch（分类 + 编号跟随）：store 变更与发出的事件用同一份，否则 replay≢store
+    // （编号变更不入事件，重放出残留 shotIndex——S5-a 安全网抓出的真分叉）。
+    // 编号跟随分镜成员身份：离开分镜清号（patch 用 null=删除信号），进入分镜领新号
+    // （不复用旧号——旧号可能已被后续节点顶替语义）。
+    const willBeShotNumbered = isShotNumberedNode({ kind: existing.kind, categoryId: id })
+    const patch: Record<string, unknown> = { categoryId: id }
+    if (willBeShotNumbered) {
+      patch.shotIndex = nextShotIndex(get().nodes)
+    } else if (typeof existing.shotIndex === 'number') {
+      patch.shotIndex = null
+    }
     set((state) => {
       const node = state.nodes.find((candidate) => candidate.id === nodeId)
       if (!node) return
-      if (node.categoryId === id) return
       node.categoryId = id
-      // 编号跟随分镜成员身份：离开分镜清号，进入分镜领新号（不复用旧号——
-      // 旧号可能已被后续节点顶替语义）。
-      if (isShotNumberedNode(node)) {
-        node.shotIndex = nextShotIndex(state.nodes)
+      if (willBeShotNumbered) {
+        node.shotIndex = patch.shotIndex as number
       } else if (typeof node.shotIndex === 'number') {
         delete node.shotIndex
       }
       bumpPersistRevision(state)
     })
-    emitCanvasGesture([{ type: 'canvas.node.updated', payload: { nodeId, patch: { categoryId: id } } }])
+    emitCanvasGesture([{ type: 'canvas.node.updated', payload: { nodeId, patch } }])
   },
   copyNodeToCategory: (nodeId, categoryId) => {
     const id = String(categoryId || '').trim()
