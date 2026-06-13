@@ -82,7 +82,8 @@ export function NodeAddMenu({
 }
 
 type CanvasToolbarProps = {
-  getInsertionPosition: () => { x: number; y: number }
+  // 传 kind：落点避让按该节点真实尺寸做 AABB（审计 A4）。
+  getInsertionPosition: (kind: GenerationNodeKind) => { x: number; y: number }
   categoryId?: string
 }
 
@@ -93,7 +94,7 @@ export default function CanvasToolbar({ getInsertionPosition, categoryId }: Canv
   const cutSelectedNodes = useGenerationCanvasStore((state) => state.cutSelectedNodes)
 
   const handleAddNode = (kind: GenerationNodeKind) => {
-    addNode({ kind, position: getInsertionPosition(), categoryId })
+    addNode({ kind, position: getInsertionPosition(kind), categoryId })
   }
 
   return (

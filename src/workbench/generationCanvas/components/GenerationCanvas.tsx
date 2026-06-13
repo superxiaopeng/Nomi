@@ -8,6 +8,7 @@ import { importImageFilesToGenerationCanvas } from '../adapters/assetImportAdapt
 import { getDesktopBridge } from '../../../desktop/bridge'
 import { WORKSPACE_FILE_DRAG_MIME, buildWorkspaceFileUrl, parseWorkspaceFileDrag } from '../../explorer/workspaceFileDrag'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
+import { resolveInsertionPosition } from './resolveInsertionPosition'
 import { getGenerationNodeComponent } from '../nodes/renderRegistry'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -652,25 +653,22 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   // 防止图都在视口外、用户误以为「图消失」）。逻辑抽到 useAutoFitOnLoad（防巨壳）。
   useAutoFitOnLoad({ nodes, activeCategoryId, categoryViewports, fitView, stageRef, zoomRef, offsetRef })
 
-  const getToolbarInsertionPosition = React.useCallback(() => {
-    const rect = stageRef.current?.getBoundingClientRect()
-    const viewportAnchor = rect
-      ? { x: rect.width * 0.38, y: rect.height * 0.42 }
-      : { x: 360, y: 280 }
-    const basePosition = {
-      x: Math.round((viewportAnchor.x - offset.x) / zoom),
-      y: Math.round((viewportAnchor.y - offset.y) / zoom),
-    }
-    const occupied = new Set(nodes.map((node) => `${Math.round(node.position.x)},${Math.round(node.position.y)}`))
-    for (let index = 0; index < 12; index += 1) {
-      const candidate = {
-        x: basePosition.x + index * 34,
-        y: basePosition.y + index * 28,
+  // 落点：视口锚换回画布坐标得 basePosition，再交给 resolveInsertionPosition 做真实 AABB
+  // 碰撞避让（审计 A4：旧版整数点等值「假避让」几乎总返回中心、压住已有节点）。
+  const getToolbarInsertionPosition = React.useCallback(
+    (kind: GenerationNodeKind = 'image') => {
+      const rect = stageRef.current?.getBoundingClientRect()
+      const viewportAnchor = rect
+        ? { x: rect.width * 0.38, y: rect.height * 0.42 }
+        : { x: 360, y: 280 }
+      const basePosition = {
+        x: Math.round((viewportAnchor.x - offset.x) / zoom),
+        y: Math.round((viewportAnchor.y - offset.y) / zoom),
       }
-      if (!occupied.has(`${candidate.x},${candidate.y}`)) return candidate
-    }
-    return basePosition
-  }, [nodes, offset.x, offset.y, zoom])
+      return resolveInsertionPosition(kind, basePosition, nodes)
+    },
+    [nodes, offset.x, offset.y, zoom],
+  )
 
   const zoomPercent = Math.round(zoom * 100)
   const selectedCount = selectedNodeIds.length

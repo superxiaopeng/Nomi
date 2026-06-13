@@ -26,6 +26,20 @@ describe('storyboardPlanToCreateNodesArgs', () => {
     ]) // a-style(文本锚)不在
   })
 
+  it('镜头乱序吐出 → 按 shot.index 排序后建节点（审计 A5：钉死数组序=镜序）', () => {
+    const shuffled: StoryboardPlan = {
+      ...PLAN,
+      shots: [
+        { index: 3, durationSec: 4, anchorIds: [], prompt: '镜三' },
+        { index: 1, durationSec: 5, anchorIds: [], prompt: '镜一' },
+        { index: 2, durationSec: 6, anchorIds: [], prompt: '镜二' },
+      ],
+    }
+    const { nodes } = storyboardPlanToCreateNodesArgs(shuffled)
+    const shotNodes = nodes.filter((n) => n.clientId.startsWith('shot-'))
+    expect(shotNodes.map((n) => n.title)).toEqual(['镜头 1', '镜头 2', '镜头 3'])
+  })
+
   it('镜头 → 视频节点，时长入 params，默认模型 + 模式可注入', () => {
     const { nodes } = storyboardPlanToCreateNodesArgs(PLAN, { defaultVideoModelKey: 'seedance-2', defaultVideoModeId: 'omni' })
     const shotNodes = nodes.filter((n) => n.clientId.startsWith('shot-'))

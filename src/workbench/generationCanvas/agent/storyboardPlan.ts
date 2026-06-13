@@ -181,7 +181,10 @@ export function storyboardPlanToCreateNodesArgs(
   }
 
   // 镜头 → 视频节点 + 引用的视觉锚连参考边。
-  for (const shot of plan.shots) {
+  // 按 shot.index 排序后再建节点（审计 A5 防御）：布局按数组顺序排格子，若 LLM 把镜头
+  // 乱序吐出来，画布空间顺序就会与镜头编号错位（镜6 排在镜5 前）。这里钉死「数组序=镜序」。
+  const orderedShots = [...plan.shots].sort((a, b) => a.index - b.index)
+  for (const shot of orderedShots) {
     const id = shotClientId(shot)
     // 时长钳到所选模型上限（S4「时长不超模型上限」铁律的落地点；无上限信息则原样）。
     const duration =

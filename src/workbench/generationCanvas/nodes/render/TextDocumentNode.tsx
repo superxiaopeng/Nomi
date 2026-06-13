@@ -1,7 +1,7 @@
 /**
  * TextDocumentNode — `text`-kind 节点的可编辑 body（C5）。
  *
- * - **拖动 vs 编辑**：顶部「Text」栏才是拖拽手柄（非 contenteditable，pointerdown 冒泡触发拖动）；
+ * - **拖动 vs 编辑**：顶部「文本」栏才是拖拽手柄（非 contenteditable，pointerdown 冒泡触发拖动）；
  *   正文是 ProseMirror，已被 handlePointerDown 白名单放行 → 点正文 = 编辑、不误拖。
  * - **键盘**：正文 stopPropagation keydown/keyup，否则打字触发画布全局快捷键（Backspace 删节点）。
  * - **持久化**：实时写 store（persist:false），失焦 commit。
@@ -145,7 +145,7 @@ function TextDocumentNodeImpl({ node }: Props): JSX.Element {
           )}
           aria-label="拖动文本节点">
           <IconGripVertical size={13} stroke={1.8} aria-hidden="true" />
-          <span className="text-[11px] font-medium tracking-[0.04em]">Text</span>
+          <span className="text-[11px] font-medium tracking-[0.04em]">文本</span>
         </header>
 
         {/* 正文：ProseMirror 编辑区。stopPropagation 挡画布快捷键；select-text/touch-auto 覆盖
