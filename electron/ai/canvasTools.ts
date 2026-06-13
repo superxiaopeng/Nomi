@@ -32,7 +32,17 @@ export const plannedNodeSchema = z.object({
   clientId: z.string().min(1),
   kind: canvasNodeKindSchema,
   title: z.string().min(1),
-  prompt: z.string(),
+  // ⑤ 结构化骨架（唯一真相源；系统提示/skill 只放指向这里的指针，不重写，避免三处漂移）。
+  // 文本须稳定、不含动态值（进 tools 块前缀，一次性 byte 变更后命中缓存）。
+  prompt: z
+    .string()
+    .describe(
+      "High-quality generation prompt, in the SAME language as the user (Chinese user → Chinese prompt). Write it as a STRUCTURED skeleton, not a run-on sentence:\n" +
+        "- character/scene reference card: stable appearance/environment description + unified style keywords (neutral full-body pose for a character, empty wide establishing shot for a scene; no plot action).\n" +
+        "- image / keyframe shot: scene·time·light → subject·action·expression → shot language (wide / close-up / low-angle…) → style keywords.\n" +
+        "- video shot: camera move (push / pull / pan / track…) → on-screen action progression → rhythm & duration feel; do NOT restate the static keyframe description.\n" +
+        "Keep the same subject's appearance description consistent across shots.",
+    ),
   // 可省略：批量布局由渲染层 derive 成紧凑网格（applyCanvasToolCall.gridPosition），
   // 不再信任 LLM 手写的像素坐标（硬编码单行会溢出视口）。
   position: z

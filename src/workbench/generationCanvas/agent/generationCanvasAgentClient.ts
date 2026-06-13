@@ -82,7 +82,7 @@ function buildStaticAgentSystemPrompt(mode: SendGenerationCanvasAgentMessageInpu
     '- 你写进节点 prompt 字段的提示词，也要用与用户相同的语言（用户用中文就写中文提示词），不要固定用英文。',
     '- 用户必须先在 UI 上确认你的每一次工具调用，再实际生效。',
     '- 节点创建出来默认是 idle 状态，用户会自己点生成按钮，不要假定节点会立即出图。',
-    '- 节点的 prompt 字段必须是高质量提示词，语言与用户保持一致。',
+    '- 节点的 prompt 字段必须是高质量提示词，语言与用户保持一致；按 create_canvas_nodes 里 prompt 字段说明的结构化骨架组织，不要写成一句流水账。',
     '- 在调用工具之前，可以先用自然语言简短说明你的计划。',
   ].join('\n')
 }
