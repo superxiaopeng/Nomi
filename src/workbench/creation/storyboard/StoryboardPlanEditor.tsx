@@ -94,8 +94,8 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
 
   return (
     <section className="relative w-full h-full min-h-0 grid grid-rows-[auto_auto_minmax(0,1fr)_auto] border border-workbench-border rounded-workbench bg-workbench-surface-solid shadow-workbench-md overflow-hidden">
-      <header className="flex items-center justify-between gap-3 h-12 px-[14px] border-b border-nomi-line">
-        <div className="flex items-center gap-[6px] min-w-0">
+      <header className="flex items-center justify-between gap-3 h-12 px-4 border-b border-nomi-line">
+        <div className="flex items-center gap-2 min-w-0">
           <IconMovie size={16} stroke={1.5} className="text-nomi-ink-60 shrink-0" />
           <input
             value={plan.title}
@@ -104,33 +104,34 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
             placeholder="给方案起个名字"
             className="min-w-0 max-w-[260px] text-title font-medium text-nomi-ink bg-transparent outline-none focus:bg-nomi-ink-05 rounded-nomi-sm px-1"
           />
-          <span className="shrink-0 text-micro text-nomi-ink-40 bg-nomi-ink-05 px-[7px] py-[2px] rounded-full">{plan.shots.length} 镜</span>
+          <span className="shrink-0 text-micro text-nomi-ink-40 bg-nomi-ink-05 px-2 py-0.5 rounded-full">{plan.shots.length} 镜</span>
         </div>
         <button
           type="button"
           onClick={onDiscard}
-          className="shrink-0 h-7 px-[11px] rounded-full border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-60 hover:text-nomi-ink-80 hover:border-nomi-ink-20"
+          className="shrink-0 h-7 px-2.5 rounded-full border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-60 hover:text-nomi-ink-80 hover:border-nomi-ink-20"
         >
           丢弃方案
         </button>
       </header>
 
-      <div className="flex items-center gap-[6px] px-[14px] py-2 bg-nomi-accent-soft text-nomi-accent text-caption">
-        <IconLockOpen size={14} stroke={1.6} className="shrink-0" />
-        AI 草拟的方案 · 随便改，改字段就是改方案 · 规划全程免费，确认后才落画布、才花钱
+      <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-nomi-accent-soft text-nomi-accent text-caption">
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+          <IconLockOpen size={14} stroke={1.6} className="shrink-0" />
+          <span className="truncate">AI 草拟的方案，随便改——确认前不生成、不花钱</span>
+        </span>
+        <span className="shrink-0 text-micro font-medium px-2 py-0.5 rounded-full bg-nomi-accent text-nomi-paper">规划免费</span>
       </div>
 
-      <div className="overflow-y-auto px-[14px] py-[14px] flex flex-col gap-[18px]">
+      <div className="overflow-y-auto px-4 py-4 flex flex-col gap-4">
         <section>
-          <div className="mb-2">
+          <div className="flex items-baseline gap-2 mb-2">
             <span className="text-bodySm font-medium text-nomi-ink-80">跨镜头要一致的</span>
-            <div className="text-micro text-nomi-ink-40 mt-[2px] leading-normal">
-              脸/特定场景/道具这类「说不清的」→ <span className="text-nomi-ink-60">生成参考图</span>锁住长相；色调/品牌色这类「说得清的」→ <span className="text-nomi-ink-60">仅提示词</span>，省一次生成
-            </div>
+            <span className="text-micro text-nomi-ink-40">生成参考图=锁长相 · 仅提示词=写进 prompt</span>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {plan.anchors.length === 0 && (
-              <div className="text-caption text-nomi-ink-40 px-[10px] py-2">还没有锚——加一个，或直接写镜头。</div>
+              <div className="text-caption text-nomi-ink-40 px-2.5 py-2">还没有锚——加一个，或直接写镜头。</div>
             )}
             {plan.anchors.map((anchor) => (
               <StoryboardAnchorCard
@@ -145,7 +146,7 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
             <button
               type="button"
               onClick={() => setStoryboardPlan(addAnchor(plan))}
-              className="self-start h-[26px] px-[11px] rounded-full border border-dashed border-nomi-ink-20 text-caption text-nomi-ink-60 inline-flex items-center gap-1 hover:text-nomi-ink-80"
+              className="self-start h-6 px-2.5 rounded-full border border-dashed border-nomi-ink-20 text-caption text-nomi-ink-60 inline-flex items-center gap-1 hover:text-nomi-ink-80"
             >
               <IconPlus size={13} stroke={1.8} />
               添加锚（角色/场景/道具/风格）
@@ -187,7 +188,7 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
             <button
               type="button"
               onClick={() => setStoryboardPlan(addShot(plan))}
-              className="self-start h-[26px] px-[11px] rounded-full border border-dashed border-nomi-ink-20 text-caption text-nomi-ink-60 inline-flex items-center gap-1 hover:text-nomi-ink-80"
+              className="self-start h-6 px-2.5 rounded-full border border-dashed border-nomi-ink-20 text-caption text-nomi-ink-60 inline-flex items-center gap-1 hover:text-nomi-ink-80"
             >
               <IconPlus size={13} stroke={1.8} />
               添加镜头
@@ -196,7 +197,7 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
         </section>
       </div>
 
-      <footer className="flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-nomi-line bg-nomi-paper">
+      <footer className="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-nomi-line bg-nomi-paper">
         {issues.length > 0 ? (
           <span className="text-caption text-workbench-danger inline-flex items-center gap-[5px] min-w-0">
             <IconAlertTriangle size={14} stroke={1.8} className="shrink-0" />

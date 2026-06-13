@@ -55,7 +55,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
       onDrop={props.onDrop}
       onDragEnd={props.onDragEnd}
       className={cn(
-        'border rounded-nomi p-[10px] bg-nomi-paper',
+        'border rounded-nomi p-3 bg-nomi-paper',
         props.isDragOver ? 'border-nomi-accent' : 'border-nomi-line',
       )}
     >
@@ -77,14 +77,14 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
           type="button"
           aria-label="删除镜头"
           onClick={onRemove}
-          className="size-[26px] grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:bg-nomi-ink-10 hover:text-nomi-ink-60"
+          className="size-7 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:bg-nomi-ink-10 hover:text-nomi-ink-60"
         >
           <IconTrash size={14} stroke={1.6} />
         </button>
       </div>
 
-      <div className="flex items-center gap-[6px] flex-wrap mt-2">
-        <span className="text-micro text-nomi-ink-40 mr-[2px]">参考</span>
+      <div className="flex items-center gap-1.5 flex-wrap mt-2">
+        <span className="text-micro text-nomi-ink-40 mr-0.5">参考</span>
         {selected.map((id) => {
           const anchor = byId.get(id)!
           const Icon = KIND_ICON[anchor.kind]
@@ -94,7 +94,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
               type="button"
               onClick={() => onToggleAnchor(id)}
               title={`点一下取消引用 ${anchor.name || '该锚'}`}
-              className="h-6 pl-[7px] pr-[9px] rounded-full bg-nomi-accent-soft text-nomi-accent text-caption inline-flex items-center gap-1"
+              className="h-6 px-2 rounded-full bg-nomi-accent-soft text-nomi-accent text-caption inline-flex items-center gap-1"
             >
               <Icon size={12} stroke={1.8} />
               {anchor.name || '未命名'}
@@ -107,7 +107,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
             type="button"
             onClick={() => onToggleAnchor(id)}
             title="引用已失效，点一下移除"
-            className="h-6 pl-[9px] pr-[7px] rounded-full bg-workbench-danger-soft text-workbench-danger text-caption inline-flex items-center gap-1"
+            className="h-6 px-2 rounded-full bg-workbench-danger-soft text-workbench-danger text-caption inline-flex items-center gap-1"
           >
             <span className="line-through">失效引用</span>
             <IconX size={12} stroke={1.8} />
@@ -118,7 +118,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
             type="button"
             onClick={() => setPickerOpen((open) => !open)}
             aria-expanded={pickerOpen}
-            className="h-6 px-[9px] rounded-full border border-dashed border-nomi-ink-20 text-nomi-ink-60 text-caption inline-flex items-center gap-[3px] hover:text-nomi-ink-80"
+            className="h-6 px-2.5 rounded-full border border-dashed border-nomi-ink-20 text-nomi-ink-60 text-caption inline-flex items-center gap-1 hover:text-nomi-ink-80"
           >
             <IconPlus size={12} stroke={1.8} />
             参考
@@ -127,7 +127,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
       </div>
 
       {pickerOpen && unselected.length > 0 && (
-        <div className="flex items-center gap-[6px] flex-wrap mt-[6px] pl-[26px]">
+        <div className="flex items-center gap-1.5 flex-wrap mt-1.5 pl-7">
           {unselected.map((anchor) => {
             const Icon = KIND_ICON[anchor.kind]
             return (
@@ -138,7 +138,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
                   onToggleAnchor(anchor.id)
                   if (unselected.length === 1) setPickerOpen(false)
                 }}
-                className="h-6 pl-[7px] pr-[9px] rounded-full border border-nomi-line text-nomi-ink-60 text-caption inline-flex items-center gap-1 hover:border-nomi-ink-20 hover:text-nomi-ink-80"
+                className="h-6 px-2 rounded-full border border-nomi-line text-nomi-ink-60 text-caption inline-flex items-center gap-1 hover:border-nomi-ink-20 hover:text-nomi-ink-80"
               >
                 <Icon size={12} stroke={1.8} className="text-nomi-ink-40" />
                 {anchor.name || '未命名'}
@@ -149,7 +149,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
       )}
 
       {danglingIds.length > 0 && (
-        <div className="text-micro text-workbench-danger mt-[5px] flex items-center gap-1">
+        <div className="text-micro text-workbench-danger mt-1.5 flex items-center gap-1">
           <IconAlertTriangle size={12} stroke={1.8} />
           有引用的锚已被删除——移除失效标签，或回上面重新加锚
         </div>
@@ -161,7 +161,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
         aria-label={`镜 ${shot.index} 提示词`}
         placeholder="这镜画什么：运镜 + 动作演进（不复述锚的静态描述）"
         className={cn(
-          'mt-2 px-[9px] py-[7px] rounded-nomi-sm border bg-nomi-paper',
+          'mt-2 px-2 py-2 rounded-nomi-sm border bg-nomi-paper',
           'text-bodySm text-nomi-ink-80 leading-normal focus:border-nomi-accent',
           promptInvalid ? 'border-workbench-danger' : 'border-nomi-line',
         )}
