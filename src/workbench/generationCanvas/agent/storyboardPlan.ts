@@ -124,6 +124,17 @@ function edgeModeForAnchor(kind: PlanAnchorKind): GenerationCanvasEdgeMode {
   return 'reference' // prop 走通用参考槽（无道具专用 mode）
 }
 
+/**
+ * 锚类型 → 画布节点种类。角色/场景有专用卡；**道具无专用节点种类 → 用 image（通用参考图节点）**
+ * ——直接用 'prop' 当 kind 会让画布 registry 查不到定义而崩（defaultSize undefined，R13 真机抓出）。
+ * 道具落进哪个分类是 S4 的精修（补道具锚），这里先保证落得下、不崩。
+ */
+function anchorKindToNodeKind(kind: PlanAnchorKind): string {
+  if (kind === 'character') return 'character'
+  if (kind === 'scene') return 'scene'
+  return 'image' // prop（style 是文本锚，不走到这）
+}
+
 function shotClientId(shot: PlanShot): string {
   return `shot-${shot.index}`
 }
@@ -158,7 +169,7 @@ export function storyboardPlanToCreateNodesArgs(
     if (anchor.carrier !== 'visual' || !VISUAL_KINDS.has(anchor.kind)) continue
     nodes.push({
       clientId: anchor.id,
-      kind: anchor.kind,
+      kind: anchorKindToNodeKind(anchor.kind),
       title: anchor.name,
       prompt: anchor.description.trim(),
     })
