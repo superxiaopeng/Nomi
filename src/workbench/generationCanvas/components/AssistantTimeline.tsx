@@ -79,6 +79,8 @@ export type AssistantTimelineProps = {
   committedProposal: CommittedProposalRecord | null
   /** 对账出入(警示步骤,与 committed 互斥显示)。 */
   deviationReport: ReconcileDeviation[] | null
+  /** 时序内联:对账卡锚定到本轮「卡前气泡」(与 committed 同源)。 */
+  deviationAnchorId: string | null
   onDeviationUndo: () => void
   onDeviationDismiss: () => void
   /** 让 AI 用支持的方式重连没接上的边(完整版重设计)。 */
@@ -96,12 +98,13 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
   const planCallIds = new Set([plan?.createCallId, plan?.connectCallId].filter(Boolean) as string[])
   const remaining = plan ? pendingToolCalls.filter((call) => !planCallIds.has(call.toolCallId)) : pendingToolCalls
 
-  // 活动组(回执/出入在上=较早轮,待确认在下=最新)。每项是一个导轨步骤。
-  const liveSteps: { key: string; status: StepStatus; render: () => React.ReactNode }[] = []
+  // 活动组(回执/出入/待确认)。每项是一个导轨步骤;anchor=它锚定到的消息 id(时序内联)。
+  const liveSteps: { key: string; status: StepStatus; anchor?: string; render: () => React.ReactNode }[] = []
   if (props.deviationReport) {
     liveSteps.push({
       key: 'deviation',
       status: 'warn',
+      anchor: props.deviationAnchorId ?? undefined,
       render: () => (
         <div className={cn('flex flex-col gap-1')}>
           <StepHeader title={`这次有 ${props.deviationReport!.length} 处没按计划生效`} badge="⚠" badgeTone="warn" />
@@ -119,6 +122,7 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
     liveSteps.push({
       key: `committed-${props.committedProposal.proposalId}`,
       status: 'done',
+      anchor: props.committedProposal.anchorMessageId,
       render: () => <CommittedProposalCard flat record={props.committedProposal!} />,
     })
   }
@@ -126,6 +130,7 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
     liveSteps.push({
       key: 'plan',
       status: 'active',
+      anchor: pendingToolCalls.find((call) => call.toolCallId === plan.createCallId)?.anchorMessageId,
       render: () => (
         <div className={cn('flex flex-col gap-2')}>
           <StepHeader title={`创建 ${plan.nodes.length} 个镜头节点`} badge="等你确认" badgeTone="active" />
@@ -144,6 +149,7 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
     liveSteps.push({
       key: call.toolCallId,
       status: 'active',
+      anchor: call.anchorMessageId,
       render: () => (
         <div className={cn('flex flex-col gap-2')} data-tool-call-id={call.toolCallId}>
           <StepHeader title={summarizeToolCall(call.toolName, call.args)} badge="等你确认" badgeTone="active" />
@@ -219,23 +225,26 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
     )
   }
 
-  // 吐字顺序修复:把「当前轮的 AI 气泡」排到 liveSteps(待确认/已应用卡)之后,
-  // 让时间线 = 用户问 → AI 动手(卡) → AI 吐字总结,位置与时间一致。
-  // 旧实现把这条气泡钉在卡片上方,但 agent 的总结文字在动作之后才到 →
-  // 「下面已到下一阶段、上面过一会才吐字」的位置/时间倒挂。「处理中」转圈也随之
-  // 落到底部,眼睛跟随活动处。纯聊天(无 liveSteps)时位置与原先一致,零回归。
-  const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role !== 'user'
-  const headMessages = lastIsAssistant ? messages.slice(0, -1) : messages
-  const trailingAssistant = lastIsAssistant ? messages[messages.length - 1] : null
+  // 时序内联(根治「吐字顺序倒挂 / 确认卡在上面」):卡片按 anchor 排进消息序列——锚定到某条
+  // 消息的卡紧跟该消息之后渲染。卡锚定到它的「卡前气泡」,卡后总结是更晚的消息 → 自然排到卡下方,
+  // 得到「叙述 → 卡 → 总结」位置与时间一致。锚点缺失/无匹配的卡兜底排队尾(=旧行为,保安全)。
+  type LiveStep = (typeof liveSteps)[number]
+  const messageIds = new Set(messages.map((message) => message.id))
+  const stepsByAnchor = new Map<string, LiveStep[]>()
+  const tailSteps: LiveStep[] = []
+  for (const step of liveSteps) {
+    if (step.anchor && messageIds.has(step.anchor)) {
+      const list = stepsByAnchor.get(step.anchor) ?? []
+      list.push(step)
+      stepsByAnchor.set(step.anchor, list)
+    } else {
+      tailSteps.push(step)
+    }
+  }
 
   type RailItem = { rail: boolean; render: (connectDown: boolean) => React.ReactNode }
   const items: RailItem[] = []
-  for (const message of headMessages) {
-    items.push(message.role === 'user'
-      ? { rail: false, render: () => renderUserBubble(message) }
-      : { rail: true, render: (connectDown) => renderAssistantStep(message, connectDown) })
-  }
-  for (const step of liveSteps) {
+  const pushStep = (step: LiveStep): void => {
     items.push({
       rail: true,
       render: (connectDown) => (
@@ -245,9 +254,13 @@ export default function AssistantTimeline(props: AssistantTimelineProps): JSX.El
       ),
     })
   }
-  if (trailingAssistant) {
-    items.push({ rail: true, render: (connectDown) => renderAssistantStep(trailingAssistant, connectDown) })
+  for (const message of messages) {
+    items.push(message.role === 'user'
+      ? { rail: false, render: () => renderUserBubble(message) }
+      : { rail: true, render: (connectDown) => renderAssistantStep(message, connectDown) })
+    for (const step of stepsByAnchor.get(message.id) ?? []) pushStep(step)
   }
+  for (const step of tailSteps) pushStep(step)
 
   return (
     <ol className={cn('flex flex-1 flex-col min-h-0 overflow-auto p-4 list-none m-0')} data-assistant-timeline="true">

@@ -2,6 +2,8 @@ export type PendingToolCallLike = {
   toolCallId: string
   toolName: string
   args: unknown
+  /** 时序内联:这张卡跟在哪条消息后(=入队时的「卡前气泡」或用户消息 id)。 */
+  anchorMessageId?: string
 }
 
 export type PlannedNode = {

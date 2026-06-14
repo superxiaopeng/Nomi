@@ -25,6 +25,8 @@ export type CommittedProposalRecord = {
   compensation: CompensationOp[]
   watchNodes: ProposalWatchNode[]
   reconciliationOk: boolean
+  /** 时序内联:已应用卡跟在哪条消息后(=本轮「卡前气泡」id)。落盘可选,缺失=回退队尾。 */
+  anchorMessageId?: string
 }
 
 // ---- committed 记录 mini-store(单笔:下一笔覆盖上一笔;约束 ①) ----
@@ -82,6 +84,7 @@ export function parseCommittedProposalRecord(input: unknown): CommittedProposalR
     compensation: raw.compensation as CompensationOp[],
     watchNodes: raw.watchNodes as ProposalWatchNode[],
     reconciliationOk: raw.reconciliationOk !== false,
+    ...(typeof raw.anchorMessageId === 'string' ? { anchorMessageId: raw.anchorMessageId } : {}),
   }
 }
 
