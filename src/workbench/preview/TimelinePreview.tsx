@@ -81,7 +81,7 @@ function clampPreviewScale(value: number): number {
 }
 
 export default function TimelinePreview({ activeClips, aspectRatio, fps, playheadFrame, timeline }: TimelinePreviewProps): JSX.Element {
-  const playerRef = React.useRef<HTMLElement | null>(null)
+  const playerRef = React.useRef<HTMLDivElement | null>(null)
   const stageRef = React.useRef<HTMLDivElement | null>(null)
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
   const dragRef = React.useRef<{
@@ -309,10 +309,12 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const activeTextClips = resolveActiveTextClipsAtFrame(timeline, playheadFrame)
 
   return (
-    <section ref={playerRef} className={cn(
+    <section className={cn(
       'workbench-preview-player',
-      'relative min-w-0 min-h-0 grid place-items-center p-8 bg-[var(--workbench-bg)]',
+      'relative min-w-0 min-h-0 flex flex-col items-center p-8 gap-3 bg-[var(--workbench-bg)]',
     )} aria-label="预览播放器">
+      {/* 测量区：stage 居中于此（控制条之上的可用高度），控制条作为下方独立一行不再压住画面。 */}
+      <div ref={playerRef} className="workbench-preview-player__stage-area flex-1 min-h-0 w-full grid place-items-center">
       <div
         ref={stageRef}
         className={cn(
@@ -491,13 +493,12 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           </div>
         ) : null}
       </div>
-      {/* 控制条放在 player section（非 stage）层：stage 为裁剪 media 用了 overflow-hidden，
-          若把这条浮动工具条放进去，stage 一窄就会裁掉「安全框」并冒出多余横向滚动条。
-          挂到不裁剪的 section 上 → 用全宽、不裁、无滚动条；居中浮在画面底部。 */}
+      </div>
+      {/* 控制条：stage 下方独立一行（不再 absolute 浮在画面上遮挡底部字幕）。
+          section 不裁剪 → 下拉/安全框可正常溢出；居中、不被 flex 挤压。 */}
       <div className={cn(
         'workbench-preview-player__control-bar',
-        'absolute z-[3] left-1/2 bottom-8 -translate-x-1/2',
-        'max-w-[calc(100%-24px)] inline-flex items-center gap-1.5 p-[5px]',
+        'relative z-[3] shrink-0 max-w-full inline-flex items-center gap-1.5 p-[5px]',
         'border border-[var(--workbench-border)] rounded-full',
         'bg-[color-mix(in_oklch,var(--nomi-paper)_88%,transparent)]',
         'shadow-[var(--workbench-shadow-sm)] backdrop-blur-[12px] backdrop-saturate-[1.2]',
