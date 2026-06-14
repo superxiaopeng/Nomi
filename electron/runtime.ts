@@ -129,6 +129,8 @@ export type TaskResult = {
     assetId?: string | null;
     assetRefId?: string | null;
     assetName?: string | null;
+    /** 原始 CDN URL（https://...）。供后续生成直接用，无需上传。可能过期，过期后退回本地字节。 */
+    providerUrl?: string | null;
   }>;
   raw: unknown;
   /**
@@ -399,6 +401,8 @@ async function localizeTaskAsset(projectId: string, assetUrl: string, type: "ima
     thumbnailUrl: type === "image" ? String(imported.data?.url || assetUrl) : null,
     assetId: imported.id || null,
     assetName: imported.name || null,
+    // 原始 CDN URL 留存：任何 vendor 都能直接使用，不需要再上传或转 base64。
+    providerUrl: /^https?:\/\//i.test(assetUrl) ? assetUrl : null,
   };
 }
 

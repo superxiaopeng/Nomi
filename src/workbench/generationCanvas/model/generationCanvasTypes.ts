@@ -66,6 +66,8 @@ export type GenerationNodeResult = {
   type: GenerationResultType
   url?: string
   thumbnailUrl?: string
+  /** 原始 CDN URL（https://...）。url 是本地 nomi-local://，providerUrl 是 vendor 返回的公网地址。 */
+  providerUrl?: string
   text?: string
   model?: string
   durationSeconds?: number

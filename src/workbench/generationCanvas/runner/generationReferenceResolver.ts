@@ -26,7 +26,9 @@ function asUrl(value: unknown): string {
 }
 
 function resultUrl(result: GenerationNodeResult | undefined): string {
-  return asUrl(result?.url) || asUrl(result?.thumbnailUrl)
+  // 优先 providerUrl（原始 CDN https:// URL）——任何 vendor 都能直接使用，无需上传或转 base64。
+  // 退回 nomi-local:// 供支持 base64 的端点用（如 apimart 图片改图、kie 上传链路）。
+  return asUrl(result?.providerUrl) || asUrl(result?.url) || asUrl(result?.thumbnailUrl)
 }
 
 function findNodeResultUrl(nodesById: Map<string, GenerationCanvasNode>, reference: string): string {

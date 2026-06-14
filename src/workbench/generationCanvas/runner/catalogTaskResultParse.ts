@@ -138,6 +138,7 @@ export function normalizeCatalogTaskResult(
     type,
     url: asset.url,
     thumbnailUrl: asset.thumbnailUrl || undefined,
+    ...(asset.providerUrl ? { providerUrl: asset.providerUrl } : {}),
     model: selectedModelKey(node) || undefined,
     durationSeconds: type === 'video' ? readDurationSeconds(node) : undefined,
     taskId: result.id,
