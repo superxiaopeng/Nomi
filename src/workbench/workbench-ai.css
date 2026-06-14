@@ -496,6 +496,14 @@
   color: var(--workbench-muted-soft) !important;
 }
 
+/* 自增高 composer：到上限后仍可滚轮/键盘滚动，但不显示滚动条滑块（去掉右侧那条小竖条）。 */
+.workbench-autogrow {
+  scrollbar-width: none;
+}
+.workbench-autogrow::-webkit-scrollbar {
+  display: none;
+}
+
 .workbench-creation-ai__actions,
 .app-ai-chat-dialog.tc-ai-chat .tc-ai-chat__composer-row {
   padding-top: 4px;

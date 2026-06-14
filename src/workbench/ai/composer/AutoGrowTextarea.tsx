@@ -30,7 +30,7 @@ export function AutoGrowTextarea({ maxHeight = 160, className, value, onChange, 
         resize()
       }}
       style={{ maxHeight }}
-      className={cn('w-full resize-none overflow-y-auto border-0 bg-transparent font-inherit outline-none focus:shadow-none', className)}
+      className={cn('workbench-autogrow', 'w-full resize-none overflow-y-auto border-0 bg-transparent font-inherit outline-none focus:shadow-none', className)}
       {...rest}
     />
   )
