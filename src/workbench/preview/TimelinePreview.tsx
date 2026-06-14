@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconDownload, IconLetterCase, IconPlayerPause, IconPlayerPlay, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
+import { IconChevronDown, IconDownload, IconLetterCase, IconPlayerPause, IconPlayerPlay, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
 import { NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -100,6 +100,8 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const [playbackError, setPlaybackError] = React.useState('')
   const [editingTextId, setEditingTextId] = React.useState('')
   const [editingDraft, setEditingDraft] = React.useState('')
+  const [textMenuOpen, setTextMenuOpen] = React.useState(false)
+  const textMenuRef = React.useRef<HTMLDivElement | null>(null)
   const [textSnapGuides, setTextSnapGuides] = React.useState<{ x: number | null; y: number | null }>({ x: null, y: null })
   const addTimelineTextClip = useWorkbenchStore((state) => state.addTimelineTextClip)
   const updateTimelineTextClip = useWorkbenchStore((state) => state.updateTimelineTextClip)
@@ -214,7 +216,18 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     const id = addTimelineTextClip(style, playheadFrame)
     setEditingTextId(id)
     setEditingDraft('')
+    setTextMenuOpen(false)
   }, [addTimelineTextClip, playheadFrame])
+
+  // 文字预设菜单：点外部关闭
+  React.useEffect(() => {
+    if (!textMenuOpen) return
+    const onDown = (event: PointerEvent) => {
+      if (textMenuRef.current && !textMenuRef.current.contains(event.target as globalThis.Node | null)) setTextMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [textMenuOpen])
 
   const beginEditText = React.useCallback((id: string, text: string) => {
     selectTimelineTextClip(id)
@@ -254,6 +267,13 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
       toast(message, 'error')
     }
   }, [aspectRatio, exportBusy, timeline])
+
+  // 右上角「导出」在预览页时派发本事件 → 直接触发导出（handleExport 已自带 busy/空 守卫）。
+  React.useEffect(() => {
+    const onRequest = () => { void handleExport() }
+    window.addEventListener('nomi-request-export', onRequest as EventListener)
+    return () => window.removeEventListener('nomi-request-export', onRequest as EventListener)
+  }, [handleExport])
 
   const togglePlayback = React.useCallback(() => {
     const durationFrame = computeTimelineDuration(timeline)
@@ -568,26 +588,43 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           'workbench-preview-player__control-separator',
           'w-px h-5 bg-[var(--workbench-border-soft)]',
         )} aria-hidden="true" />
-        <div className={cn(
+        <div ref={textMenuRef} className={cn(
           'workbench-preview-player__text-tools',
-          'flex-none inline-flex items-center gap-[3px]',
+          'relative flex-none inline-flex items-center',
         )} aria-label="添加文字">
           <WorkbenchButton
             className={cn('h-7 px-2.5 inline-flex items-center gap-1 border border-[var(--workbench-border)] rounded-full whitespace-nowrap bg-transparent text-[var(--workbench-muted)] text-micro font-bold cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')}
-            aria-label="添加字幕"
-            title="在当前位置加一条字幕"
-            onClick={() => addText('caption')}
+            aria-label="添加文字"
+            aria-expanded={textMenuOpen}
+            title="加字幕 / 标题（都是文字，可自由拖动缩放）"
+            onClick={() => setTextMenuOpen((open) => !open)}
           >
-            <IconLetterCase size={14} />字幕
+            <IconLetterCase size={14} />文字<IconChevronDown size={12} className="opacity-60" />
           </WorkbenchButton>
-          <WorkbenchButton
-            className={cn('h-7 px-2.5 inline-flex items-center gap-1 border border-[var(--workbench-border)] rounded-full whitespace-nowrap bg-transparent text-[var(--workbench-muted)] text-micro font-bold cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')}
-            aria-label="添加标题卡"
-            title="在当前位置加一张标题卡"
-            onClick={() => addText('title')}
-          >
-            <IconLetterCase size={14} />标题卡
-          </WorkbenchButton>
+          {textMenuOpen ? (
+            <div className={cn(
+              'workbench-preview-player__text-menu',
+              'absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-[5]',
+              'min-w-[148px] p-1 flex flex-col gap-0.5',
+              'rounded-[var(--nomi-radius-md)] border border-[var(--workbench-border)]',
+              'bg-[var(--nomi-paper)] shadow-[var(--workbench-shadow-pop)]',
+            )} role="menu">
+              <button type="button" role="menuitem"
+                className={cn('flex items-center gap-2 px-2 py-1.5 rounded-[var(--nomi-radius-sm)] text-left text-[12px] text-[var(--workbench-ink)] hover:bg-[var(--workbench-hover)]')}
+                onClick={() => addText('caption')}>
+                <IconLetterCase size={14} className="flex-none text-[var(--workbench-text)]" />
+                <span className="flex-1">字幕</span>
+                <span className="text-[var(--workbench-muted-soft)] text-[11px]">底部 · 小</span>
+              </button>
+              <button type="button" role="menuitem"
+                className={cn('flex items-center gap-2 px-2 py-1.5 rounded-[var(--nomi-radius-sm)] text-left text-[12px] text-[var(--workbench-ink)] hover:bg-[var(--workbench-hover)]')}
+                onClick={() => addText('title')}>
+                <IconLetterCase size={14} className="flex-none text-[var(--workbench-text)]" />
+                <span className="flex-1">标题</span>
+                <span className="text-[var(--workbench-muted-soft)] text-[11px]">居中 · 大</span>
+              </button>
+            </div>
+          ) : null}
         </div>
         <div className={cn(
           'workbench-preview-player__control-separator',
