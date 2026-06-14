@@ -80,7 +80,17 @@
 
 ## 进度回填
 
-- [ ] Lane C — 完整流程评测 J1-J5
-- [ ] Lane A — 分维度质量分
-- [ ] Lane B — benchmark 基线 + 回归门
-- [ ] Lane D — 生成质量评测(待用户预算/key)
+- [x] **Lane C — 完整流程评测 J1-J5**(commit 0b7edb9):旅程框架(journeyRunner+eval:journey)+ J1/J3/J5 落地;
+      J3/J5 零额度真机 2/2 绿;删旧 journeys.e2e.mjs、test:journeys 重指新框架;
+      抓修旧 e2e 三处 stale 选择器。J1 需用户 catalog 实跑;J2/J4 待补(框架就绪)。
+- [x] **Lane A — 分维度质量分**(commit 2874a71):judge 升级成四维 analytic rubric(忠实原文/画面可生成/
+      叙事连续/跨镜一致,各 1-5 档带锚点);eval-score 出质量分卡;防长度偏袒+异家族避 self-preference;
+      沿用未校准只展示铁律。需用户 judge.config key 实评 + 标注校准转正。
+- [x] **Lane B — benchmark 基线 + 回归门**(commit 47e8d47):evals/lib/baseline.mjs + eval:baseline 入库 golden 基线;
+      eval:diff 单参对基线比(纳入质量维度回归);正反向端到端验证;已入库首份真基线 journeys.json(零额度)。
+- [x] **Lane D — 生成质量评测**(commit 5a07f30):evals/lib/vbenchRubric.mjs(图 3 维/视频 5 维 VBench 分卡)+
+      eval-review-images 升级(图+视频抽帧+资产映射提示词);离屏结构全验;需用户 vision key 实评。
+
+**总结**:四条 lane 全部落地。零额度部分(C 的 J3/J5、A/B 机制、D 结构)已真机/实跑验证;
+需用户资源的部分(J1 agent catalog、A/D 的 judge/vision key、质量分校准标注)代码就绪待用户接入。
+唯一真相源 = 本文档 + 各 commit。
