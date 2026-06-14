@@ -82,6 +82,8 @@ function buildStaticAgentSystemPrompt(mode: SendGenerationCanvasAgentMessageInpu
     '',
     '硬约束：',
     '- 同一个计划的节点与边必须在一次 create_canvas_nodes 调用里一起提交（nodes + edges）——用户对整个计划只确认一次，拆开会造成重复审批。',
+    '- 拆镜头默认建 kind=image 节点（关键画面先行，用户后续再决定动画化）；只有用户明确要「视频 / 动起来 / 直接出视频」时才建 kind=video。',
+    '- 顺序叙事的相邻镜头默认连成时序链：把 n1→n2→n3 的引用边（mode=reference）一并写进同一次 create_canvas_nodes 的 edges 字段（不要用 connect_canvas_edges 另开一轮）；只有用户明确说「独立镜头 / 不要连线」时才不连。',
     '- 你写进节点 prompt 字段的提示词，也要用与用户相同的语言（用户用中文就写中文提示词），不要固定用英文。',
     '- 用户必须先在 UI 上确认你的每一次工具调用，再实际生效。',
     '- 节点创建出来默认是 idle 状态，用户会自己点生成按钮，不要假定节点会立即出图。',
