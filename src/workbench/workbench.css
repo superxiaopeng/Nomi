@@ -24,6 +24,9 @@
   --workbench-danger-soft: rgba(255, 59, 48, 0.1);
   --workbench-video: #00a886;
   --workbench-video-soft: rgba(0, 168, 134, 0.11);
+  /* 文字轨（字幕/标题卡）：紫，与图片轨蓝(accent)、媒体轨青(video)区分。 */
+  --workbench-text: oklch(0.56 0.17 305);
+  --workbench-text-soft: oklch(0.56 0.17 305 / 0.13);
   --workbench-success-ink: #248a3d;
   --workbench-hover: rgba(60, 60, 67, 0.06);
   --workbench-pressed: rgba(60, 60, 67, 0.09);

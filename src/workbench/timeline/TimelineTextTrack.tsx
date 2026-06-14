@@ -58,7 +58,7 @@ export default function TimelineTextTrack(): JSX.Element {
         'min-w-0 min-h-[52px] pr-3 border-r-0 bg-transparent',
         'text-[var(--workbench-ink)] text-xs font-semibold',
       )}>
-        <span className="flex-none w-2 h-2 rounded-full shadow-none bg-[var(--nomi-accent)]" aria-hidden="true" />
+        <span className="flex-none w-2 h-2 rounded-full shadow-none bg-[var(--workbench-text)]" aria-hidden="true" />
         <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">文字轨</span>
         <span className={cn(
           'flex-none min-w-0 h-auto ml-auto px-1.5 py-px inline-grid place-items-center border-0 rounded-full',
@@ -102,10 +102,10 @@ export default function TimelineTextTrack(): JSX.Element {
                 'workbench-timeline-text-clip',
                 'absolute top-[5px] h-9 z-[1] flex items-center gap-1 px-2 overflow-hidden',
                 'rounded-[var(--nomi-radius-sm)] cursor-grab active:cursor-grabbing touch-none text-left',
-                'border bg-[var(--nomi-accent-soft)] text-[var(--nomi-ink)] text-[11px] font-semibold',
+                'border bg-[var(--workbench-text-soft)] text-[var(--nomi-ink)] text-[11px] font-semibold',
                 selected
-                  ? 'border-[var(--nomi-accent)] shadow-[0_0_0_1px_var(--nomi-accent)]'
-                  : 'border-[color-mix(in_oklch,var(--nomi-accent)_36%,transparent)]',
+                  ? 'border-[var(--workbench-text)] shadow-[0_0_0_1px_var(--workbench-text)]'
+                  : 'border-[color-mix(in_oklch,var(--workbench-text)_36%,transparent)]',
               )}
               style={{ left: `${left}px`, width: `${width}px` }}
               title={clip.style === 'title' ? '标题卡' : '字幕'}
