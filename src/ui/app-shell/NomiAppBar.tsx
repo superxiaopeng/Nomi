@@ -199,9 +199,13 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
             'hover:bg-[var(--nomi-ink-80)]',
             'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
           )}
-          aria-label="前往预览导出"
-          title="导出"
-          onClick={() => onWorkspaceModeChange('preview')}
+          aria-label={workspaceMode === 'preview' ? '导出 MP4' : '前往预览导出'}
+          title={workspaceMode === 'preview' ? '导出 MP4' : '前往预览导出'}
+          onClick={() => {
+            // 已在预览页 → 直接触发导出（TimelinePreview 监听此事件）；否则先跳到预览页。
+            if (workspaceMode === 'preview') window.dispatchEvent(new CustomEvent('nomi-request-export'))
+            else onWorkspaceModeChange('preview')
+          }}
         >
           <IconDownload size={15} stroke={1.7} />
           <span className={cn('nomi-appbar__action-text', 'max-[700px]:hidden')}>导出</span>
