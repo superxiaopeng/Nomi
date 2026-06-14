@@ -24,13 +24,39 @@ export function parseJsonLoose(text) {
   let s = String(text || "").trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
-  try {
-    return JSON.parse(s);
-  } catch {
-    const brace = s.match(/\{[\s\S]*\}/);
-    if (brace) return JSON.parse(brace[0]);
-    throw new Error(`grader 输出非 JSON: ${s.slice(0, 120)}`);
+  const brace = s.match(/\{[\s\S]*\}/);
+  const candidate = brace ? brace[0] : s;
+  // 常见畸形修复:裸控制字符(字符串内字面换行/Tab,JSON 不允许)、对象/数组尾逗号。
+  const repair = (str) => str.replace(/[\x00-\x1f]+/g, " ").replace(/,(\s*[}\]])/g, "$1");
+  for (const c of [s, candidate, repair(candidate)]) {
+    try {
+      return JSON.parse(c);
+    } catch {
+      /* 试下一种 */
+    }
   }
+  throw new Error(`grader 输出非 JSON: ${candidate.slice(0, 140)}`);
+}
+
+/** 共享:POST chat/completions 取 JSON,解析失败自动重试一次(畸形 JSON 多为偶发)。单写者:judge+VLM 共用。 */
+export async function postChatJson(cfg, body) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const res = await fetch(`${String(cfg.baseUrl).replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    const json = await res.json();
+    const text = json?.choices?.[0]?.message?.content || "";
+    try {
+      return parseJsonLoose(text);
+    } catch (error) {
+      lastErr = error; // 解析失败 → 重试一次(温度 0 但畸形多偶发);仍失败才冒泡
+    }
+  }
+  throw lastErr || new Error("grader 输出解析失败");
 }
 
 export function loadJudgeConfig() {
@@ -138,7 +164,7 @@ export async function judgeOne(cfg, { userMessage, createdNodes, fewshots = [] }
         role: "system",
         content:
           "你是视频创作领域的资深评审。逐维度按 Rubric 给这组拆镜头结果打分,每维 1-5 档(对着锚点判该打第几档)。" +
-          "先在 reason 里简述各维判断,再给分。打分铁律:① 不要因为提示词写得长就给高分——长而空洞应低分;" +
+          "reason 务必简短(不超过 80 字、一句话概括,不要分点长篇),否则后续解析会出错。打分铁律:① 不要因为提示词写得长就给高分——长而空洞应低分;" +
           "② 拿不准时给保守(偏低)分;③ 只评质量四维,不评数量/参数是否填齐(那由规则另查)。" +
           `只输出 JSON: {"reason": string, "scores": {${keys.map((k) => `"${k}": 1-5`).join(", ")}}}。` +
           (fewshotText ? `\n以下是领域专家过往判例口径,对齐它:\n${fewshotText}` : ""),
@@ -149,16 +175,8 @@ export async function judgeOne(cfg, { userMessage, createdNodes, fewshots = [] }
       },
     ],
   };
-  const res = await fetch(`${String(cfg.baseUrl).replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`judge HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const json = await res.json();
-  const text = json?.choices?.[0]?.message?.content || "";
-  // grader 输出解析失败必须冒泡为 error,不静默当 fail(抄 promptfoo 纪律)
-  const parsed = parseJsonLoose(text);
+  // 解析失败自动重试一次(畸形 JSON 偶发);仍失败冒泡 error,不静默当 fail(promptfoo 纪律)。
+  const parsed = await postChatJson(cfg, body);
   if (!parsed.scores || typeof parsed.scores !== "object") {
     throw new Error(`judge 输出缺 scores 字段: ${text.slice(0, 120)}`);
   }

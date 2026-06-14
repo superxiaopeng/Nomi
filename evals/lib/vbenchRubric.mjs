@@ -1,7 +1,7 @@
 // Lane D 生成质量评测维度(对标 VBench / VBench-I2V)。把「质量」拆成解耦维度逐维 1-5 打分,
 // 而非单一分(VBench 核心思路:disentangled dimensions + 锚点)。VLM 看真实生成产物打分。
 // 图:文图对齐 / 美学 / 成像质量;视频(I2V):再加主体一致 / 运动平滑 / 时序稳定 / 动态程度。
-import { normalizeDimensionScore, parseJsonLoose } from "./judge.mjs";
+import { normalizeDimensionScore, postChatJson } from "./judge.mjs";
 
 export const IMAGE_DIMENSIONS = [
   { key: "alignment", name: "文图对齐", desc: "图像主体/场景/动作是否符合提示词", anchors: { 5: "完全符合", 3: "主体对但细节偏", 1: "明显跑题" } },
@@ -41,14 +41,7 @@ export async function scoreAssetWithVlm(cfg, { kind, prompt, images, model }) {
     { type: "text", text: `${intro}\n提示词：${prompt || "(未知)"}\n<Rubric 逐维度 1-5 档>\n${buildRubricBlock(dims)}\n只输出 JSON: {"reason": string, "scores": {${keys.map((k) => `"${k}": 1-5`).join(", ")}}}。打分铁律:拿不准给保守(偏低)分;不要被高分辨率本身唬住,硬伤就低分。` },
     ...images.map((url) => ({ type: "image_url", image_url: { url } })),
   ];
-  const res = await fetch(`${String(cfg.baseUrl).replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
-    body: JSON.stringify({ model: model || cfg.visionModel || cfg.model, temperature: 0, stream: false, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
-  });
-  if (!res.ok) throw new Error(`VLM HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
-  const json = await res.json();
-  const parsed = parseJsonLoose(json?.choices?.[0]?.message?.content || "{}");
+  const parsed = await postChatJson(cfg, { model: model || cfg.visionModel || cfg.model, temperature: 0, stream: false, response_format: { type: "json_object" }, messages: [{ role: "user", content }] });
   if (!parsed.scores || typeof parsed.scores !== "object") throw new Error(`VLM 输出缺 scores: ${JSON.stringify(parsed).slice(0, 120)}`);
   const scores = {};
   const normalized = {};
