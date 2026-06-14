@@ -1,0 +1,129 @@
+import { describe, expect, it } from 'vitest'
+import { resolveReferenceSlots } from './referenceSlots'
+import type { GenerationCanvasEdge, GenerationCanvasNode } from '../model/generationCanvasTypes'
+
+function node(
+  id: string,
+  kind: string,
+  opts: { url?: string; archetypeId?: string; modeId?: string; meta?: Record<string, unknown> } = {},
+): GenerationCanvasNode {
+  const meta: Record<string, unknown> = { ...(opts.meta || {}) }
+  if (opts.archetypeId) meta.archetype = { id: opts.archetypeId, modeId: opts.modeId || '' }
+  return {
+    id,
+    kind: kind as GenerationCanvasNode['kind'],
+    title: id,
+    prompt: '',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    meta,
+    ...(opts.url ? { result: { type: kind === 'video' ? 'video' : 'image', url: opts.url } } : {}),
+  } as GenerationCanvasNode
+}
+
+function target(kind: string, archetypeId: string, modeId: string, meta?: Record<string, unknown>) {
+  return node('tgt', kind, { archetypeId, modeId, meta })
+}
+
+describe('resolveReferenceSlots — 能力驱动单一真相源', () => {
+  it('Sora i2v：image 源经 first_frame 边、源已生成 → image_ref 槽显示该参考（这正是「连线没用」要修的）', () => {
+    const img = node('img1', 'image', { url: 'https://cdn/a.png' })
+    const tgt = target('video', 'sora-2', 'i2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'img1', target: 'tgt', mode: 'first_frame' }]
+    const slots = resolveReferenceSlots(tgt, [img, tgt], edges)
+    expect(slots).toHaveLength(1)
+    expect(slots[0].slotKind).toBe('image_ref')
+    expect(slots[0].max).toBe(1)
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: 'https://cdn/a.png', status: 'resolved', origin: { type: 'edge', sourceNodeId: 'img1', semantic: 'first_frame' } },
+    ])
+  })
+
+  it('源还没生成 → 槽仍显示「已连接·待生成」(pending-generation, url=null)，不再显示为空', () => {
+    const img = node('img1', 'image') // 无 result
+    const tgt = target('video', 'sora-2', 'i2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'img1', target: 'tgt', mode: 'first_frame' }]
+    const slots = resolveReferenceSlots(tgt, [img, tgt], edges)
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: null, status: 'pending-generation', origin: { type: 'edge', sourceNodeId: 'img1', semantic: 'first_frame' } },
+    ])
+  })
+
+  it('Kling i2v：first_frame 边→位置 0、last_frame 边→位置 1（有序，保首/尾帧语义）', () => {
+    const a = node('a', 'image', { url: 'https://cdn/first.png' })
+    const b = node('b', 'image', { url: 'https://cdn/last.png' })
+    const tgt = target('video', 'kling-3.0', 'i2v')
+    const edges: GenerationCanvasEdge[] = [
+      { id: 'e2', source: 'b', target: 'tgt', mode: 'last_frame' },
+      { id: 'e1', source: 'a', target: 'tgt', mode: 'first_frame' },
+    ]
+    const slots = resolveReferenceSlots(tgt, [a, b, tgt], edges)
+    expect(slots[0].slotKind).toBe('image_ref')
+    expect(slots[0].max).toBe(2)
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: 'https://cdn/first.png', status: 'resolved', origin: { type: 'edge', sourceNodeId: 'a', semantic: 'first_frame' } },
+      { position: 1, url: 'https://cdn/last.png', status: 'resolved', origin: { type: 'edge', sourceNodeId: 'b', semantic: 'last_frame' } },
+    ])
+  })
+
+  it('Hailuo i2v：video 源经 first_frame 边 → pending-extraction（待抽帧，绝不拿视频当首帧）', () => {
+    const v = node('v1', 'video', { url: 'nomi-local://asset/p/v1.mp4' })
+    const tgt = target('video', 'hailuo-2.3', 'i2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'v1', target: 'tgt', mode: 'first_frame' }]
+    const slots = resolveReferenceSlots(tgt, [v, tgt], edges)
+    expect(slots[0].slotKind).toBe('first_frame')
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: null, status: 'pending-extraction', origin: { type: 'edge', sourceNodeId: 'v1', semantic: 'first_frame' } },
+    ])
+  })
+
+  it('meta 上传（无源节点）也在槽里可见，origin=upload', () => {
+    const tgt = target('video', 'sora-2', 'i2v', { referenceImageUrls: ['https://cdn/up.png'] })
+    const slots = resolveReferenceSlots(tgt, [tgt], [])
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: 'https://cdn/up.png', status: 'resolved', origin: { type: 'upload' } },
+    ])
+  })
+
+  it('边 + 上传共存（Kling max2）：边占其首选位、上传填剩余空位', () => {
+    const a = node('a', 'image', { url: 'https://cdn/edge.png' })
+    const tgt = target('video', 'kling-3.0', 'i2v', { referenceImageUrls: ['https://cdn/upload.png'] })
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'a', target: 'tgt', mode: 'first_frame' }]
+    const slots = resolveReferenceSlots(tgt, [a, tgt], edges)
+    expect(slots[0].fills).toEqual([
+      { position: 0, url: 'https://cdn/edge.png', status: 'resolved', origin: { type: 'edge', sourceNodeId: 'a', semantic: 'first_frame' } },
+      { position: 1, url: 'https://cdn/upload.png', status: 'resolved', origin: { type: 'upload' } },
+    ])
+  })
+
+  it('边与上传是同一 URL → 去重，只留一个', () => {
+    const a = node('a', 'image', { url: 'https://cdn/same.png' })
+    const tgt = target('video', 'kling-3.0', 'i2v', { referenceImageUrls: ['https://cdn/same.png'] })
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'a', target: 'tgt', mode: 'first_frame' }]
+    const slots = resolveReferenceSlots(tgt, [a, tgt], edges)
+    expect(slots[0].fills).toHaveLength(1)
+    expect(slots[0].fills[0].origin).toEqual({ type: 'edge', sourceNodeId: 'a', semantic: 'first_frame' })
+  })
+
+  it('无档案节点（未知/未设模型）→ []（交旧 image-url 启发式路径兜，本函数不接管）', () => {
+    const plain = node('p', 'video')
+    expect(resolveReferenceSlots(plain, [plain], [])).toEqual([])
+  })
+
+  it('t2v 模式无声明槽 → []（纯文生没有参考槽）', () => {
+    const img = node('img1', 'image', { url: 'https://cdn/a.png' })
+    const tgt = target('video', 'sora-2', 't2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'img1', target: 'tgt', mode: 'first_frame' }]
+    expect(resolveReferenceSlots(tgt, [img, tgt], edges)).toEqual([])
+  })
+
+  it('文本源（不可作参考）→ 不落任何槽', () => {
+    const txt = node('t1', 'text')
+    const tgt = target('video', 'sora-2', 'i2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 't1', target: 'tgt', mode: 'reference' }]
+    const slots = resolveReferenceSlots(tgt, [txt, tgt], edges)
+    expect(slots[0].fills).toEqual([])
+  })
+})

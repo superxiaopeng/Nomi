@@ -39,7 +39,7 @@ export function referenceAssetKindForNode(node: GenerationCanvasNode): Reference
 }
 
 /** 每种参考槽能被哪种源资产喂。first_frame 收视频=尾帧接力(resolver 抽帧),故收 image+video。 */
-const SLOT_ACCEPTS: Record<ArchetypeReferenceSlotKind, readonly ReferenceAssetKind[]> = {
+export const SLOT_ACCEPTS: Record<ArchetypeReferenceSlotKind, readonly ReferenceAssetKind[]> = {
   first_frame: ['image', 'video'],
   last_frame: ['image'],
   image_ref: ['image'],
@@ -67,7 +67,7 @@ const EDGE_MODE_SLOTS: Record<GenerationCanvasEdgeMode, readonly ArchetypeRefere
 }
 
 /** 从节点 meta 解析模型档案:优先 meta.archetype.id(命名空间),回退 meta.modelKey 身份匹配。无 → null。 */
-function archetypeForNode(node: GenerationCanvasNode): ModelArchetype | null {
+export function archetypeForNode(node: GenerationCanvasNode): ModelArchetype | null {
   const meta = node.meta
   if (!meta || typeof meta !== 'object') return null
   const record = meta as Record<string, unknown>

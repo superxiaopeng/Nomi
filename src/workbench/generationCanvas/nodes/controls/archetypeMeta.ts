@@ -232,6 +232,16 @@ const DEFAULT_AS_ARRAY: Record<ArchetypeReferenceSlotKind, boolean> = {
   image_ref: true, video_ref: true, audio_ref: true,
 }
 
+/** 一个声明槽在 meta 里的存储形态（单一真相源：槽→存储键 的知识只在这里）。无存储映射 → null。 */
+export type ReferenceSlotStorage = { metaKey: string; isArray: boolean }
+export function referenceSlotStorage(slot: { kind: ArchetypeReferenceSlotKind }): ReferenceSlotStorage | null {
+  const arr = ARRAY_SLOT_ROUTE[slot.kind]
+  if (arr) return { metaKey: arr.metaKey, isArray: true }
+  const single = SINGLE_SLOT_META_KEY[slot.kind]
+  if (single) return { metaKey: single, isArray: false }
+  return null
+}
+
 function slotInputKey(slot: { kind: ArchetypeReferenceSlotKind; inputKey?: string }): string {
   return slot.inputKey ?? DEFAULT_INPUT_KEY[slot.kind]
 }

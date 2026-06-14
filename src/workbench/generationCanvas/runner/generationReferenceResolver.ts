@@ -1,5 +1,6 @@
-import type { GenerationCanvasEdge, GenerationCanvasNode, GenerationNodeResult } from '../model/generationCanvasTypes'
+import type { GenerationCanvasEdge, GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { collectNodeContext } from '../model/nodeContext'
+import { asUrl, findNodeResultUrl, resolveReferenceUrl } from './referenceUrl'
 
 export type ResolvedGenerationReferences = {
   referenceImages: string[]
@@ -15,38 +16,6 @@ export type ResolvedGenerationReferences = {
    * 冒充首帧（封死 thumbnail 静默回退，audit 2026-06-12 评审必改）。
    */
   relayFromVideoUrl?: string
-}
-
-function asUrl(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  const trimmed = value.trim()
-  // nomi-local:// 是项目内素材协议（抽帧 IPC 的返回值就是它）——必须放行，
-  // 否则尾帧接力抽出的帧 URL 进 resolver 即被丢弃（评审必改②）。
-  return /^https?:\/\//i.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('blob:') || trimmed.startsWith('nomi-local://') ? trimmed : ''
-}
-
-function resultUrl(result: GenerationNodeResult | undefined): string {
-  // 优先 providerUrl（原始 CDN https:// URL）——任何 vendor 都能直接使用，无需上传或转 base64。
-  // 退回 nomi-local:// 供支持 base64 的端点用（如 apimart 图片改图、kie 上传链路）。
-  return asUrl(result?.providerUrl) || asUrl(result?.url) || asUrl(result?.thumbnailUrl)
-}
-
-function findNodeResultUrl(nodesById: Map<string, GenerationCanvasNode>, reference: string): string {
-  const [nodeId, resultId] = reference.split(':')
-  const node = nodesById.get(nodeId)
-  if (!node) return ''
-  if (resultId) {
-    const result = node.history?.find((entry) => entry.id === resultId)
-    return resultUrl(result)
-  }
-  return resultUrl(node.result) || resultUrl(node.history?.[0])
-}
-
-function resolveReferenceUrl(nodesById: Map<string, GenerationCanvasNode>, reference: unknown): string {
-  const directUrl = asUrl(reference)
-  if (directUrl) return directUrl
-  if (typeof reference !== 'string') return ''
-  return findNodeResultUrl(nodesById, reference)
 }
 
 function pushUnique(output: string[], value: unknown) {

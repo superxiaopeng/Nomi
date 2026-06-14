@@ -84,7 +84,10 @@ export function connectNodes(
   mode: GenerationCanvasEdgeMode = 'reference',
 ): GenerationCanvasEdge[] {
   if (!source || !target || source === target) return edges
-  if (edges.some((edge) => edge.source === source && edge.target === target)) return edges
+  // 去重按 (source,target,**mode**)：同两点连第二种语义的参考(如 Kling 首帧+尾帧、或一图既当
+  // 角色参考又当风格参考)是合法的、应能连上。旧版只看 (source,target) → 静默吞掉第二条边
+  // (「同两点连不了第二种参考」)，且 connectToNode 仍报 ok、用户无感(治「线连不上」R2)。
+  if (edges.some((edge) => edge.source === source && edge.target === target && edge.mode === mode)) return edges
   return [...edges, { id: createEdgeId(source, target), source, target, mode }]
 }
 
