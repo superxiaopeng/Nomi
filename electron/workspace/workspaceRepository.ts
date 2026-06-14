@@ -52,6 +52,7 @@ type RecordInput = {
   id?: unknown;
   name?: unknown;
   seedKey?: unknown;
+  draft?: unknown;
   payload?: unknown;
 };
 
@@ -103,6 +104,7 @@ export function createWorkspaceProject(
     ...initialized,
     ...(typeof raw.id === "string" && raw.id.trim() ? { id: raw.id.trim() } : {}),
     ...(typeof raw.seedKey === "string" && raw.seedKey.trim() ? { seedKey: raw.seedKey.trim() } : {}),
+    ...(raw.draft === true ? { draft: true } : {}),
     lastKnownRootPath: rootPath,
   });
   writeWorkspaceManifest(rootPath, record);
@@ -182,6 +184,8 @@ export function saveWorkspaceProject(
   const now = Date.now();
   const next = normalizeWorkspaceProjectRecord({
     ...existing,
+    // 首次真实保存 = 从草稿态 promote 为持久态：清掉 draft 标记，此后 GC 永不回收它。
+    draft: undefined,
     name: inputName(record, existing.name),
     updatedAt: now,
     savedAt: now,
@@ -224,6 +228,52 @@ export function deleteWorkspaceProject(
   if (!isNative) return { id: projectId, deleted: false }; // 外部文件夹：只解绑，不删用户内容
   fs.rmSync(resolved, { recursive: true, force: true });
   return { id: projectId, deleted: true };
+}
+
+// 递归判断目录下是否有任何真实文件（忽略空日期目录与 .DS_Store）。GC 的防御纵深：
+// 即便 draft/revision 判据通过，只要项目目录里有任何用户素材就绝不回收。
+function dirHasRealFiles(dir: string): boolean {
+  if (!fs.existsSync(dir)) return false;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === ".DS_Store") continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (dirHasRealFiles(full)) return true;
+    } else if (entry.isFile()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 启动 GC：回收「从未编辑的空白草稿」，防项目库再次堆满「未命名」垃圾（审计 P0-3）。
+ * 仅当全部判据满足才删（AND，宁可漏删不可误删）：
+ *   native（默认根内）+ 目录在（!missing）+ draft===true + revision===0 + assets/ 无任何真实文件。
+ * folder/external 一律豁免（复用 deleteWorkspaceProject 的双重边界，绝不碰用户文件）。
+ * 不变量 `revision===0 ⟺ 落盘 payload 即出生默认值` 保证「revision 0 的草稿 = 可证明的零编辑」。
+ * 调用方负责「一进程一次」（见 repository.listProjects 的 once-guard），故本会话新建的草稿不会被误删。
+ */
+export function gcEmptyDraftWorkspaceProjects(
+  deps: WorkspaceRepositoryDeps,
+): { recycled: string[]; scanned: number } {
+  const projects = listWorkspaceProjects(deps);
+  const recycled: string[] = [];
+  for (const project of projects) {
+    if (project.source !== "native") continue;
+    if (project.missing) continue;
+    if (project.draft !== true) continue;
+    if ((project.revision ?? 0) !== 0) continue;
+    const dir = resolveWorkspaceProjectDir(project.id, deps);
+    if (!dir) continue;
+    if (dirHasRealFiles(path.join(dir, "assets"))) continue;
+    const result = deleteWorkspaceProject(project.id, deps);
+    if (result.deleted) recycled.push(project.id);
+  }
+  if (recycled.length) {
+    console.info(`[gc] recycled ${recycled.length} empty draft project(s): ${recycled.join(", ")}`);
+  }
+  return { recycled, scanned: projects.length };
 }
 
 export function resolveWorkspaceProjectDir(projectId: string, deps: WorkspaceRepositoryDeps): string | null {

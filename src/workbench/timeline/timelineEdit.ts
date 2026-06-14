@@ -1,5 +1,6 @@
 import type { TimelineClip, TimelineState, TimelineTrack, TimelineTrackType } from './timelineTypes'
 import { getTrackTypeForClipType } from './timelineTypes'
+import { resolveClipFraming, type ClipFraming } from './clipFraming'
 
 export const TIMELINE_MIN_SCALE = 0.35
 export const TIMELINE_MAX_SCALE = 4
@@ -176,6 +177,25 @@ export function removeClipsByIds(timeline: TimelineState, clipIds: readonly stri
   let removed = false
   const tracks = timeline.tracks.map((track) => {
     const nextClips = track.clips.filter((clip) => !idSet.has(clip.id))
+    if (nextClips.length === track.clips.length) return track
+    removed = true
+    return { ...track, clips: nextClips }
+  })
+  return removed ? { ...timeline, tracks } : timeline
+}
+
+/**
+ * 删画布节点 → 时间轴对账：移除所有 sourceNodeId 命中的 clip（跨轨、含同节点的多个产物）。
+ * 根因（P2，数据一致性）：clip 创建时把节点 result 的 url/thumbnailUrl 快照冻结，无 node→clip 同步；
+ * 画布删了节点后时间轴仍引用「已不存在/过期素材」，导出会渲染悬空帧。此处按 sourceNodeId 单向对账，
+ * 让「画布删了的节点，时间轴不再放它的旧产物」。无命中返回原引用 → store 据此跳过 persistRevision 自增。
+ */
+export function removeClipsBySourceNodeIds(timeline: TimelineState, nodeIds: readonly string[]): TimelineState {
+  const idSet = new Set(nodeIds.map((id) => String(id || '').trim()).filter(Boolean))
+  if (idSet.size === 0) return timeline
+  let removed = false
+  const tracks = timeline.tracks.map((track) => {
+    const nextClips = track.clips.filter((clip) => !idSet.has(clip.sourceNodeId))
     if (nextClips.length === track.clips.length) return track
     removed = true
     return { ...track, clips: nextClips }
@@ -376,6 +396,38 @@ export function resizeClipEdge(timeline: TimelineState, clipId: string, edge: 'l
     }
   })
   return resized ? { ...timeline, tracks } : timeline
+}
+
+/**
+ * 设置某个媒体 clip 的取景（patch 合并到现有 framing，缺省补默认、清洗、缩放 clamp）。
+ * 找不到 clip 或结果无变化 → 返回原 timeline（引用不变，供 store 跳过 persistRevision 自增）。
+ */
+export function setClipFraming(timeline: TimelineState, clipId: string, patch: Partial<ClipFraming>): TimelineState {
+  const id = String(clipId || '').trim()
+  if (!id) return timeline
+  let changed = false
+  const tracks = timeline.tracks.map((track) => {
+    const index = track.clips.findIndex((clip) => clip.id === id)
+    if (index < 0) return track
+    const current = track.clips[index]
+    const nextFraming = resolveClipFraming({ framing: { ...current.framing, ...patch } })
+    const prevFraming = resolveClipFraming(current)
+    if (
+      nextFraming.fit === prevFraming.fit &&
+      nextFraming.scale === prevFraming.scale &&
+      nextFraming.offsetX === prevFraming.offsetX &&
+      nextFraming.offsetY === prevFraming.offsetY &&
+      current.framing !== undefined
+    ) {
+      return track
+    }
+    changed = true
+    return {
+      ...track,
+      clips: track.clips.map((clip) => (clip.id === id ? { ...clip, framing: nextFraming } : clip)),
+    }
+  })
+  return changed ? { ...timeline, tracks } : timeline
 }
 
 export function setTimelinePlayheadFrame(timeline: TimelineState, frame: number): TimelineState {

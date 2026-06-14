@@ -112,6 +112,9 @@ export function createLocalProject(
 ): WorkbenchProjectRecordV1 {
     const now = Date.now();
     const template = getProjectTemplate(templateId || null);
+    // 草稿态：用户手动「新建空白」（无 seedKey 播种、无 rootPath 外部绑定）零编辑会被启动 GC 回收。
+    // example（seedKey）/打开文件夹（rootPath）不打标记，永不被回收。
+    const isDraft = !options.seedKey?.trim() && !options.rootPath?.trim();
     const summary: WorkbenchProjectSummary = {
         id: createProjectId(),
         name:
@@ -123,6 +126,7 @@ export function createLocalProject(
         revision: 0,
         savedAt: now,
         ...(options.seedKey?.trim() ? { seedKey: options.seedKey.trim() } : {}),
+        ...(isDraft ? { draft: true } : {}),
     };
     const docDefaults = createDefaultWorkbenchDocument();
     const seededDocument = template.seedDocument

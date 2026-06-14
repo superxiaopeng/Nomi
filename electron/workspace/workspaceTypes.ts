@@ -11,6 +11,12 @@ export const workspaceProjectRecordSchema = z.object({
   lastKnownRootPath: z.string().min(1).optional(),
   /** 播种来源幂等键（如「一键示例」）。随 manifest 持久化，list 摘要原样带回。 */
   seedKey: z.string().min(1).optional(),
+  /**
+   * 草稿态：新建空白项目零编辑的标记。首次 save（revision→≥1）即清除（promote 为持久态）。
+   * 启动 GC 只回收 `draft===true && revision===0` 的 native 空壳 → 库不再堆「未命名」垃圾。
+   * 老项目/example/打开文件夹无此字段 → 天然豁免，GC 永不碰。
+   */
+  draft: z.boolean().optional(),
   payload: z.unknown().optional(),
 });
 

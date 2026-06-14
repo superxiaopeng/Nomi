@@ -7,7 +7,14 @@ vi.mock("electron", () => ({
   app: { getPath: () => os.tmpdir(), getAppPath: () => process.cwd() },
 }));
 
-import { legacyProjectDirById, normalizeProjectRecord, sanitizeName } from "./repository";
+import {
+  createProject,
+  legacyProjectDirById,
+  listProjects,
+  normalizeProjectRecord,
+  resetEmptyDraftGcGuard,
+  sanitizeName,
+} from "./repository";
 
 describe("sanitizeName", () => {
   it("replaces filesystem-unsafe characters with underscore", () => {
@@ -85,5 +92,44 @@ describe("legacyProjectDirById（folder rename 自愈）", () => {
 
   it("找不到匹配 id 时返回 null", () => {
     expect(legacyProjectDirById("nope")).toBeNull();
+  });
+});
+
+// 启动 GC 挂在 listProjects 首次调用：回收上个进程遗留的空白草稿，但只跑一次——
+// 本会话之后新建的草稿绝不被误删（once-guard）。
+describe("listProjects 启动一次 GC（空白草稿回收）", () => {
+  let projectsRoot = "";
+  let settingsRoot = "";
+  let prevProjects: string | undefined;
+  let prevSettings: string | undefined;
+  beforeEach(() => {
+    prevProjects = process.env.NOMI_PROJECTS_DIR;
+    prevSettings = process.env.NOMI_SETTINGS_DIR;
+    projectsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nomi-gc-proj-"));
+    settingsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nomi-gc-settings-"));
+    process.env.NOMI_PROJECTS_DIR = projectsRoot;
+    process.env.NOMI_SETTINGS_DIR = settingsRoot;
+    resetEmptyDraftGcGuard();
+  });
+  afterEach(() => {
+    if (prevProjects === undefined) delete process.env.NOMI_PROJECTS_DIR;
+    else process.env.NOMI_PROJECTS_DIR = prevProjects;
+    if (prevSettings === undefined) delete process.env.NOMI_SETTINGS_DIR;
+    else process.env.NOMI_SETTINGS_DIR = prevSettings;
+    fs.rmSync(projectsRoot, { recursive: true, force: true });
+    fs.rmSync(settingsRoot, { recursive: true, force: true });
+  });
+
+  it("首次列举回收草稿，二次列举不再回收本会话新建的草稿", () => {
+    const stale = createProject({ name: "上个进程的空白", draft: true });
+    expect(listProjects().some((p) => p.id === stale.id)).toBe(false); // 首次 = 回收
+
+    const fresh = createProject({ name: "本会话新建空白", draft: true });
+    expect(listProjects().some((p) => p.id === fresh.id)).toBe(true); // 二次 = guard 已消费，保留
+  });
+
+  it("非草稿项目不被回收", () => {
+    const keep = createProject({ name: "正常项目" });
+    expect(listProjects().some((p) => p.id === keep.id)).toBe(true);
   });
 });
