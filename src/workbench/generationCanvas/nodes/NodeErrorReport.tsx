@@ -59,6 +59,13 @@ export function NodeErrorReport({ message, onRetry }: { message: string; onRetry
         <span className="select-text cursor-text text-[14px] font-bold leading-snug text-nomi-ink">{report.reason}</span>
       </div>
       {report.hint ? <p className="mt-2 select-text cursor-text text-caption leading-relaxed text-nomi-ink-60">{report.hint}</p> : null}
+      {/* 服务商真实原话——提到可见区，别再让用户去折叠的「技术详情」里挖（一脸懵逼的根源）。 */}
+      {report.providerMessage ? (
+        <p className="mt-2 select-text cursor-text rounded-nomi-sm bg-nomi-ink-05 p-2 text-caption leading-relaxed text-nomi-ink-60">
+          <span className="text-nomi-ink-45">服务商原话：</span>
+          {report.providerMessage}
+        </p>
+      ) : null}
 
       <div className="min-h-0 flex-1" />
 

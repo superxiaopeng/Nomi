@@ -95,3 +95,37 @@ describe('structured 路径(S4-2:VendorRequestError 经 IPC 标记穿透)', () =
     expect(r.reason).toBe('API Key 无效')
   })
 })
+
+describe('providerMessage —— 服务商真实原话提到可见区（别埋进折叠的技术详情）', () => {
+  const encode = (structured: Record<string, unknown>, tail = 'Provider request failed (code 429) at dm-fox: x') =>
+    `Error: NOMI_VENDOR_ERR_B64::${Buffer.from(JSON.stringify(structured), 'utf8').toString('base64')}:: ${tail}`
+
+  it('structured: 分类标题通用，但服务商原话单独可见', () => {
+    const r = classifyGenerationError(encode({ category: 'quota', upstreamMsg: '官方算力限制，请等待一段时间后再进行使用' }))
+    expect(r.reason).toBe('配额或限流') // 标题仍是"哪一类"
+    expect(r.providerMessage).toBe('官方算力限制，请等待一段时间后再进行使用') // 真实原因可见
+  })
+
+  it('structured: 原话与分类标题重复时不冗余显示', () => {
+    const r = classifyGenerationError(encode({ category: 'balance', upstreamMsg: '余额不足' }))
+    expect(r.reason).toBe('余额不足')
+    expect(r.providerMessage).toBeUndefined()
+  })
+
+  it('structured: 占位「(no detail from provider)」不显示', () => {
+    const r = classifyGenerationError(encode({ category: 'server', upstreamMsg: '(no detail from provider)' }))
+    expect(r.providerMessage).toBeUndefined()
+  })
+
+  it('legacy: 从 raw 抠出的可读原话也提到可见区', () => {
+    const r = classifyGenerationError('429 rate limit: 当前模型排队人数过多，请稍后再试')
+    expect(r.reason).toBe('配额或限流')
+    expect(r.providerMessage).toMatch(/排队人数过多/)
+  })
+
+  it('unknown 兜底: reason 本身就是原话，不重复给 providerMessage', () => {
+    const r = classifyGenerationError(JSON.stringify({ message: 'something odd happened' }))
+    expect(r.reason).toBe('something odd happened')
+    expect(r.providerMessage).toBeUndefined()
+  })
+})

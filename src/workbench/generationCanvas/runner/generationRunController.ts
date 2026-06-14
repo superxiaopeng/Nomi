@@ -146,8 +146,21 @@ export type GenerationErrorReport = {
   reason: string
   /** Actionable suggestion sentence (empty for unknown errors). */
   hint: string
+  /**
+   * 服务商的**真实原话**（如「官方算力限制，请等待一段时间后再进行使用」）。分类标题
+   * 只说"哪一类"，这条说"服务商到底咋讲的"——以前它被埋进折叠的「技术详情」，用户一脸懵逼。
+   * 只在它与 reason 不同、且有信息量时给（unknown 类的 reason 本身就是原话，不重复）。
+   */
+  providerMessage?: string
   /** Original raw error message (any "→ hint" tail from older builds stripped). */
   raw: string
+}
+
+/** 上游原话提到可见区前的清洗：去掉占位、与 reason 重复、过长。 */
+function pickProviderMessage(candidate: string | undefined, reason: string): string {
+  const msg = String(candidate || '').replace(/\s+/g, ' ').trim()
+  if (!msg || msg === '(no detail from provider)' || msg === reason) return ''
+  return msg.length > 200 ? `${msg.slice(0, 199)}…` : msg
 }
 
 /**
@@ -217,14 +230,16 @@ export function classifyGenerationError(message: string): GenerationErrorReport 
   const structured = parseVendorErrorFromMessage(message)
   if (structured?.category && (STRUCTURED_KINDS as readonly string[]).includes(structured.category)) {
     const { reason, hint } = narrateGenerationError(structured.category as GenerationErrorKind)
-    return { reason, hint, raw: stripVendorErrorMarker(message) }
+    const providerMessage = pickProviderMessage(structured.upstreamMsg, reason)
+    return { reason, hint, raw: stripVendorErrorMarker(message), ...(providerMessage ? { providerMessage } : {}) }
   }
   // Strip any legacy "\n→ hint" tail that older builds baked into node.error.
   const raw = stripVendorErrorMarker(String(message || '')).split('\n→')[0].trim() || '生成失败'
   const kind = detectLegacyErrorKind(raw)
   if (kind) {
     const { reason, hint } = narrateGenerationError(kind)
-    return { reason, hint, raw }
+    const providerMessage = pickProviderMessage(extractReadableErrorLine(raw), reason)
+    return { reason, hint, raw, ...(providerMessage ? { providerMessage } : {}) }
   }
   // 兜底:抠 raw 可读首行当 reason,通用建议出自 narrate 的 unknown 词条。
   return {

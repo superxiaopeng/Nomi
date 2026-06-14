@@ -47,6 +47,19 @@ AI SDK 真路径复现，完整还原「空响应」：
 
 单 commit，回滚即 `git revert`。新增 `agentError.ts` 物理删除即可。
 
+## 第二轮（用户反馈：要通用 + 用户得真看见原因）
+
+用户指出：① 确认通用（非只为这俩模型）；② 生成节点出错时，用户看到的是**通用分类标题**（如「配额或限流」），服务商**真实原话**（「官方算力限制，请等待…」）被埋在折叠的「技术详情」里 → 一脸懵逼。
+
+补：覆盖**所有用户出错口**，真实原因都提到可见区：
+| 出错口 | 之前 | 现在 |
+|---|---|---|
+| 创作助手 / 画布助手（agent 文本） | 裸状态文本 / 空响应 | `describeAgentError` 透上游人话 + `describeEmptyAgentReply` 截断说原因+引导 |
+| 画布文本节点流式（续写/改写） | 裸状态文本 | `describeAgentError`（textStreamIpc） |
+| **图片/视频生成节点** | 通用分类标题，原话埋在折叠技术详情 | **`GenerationErrorReport.providerMessage`**：分类标题保留（扫读用），服务商原话单独成行可见（`NodeErrorReport` 显示「服务商原话：…」） |
+
+通用性核对：`describeAgentError`/`describeEmptyAgentReply`/`pickProviderMessage` 逻辑**零写死模型/vendor 名**（仅注释里举例），解析任意 vendor 的 responseBody 通用字段。
+
 ## 验收门
 
 - TDD：`agentError.test.ts` 覆盖 APICallError(有 responseBody JSON / 纯文本 / 无 body) + 普通 Error + 非 Error。
