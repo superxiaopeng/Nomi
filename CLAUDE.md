@@ -3,6 +3,8 @@
 > 单一文档。**上半部「速览」每次 session 读完再动手**；下半部「详细规则 R1–R14」按编号随时查。
 > （原 `CLAUDE-RULES.md` 已并入本文件，不再分两份。）
 > `docs/coding-standards.md` - 通用编码规范与实现风格补充。
+>
+> **每轮自动提醒机制**：`.claude/settings.json` 的 `UserPromptSubmit` hook 在**每条**用户消息前自动注入「动手前自检」触发清单（脚本 `.claude/hooks/self-check.sh`），让规则在动手那一刻顶在眼前、对话再长也不沉底——不用再等用户提醒才记起。该脚本是「每轮·极短·触发版」，本文件是**完整真相源**；改触发清单时两处同步，规则细节只改本文件。注：`.claude/` 被 gitignore，hook 文件不随 git 走，换机/新 worktree 需手动复制 `.claude/hooks/` 与 settings.json 的 hooks 块。
 
 ## 项目概览
 
