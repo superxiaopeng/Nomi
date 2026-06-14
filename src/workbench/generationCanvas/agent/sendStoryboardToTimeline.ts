@@ -22,6 +22,40 @@ function timelineEndFrame(timeline: TimelineState): number {
   return end
 }
 
+/** 时间轴上已落 clip 的 sourceNodeId 集合（跨两轨）。clip.sourceNodeId === 排片单位 nodeId。 */
+function timelineSourceNodeIds(timeline: TimelineState): Set<string> {
+  const ids = new Set<string>()
+  for (const track of timeline.tracks) {
+    for (const clip of track.clips) {
+      if (clip.sourceNodeId) ids.add(clip.sourceNodeId)
+    }
+  }
+  return ids
+}
+
+/**
+ * append 幂等：把已在时间轴上的单位（按 sourceNodeId）滤掉。
+ * 选「跳过」而非「替换」——arrange 是「追加整条故事板到末尾」的语义（用户拍板），
+ * 重复触发不应把已排好（可能用户已手动调过位/裁过）的 clip 再复制一份到末尾。
+ * 跳过的单位回报 reason=already_on_timeline，让 LLM/调用方知道为何没动它。
+ * 纯函数：不读 store，便于单测。
+ */
+export function partitionUnitsByTimelinePresence<T extends { nodeId: string }>(
+  units: ReadonlyArray<T>,
+  presentSourceNodeIds: ReadonlySet<string>,
+): { kept: T[]; skipped: Array<{ nodeId: string; reason: string }> } {
+  const kept: T[] = []
+  const skipped: Array<{ nodeId: string; reason: string }> = []
+  for (const unit of units) {
+    if (presentSourceNodeIds.has(unit.nodeId)) {
+      skipped.push({ nodeId: unit.nodeId, reason: 'already_on_timeline' })
+    } else {
+      kept.push(unit)
+    }
+  }
+  return { kept, skipped }
+}
+
 /**
  * 把一组「排片单位」（已按剧本镜序排好）逐个落到时间轴：每个 clip 落自然轨
  * （视频→媒体轨、占位图→图片轨），cursor 在两轨间顺序累加——时间上首尾相接、
@@ -90,7 +124,11 @@ export function arrangeStoryboardToTimeline(
 ): SendStoryboardToTimelineResult {
   const canvasState = useGenerationCanvasStore.getState()
   const { units, skipped } = planStoryboardTimeline(canvasState.nodes, canvasState.edges, options.nodeIds)
-  const startFrame = timelineEndFrame(useWorkbenchStore.getState().timeline)
-  const sent = placeUnitsSequentially(units, startFrame)
-  return { ok: sent.length > 0, total: units.length, sent, skipped }
+  const timeline = useWorkbenchStore.getState().timeline
+  // append 幂等：滤掉已在时间轴上的单位（按 sourceNodeId），避免重复触发把同一节点
+  // 再复制一份到末尾（clip id 含 startFrame，末尾 startFrame 不同 → 旧逻辑会生成重复 clip）。
+  const { kept, skipped: alreadyPlaced } = partitionUnitsByTimelinePresence(units, timelineSourceNodeIds(timeline))
+  const startFrame = timelineEndFrame(timeline)
+  const sent = placeUnitsSequentially(kept, startFrame)
+  return { ok: sent.length > 0, total: units.length, sent, skipped: [...skipped, ...alreadyPlaced] }
 }

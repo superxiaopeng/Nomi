@@ -232,6 +232,24 @@ export async function cancelExportJob(jobId: string): Promise<{ ok: true }> {
   return { ok: true };
 }
 
+/**
+ * App 退出时统一中止所有在跑导出：abort 每个 active controller → ffmpegRunner 监听
+ * abort 后 child.kill()（见 ffmpegRunner runProcess），子进程不再变孤儿。
+ * 返回被中止的数量，便于上层日志。同步、不抛——退出路径上不能因清理失败拖住退出。
+ */
+export function abortAllActiveExports(): number {
+  let aborted = 0;
+  for (const controller of activeExportAbortControllers.values()) {
+    try {
+      controller.abort();
+      aborted += 1;
+    } catch {
+      // 退出清理：单个 abort 失败不影响其余，绝不抛。
+    }
+  }
+  return aborted;
+}
+
 const EXPORT_TEMP_INPUT_WRITABLE_STATUSES = new Set(["queued", "preparing", "planning", "rendering", "encoding", "muxing", "finalizing"]);
 const activeExportAbortControllers = new Map<string, AbortController>();
 

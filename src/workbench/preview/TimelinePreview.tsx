@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconChevronDown, IconDownload, IconLetterCase, IconMinus, IconPlayerPause, IconPlayerPlay, IconPlus, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
+import { IconChevronDown, IconDownload, IconLetterCase, IconMinus, IconPlayerPause, IconPlayerPlay, IconPlus, IconRefresh, IconX, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
 import { NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -82,6 +82,18 @@ function clampPreviewScale(value: number): number {
   return Math.max(0.25, Math.min(4, value))
 }
 
+// 控制条圆形小图标按钮的统一样式。关键：cursor/hover 用 `enabled:` 变体门控——
+// disabled 按钮仍会收到 :hover，旧写法的无条件 `cursor-pointer hover:bg…` 会让禁用态
+// 仍高亮成「假可点」。整条控制条共用此常数，禁用态收口一处（不逐个补）。
+// 注意 WorkbenchIconButton 基类自带「无条件」hover:bg-workbench-hover/text-workbench-ink，
+// twMerge 把 base 的 `hover:` 与本处 `enabled:hover:` 视作不同键（都保留）→ 仅加 enabled:
+// 杀不掉基类那条 hover。故再显式补 `disabled:hover:`（双伪类，特异性高于基类单 hover）把
+// 禁用态 hover 钉回静息态——这是 R8 反复点名的 twMerge 隐藏覆盖坑。
+const CONTROL_ICON_BUTTON_CLASS =
+  'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] ' +
+  'enabled:cursor-pointer enabled:hover:bg-[var(--workbench-hover)] enabled:hover:text-[var(--workbench-ink)] ' +
+  'disabled:hover:bg-transparent disabled:hover:text-[var(--workbench-muted)]'
+
 export default function TimelinePreview({ activeClips, aspectRatio, fps, playheadFrame, timeline }: TimelinePreviewProps): JSX.Element {
   const playerRef = React.useRef<HTMLDivElement | null>(null)
   const stageRef = React.useRef<HTMLDivElement | null>(null)
@@ -93,6 +105,11 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     originX: number
     originY: number
   } | null>(null)
+  // 当前在跑导出的 jobId（供进度区「取消」按钮调 exports.cancel）。exportApi 内部生成 jobId
+  // 不直接回传 UI，故这里订阅导出事件、按当前项目相关性捕获（per-project 单 active 锁 →
+  // 同一项目同时至多一个在跑 job，相关性可靠）。
+  const cancelJobIdRef = React.useRef('')
+  const [canCancelExport, setCanCancelExport] = React.useState(false)
   const [stageSize, setStageSize] = React.useState<{ width: number; height: number } | null>(null)
   const [mediaScale, setMediaScale] = React.useState(1)
   const [mediaOffset, setMediaOffset] = React.useState({ x: 0, y: 0 })
@@ -269,8 +286,41 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
       setExportStatus('idle')
       const message = error instanceof Error ? error.message : '导出失败'
       toast(message, 'error')
+    } finally {
+      cancelJobIdRef.current = ''
+      setCanCancelExport(false)
     }
   }, [aspectRatio, exportBusy, timeline])
+
+  // 导出进行中订阅导出事件，捕获当前项目在跑 job 的 id（供「取消」按钮）。
+  // exportApi 内部生成 jobId 不回传 UI；per-project 单 active 锁保证相关性可靠。
+  React.useEffect(() => {
+    if (!exportBusy) return
+    const bridge = getDesktopBridge()
+    const projectId = getDesktopActiveProjectId().trim()
+    if (!bridge?.exports?.onEvent || !bridge.exports.cancel || !projectId) return
+    const unsubscribe = bridge.exports.onEvent((event) => {
+      if (event.projectId !== projectId) return
+      const stage = event.snapshot.progress.stage
+      const active = stage !== 'succeeded' && stage !== 'failed' && stage !== 'cancelled'
+      if (active && event.jobId) {
+        cancelJobIdRef.current = event.jobId
+        setCanCancelExport(true)
+      }
+    })
+    return () => unsubscribe?.()
+  }, [exportBusy])
+
+  const handleCancelExport = React.useCallback(() => {
+    const jobId = cancelJobIdRef.current
+    if (!jobId) return
+    setCanCancelExport(false)
+    // 后端 cancelExportJob abort 在跑的 ffmpeg → finishTempInput 抛 Cancelled，
+    // handleExport 的 catch 收口（复位状态 + toast），这里不重复弹错。
+    void getDesktopBridge()?.exports.cancel(jobId).catch((error: unknown) => {
+      console.warn('Failed to cancel export job', error)
+    })
+  }, [])
 
   // 右上角「导出」在预览页时派发本事件 → 直接触发导出（handleExport 已自带 busy/空 守卫）。
   React.useEffect(() => {
@@ -286,7 +336,9 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
       setTimelinePlayhead(0)
     }
     setTimelinePlaying(!playing)
-  }, [playheadFrame, playing, setTimelinePlayhead, setTimelinePlaying, timeline.tracks])
+    // computeTimelineDuration 同时计入 tracks 与 textClips（片尾标题卡也撑时长），
+    // 故依赖整个 timeline，否则改完文字轨后这个回调仍用旧时长判定空/越界。
+  }, [playheadFrame, playing, setTimelinePlayhead, setTimelinePlaying, timeline])
 
   const beginDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!hasMedia) return
@@ -553,7 +605,10 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             'workbench-preview-player__play',
             'w-[30px] h-[30px] grid place-items-center border-0 rounded-full',
             'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
-            'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
+            // 禁用态（时间轴为空）不再 hover 高亮成「假可点」：enabled: 门控自身 accent hover，
+            // 并用 disabled:hover: 把基类那条无条件 hover:bg-workbench-hover 钉回静息 ink/paper。
+            'enabled:hover:bg-[var(--nomi-accent)] enabled:hover:text-[var(--nomi-paper)]',
+            'disabled:hover:bg-[var(--nomi-ink)] disabled:hover:text-[var(--nomi-paper)]',
           )}
           label={playing ? '暂停' : '播放'}
           icon={playing ? <IconPlayerPause size={16} stroke={2} /> : <IconPlayerPlay size={16} stroke={2} />}
@@ -599,13 +654,13 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           'workbench-preview-player__control-group',
           'flex-none inline-flex items-center gap-[3px]',
         )} aria-label="预览构图">
-          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
           <span className={cn(
             'workbench-preview-player__zoom-label',
             'min-w-[38px] text-[var(--workbench-muted)] text-[11px] font-bold tabular-nums text-center',
           )} aria-label="当前缩放">{Math.round(mediaScale * 100)}%</span>
-          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
-          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
         </div>
         <div className={cn(
           'workbench-preview-player__control-separator',
@@ -655,7 +710,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             <div className={cn('workbench-preview-player__text-style', 'flex-none inline-flex items-center gap-1.5')} aria-label="文字样式">
               <span className="text-[11px] text-[var(--workbench-muted)] font-bold">字号</span>
               <div className="inline-flex items-center gap-[3px]">
-                <WorkbenchIconButton className={cn('w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="减小字号" icon={<IconMinus size={14} />} onClick={() => applyTextScale(selectedTextScale - 0.1)} />
+                <WorkbenchIconButton className={cn(CONTROL_ICON_BUTTON_CLASS)} label="减小字号" icon={<IconMinus size={14} />} onClick={() => applyTextScale(selectedTextScale - 0.1)} />
                 <input
                   className={cn('w-[40px] h-6 text-center text-[11px] font-bold tabular-nums', 'rounded-[var(--nomi-radius-sm)] border border-[var(--workbench-border)] bg-[var(--nomi-paper)] text-[var(--workbench-ink)] outline-none focus:border-[var(--nomi-accent)]')}
                   value={sizePctDraft}
@@ -666,7 +721,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
                   onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur() }}
                 />
                 <span className="text-[11px] text-[var(--workbench-muted-soft)]">%</span>
-                <WorkbenchIconButton className={cn('w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="增大字号" icon={<IconPlus size={14} />} onClick={() => applyTextScale(selectedTextScale + 0.1)} />
+                <WorkbenchIconButton className={cn(CONTROL_ICON_BUTTON_CLASS)} label="增大字号" icon={<IconPlus size={14} />} onClick={() => applyTextScale(selectedTextScale + 0.1)} />
               </div>
               <NomiSelect
                 ariaLabel="字体"
@@ -706,6 +761,20 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             )}>
               {exportStatus === 'preparing' ? '准备中…' : exportStatus === 'converting' ? '转码 MP4…' : `导出中 ${Math.round(exportRatio * 100)}%`}
             </span>
+            <WorkbenchIconButton
+              className={cn(
+                'workbench-preview-player__export-cancel',
+                'w-6 h-6 inline-grid place-items-center p-0 rounded-full border-0 bg-transparent text-[var(--workbench-muted)]',
+                'enabled:cursor-pointer enabled:hover:bg-[var(--workbench-hover)] enabled:hover:text-[var(--workbench-danger)]',
+                // 同 CONTROL_ICON_BUTTON_CLASS：钉死基类无条件 hover，禁用态（准备中）不假高亮。
+                'disabled:hover:bg-transparent disabled:hover:text-[var(--workbench-muted)]',
+              )}
+              label="取消导出"
+              title={canCancelExport ? '取消导出' : '准备中，暂不可取消'}
+              icon={<IconX size={14} />}
+              onClick={handleCancelExport}
+              disabled={!canCancelExport}
+            />
           </div>
         ) : null}
         <WorkbenchButton

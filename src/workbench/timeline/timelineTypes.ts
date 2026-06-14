@@ -43,7 +43,9 @@ export type TimelineTextClip = {
 
 export type TimelineState = {
   version: 1
-  fps: 30
+  // 帧率：默认 30，但允许持久化/导入携带其它值（导出维度/duration/adelay 都按它 derive）。
+  // 钉死字面量 30 会让任何非 30fps 的时间轴在类型层就装不下、在运行时被 normalize 抹平。
+  fps: number
   scale: number
   playheadFrame: number
   tracks: TimelineTrack[]

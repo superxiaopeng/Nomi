@@ -16,11 +16,16 @@ function formatTimecode(frame: number, fps: number): string {
 export default function PreviewWorkspace(): JSX.Element {
   const timeline = useWorkbenchStore((state) => state.timeline)
   const tracks = useWorkbenchStore((state) => state.timeline.tracks)
+  // 文字 clip 也计入时长（片尾标题卡/字幕，见 computeTimelineDuration）：必须订阅它，
+  // 否则只 deps [tracks] 的 memo 在改文字轨后不重算，时长/播放区间会停在旧值。
+  const textClips = useWorkbenchStore((state) => state.timeline.textClips)
   const playheadFrame = useWorkbenchStore((state) => state.timeline.playheadFrame)
   const playing = useWorkbenchStore((state) => state.timelinePlaying)
   const previewAspectRatio = useWorkbenchStore((state) => state.previewAspectRatio)
   const setTimelinePlaying = useWorkbenchStore((state) => state.setTimelinePlaying)
-  const durationFrame = React.useMemo(() => computeTimelineDuration(timeline), [tracks])
+  const durationFrame = React.useMemo(() => computeTimelineDuration(timeline), [tracks, textClips])
+  // activeClips 只取媒体轨当前帧（文字层另由 TimelinePreview 单算），故仅依赖 tracks/playhead；
+  // textClips 不影响这里的结果，无需进 deps。
   const activeClips = React.useMemo(
     () => resolveActiveClipsAtFrame(timeline, playheadFrame),
     [tracks, playheadFrame],

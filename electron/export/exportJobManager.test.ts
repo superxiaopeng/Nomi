@@ -118,12 +118,31 @@ describe("ExportJobManager", () => {
     ]);
   });
 
-  it("rejects concurrent active jobs", () => {
+  it("rejects concurrent active jobs in the same project", () => {
     const projectDir = makeTempDir();
     const manager = new ExportJobManager({ idGenerator: () => "job-1", clock: () => "2026-05-24T01:00:00.000Z" });
     manager.createJob({ projectId: "project-1", projectDir, manifest: makeManifest() });
 
     expect(() => manager.createJob({ projectId: "project-1", projectDir, manifest: makeManifest() })).toThrow(/active export job/i);
+  });
+
+  it("allows concurrent active jobs across different projects (per-project lock, not global)", () => {
+    // 两个不同项目各起一个导出：旧的全局锁会让第二个项目被第一个阻死；
+    // per-project 锁下两者应都能创建、互不阻塞。
+    const projectDirA = makeTempDir();
+    const projectDirB = makeTempDir();
+    let id = 0;
+    const manager = new ExportJobManager({ idGenerator: () => `job-${++id}`, clock: () => "2026-05-24T01:00:00.000Z" });
+
+    const jobA = manager.createJob({ projectId: "project-A", projectDir: projectDirA, manifest: makeManifest("project-A") });
+    const jobB = manager.createJob({ projectId: "project-B", projectDir: projectDirB, manifest: makeManifest("project-B") });
+
+    expect(jobA.projectId).toBe("project-A");
+    expect(jobB.projectId).toBe("project-B");
+    expect(jobA.status).toBe("queued");
+    expect(jobB.status).toBe("queued");
+    // 同项目再起仍被拒（锁仍生效，只是范围收到 project 维度）。
+    expect(() => manager.createJob({ projectId: "project-A", projectDir: projectDirA, manifest: makeManifest("project-A") })).toThrow(/active export job/i);
   });
 
   it("reaps a persisted orphan active job on restart instead of deadlocking (createJob-triggered hydrate)", () => {

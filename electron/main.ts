@@ -37,6 +37,7 @@ import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/worksp
 import { installCrashHandlers, logCrash } from "./crashLog";
 import { applySystemProxy } from "./systemProxy";
 import { registerExportJobIpc } from "./export/exportJobIpc";
+import { abortAllActiveExports } from "./export/exportJobs";
 import { registerAgentChatV2Ipc } from "./ai/agentChatV2Ipc";
 import { registerTextStreamIpc } from "./ai/textStreamIpc";
 import { registerConversationsIpc } from "./conversations/conversationsIpc";
@@ -352,4 +353,15 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// 退出时中止所有在跑导出，否则 ffmpeg 子进程会变孤儿（继续占 CPU/写文件，直到自己跑完）。
+// abort → ffmpegRunner 监听 abort 后 kill 子进程。同步、不抛，绝不拖住退出。
+app.on("before-quit", () => {
+  try {
+    const aborted = abortAllActiveExports();
+    if (aborted > 0) console.log(`[nomi:desktop] aborted ${aborted} in-flight export(s) on quit`);
+  } catch (error) {
+    console.error("[nomi:desktop] failed to abort exports on quit:", error);
+  }
 });

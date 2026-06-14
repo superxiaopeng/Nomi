@@ -9,6 +9,18 @@ import {
 } from './timelineTypes'
 
 const DEFAULT_TIMELINE_SCALE = 1
+const DEFAULT_TIMELINE_FPS = 30
+
+/**
+ * 帧率 derive：接受持久化/导入携带的 fps，非正/非有限值回退默认 30。
+ * 导出维度、duration、adelay 等全链路都按这个 fps 走，所以这里是单一真相源——
+ * 不能像旧 normalizeTimeline 那样硬钉 30 把外部 fps 抹掉。
+ */
+function normalizeFps(value: unknown): number {
+  const next = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(next) || next <= 0) return DEFAULT_TIMELINE_FPS
+  return next
+}
 
 function toFiniteNonNegativeInteger(value: unknown, fallback: number): number {
   const next = typeof value === 'number' ? value : Number(value)
@@ -98,7 +110,7 @@ function createDefaultTrack(definition: Pick<TimelineTrack, 'id' | 'type' | 'lab
 export function createDefaultTimeline(): TimelineState {
   return {
     version: 1,
-    fps: 30,
+    fps: DEFAULT_TIMELINE_FPS,
     scale: DEFAULT_TIMELINE_SCALE,
     playheadFrame: 0,
     tracks: TIMELINE_TRACK_DEFINITIONS.map(createDefaultTrack),
@@ -138,7 +150,7 @@ export function normalizeTimeline(input: unknown): TimelineState {
 
   return {
     version: 1,
-    fps: 30,
+    fps: normalizeFps(raw.fps),
     scale: Math.max(0.1, Number.isFinite(Number(raw.scale)) ? Number(raw.scale) : DEFAULT_TIMELINE_SCALE),
     playheadFrame: toFiniteNonNegativeInteger(raw.playheadFrame, 0),
     tracks,

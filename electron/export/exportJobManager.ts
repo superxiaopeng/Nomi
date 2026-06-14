@@ -108,7 +108,9 @@ export class ExportJobManager {
       throw new Error("Export job projectId must match manifest.projectId");
     }
     this.hydrateProject(input.projectDir);
-    const activeJob = [...this.jobs.values()].find((job) => isActive(job.status));
+    // active 锁按 projectId 维度，而非全局：同一项目同一时刻只允许一个在跑的导出
+    // （避免互相覆盖输出/抢临时目录），但不同项目可并行导出，彼此不阻塞。
+    const activeJob = [...this.jobs.values()].find((job) => job.projectId === input.projectId && isActive(job.status));
     if (activeJob !== undefined) {
       throw new Error(`Cannot create export job while active export job ${activeJob.id} is ${activeJob.status}`);
     }

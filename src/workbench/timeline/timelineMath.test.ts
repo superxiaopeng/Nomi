@@ -124,6 +124,30 @@ describe('normalizeTimeline — 归一化与清洗', () => {
   })
 })
 
+describe('normalizeTimeline — fps derive（不再钉死 30）', () => {
+  it('携带合法 fps 时按输入 derive，不被抹成 30', () => {
+    expect(normalizeTimeline({ fps: 24, tracks: [] }).fps).toBe(24)
+    expect(normalizeTimeline({ fps: 60, tracks: [] }).fps).toBe(60)
+    expect(normalizeTimeline({ fps: 23.976, tracks: [] }).fps).toBe(23.976)
+  })
+
+  it('缺省/非法/非正 fps 回退默认 30', () => {
+    expect(normalizeTimeline({ tracks: [] }).fps).toBe(30)
+    expect(normalizeTimeline({ fps: 0, tracks: [] }).fps).toBe(30)
+    expect(normalizeTimeline({ fps: -5, tracks: [] }).fps).toBe(30)
+    expect(normalizeTimeline({ fps: Number.NaN, tracks: [] }).fps).toBe(30)
+    expect(normalizeTimeline({ fps: 'garbage', tracks: [] }).fps).toBe(30)
+  })
+
+  it('字符串数字 fps 被接受（持久化兜底）', () => {
+    expect(normalizeTimeline({ fps: '25', tracks: [] }).fps).toBe(25)
+  })
+
+  it('默认时间轴 fps 为 30', () => {
+    expect(createDefaultTimeline().fps).toBe(30)
+  })
+})
+
 describe('computeTimelineDuration', () => {
   it('取所有轨道 clip 的最大 endFrame', () => {
     const t = timelineState([clip('i', 0, 90)], [clip('v', 0, 40, 'video')])
@@ -132,6 +156,25 @@ describe('computeTimelineDuration', () => {
 
   it('空时间轴时长为 0', () => {
     expect(computeTimelineDuration(createDefaultTimeline())).toBe(0)
+  })
+
+  it('末尾文字 clip（标题卡/字幕）撑出时长，取轨道与文字的最大 endFrame', () => {
+    // 媒体轨最长 60，但片尾标题卡到 120 → 总时长应 120（而非 60）。
+    const base = timelineState([clip('i', 0, 60)])
+    const withTailTitle: TimelineState = {
+      ...base,
+      textClips: [{ id: 'tail', text: '完', style: 'title', startFrame: 90, endFrame: 120 }],
+    }
+    expect(computeTimelineDuration(withTailTitle)).toBe(120)
+  })
+
+  it('文字 clip 比媒体短时，时长仍取媒体轨最大值', () => {
+    const base = timelineState([clip('i', 0, 150)])
+    const withShortCaption: TimelineState = {
+      ...base,
+      textClips: [{ id: 'cap', text: 'hi', style: 'caption', startFrame: 0, endFrame: 30 }],
+    }
+    expect(computeTimelineDuration(withShortCaption)).toBe(150)
   })
 })
 
