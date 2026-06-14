@@ -36,7 +36,9 @@ import {
   archetypeModeSourceVideoSlot,
   currentArchetypeMode,
   readArchetypeArray,
+  referenceSlotStorage,
 } from './controls/archetypeMeta'
+import { resolveReferenceSlots } from '../runner/referenceSlots'
 import ModeBar from './controls/ModeBar'
 import AssetReference, { type AssetSlot } from '../../assets/AssetReference'
 import type { AssetRef } from '../../assets/assetTypes'
@@ -317,15 +319,29 @@ export default function NodeParameterControls({
     ...arraySlots.map((s): AssetSlot => ({ key: s.metaKey, label: s.label, accept: s.accept, form: 'array', persistAsEdge: false, numbered: s.numbered, max: s.max, caption: s.caption })),
     ...(sourceVideoSlot ? [{ key: sourceVideoSlot.metaKey, label: sourceVideoSlot.label, accept: 'video', form: 'single', persistAsEdge: false, numbered: false, max: 1 } as AssetSlot] : []),
   ]
+  // 档案节点：槽值统一由 resolveReferenceSlots（边 + 上传单一真相源）派生——这样连线参考在槽里
+  // 真的看得见（根治「显示读 meta、生成读边」分裂导致的「连线没用」）。按存储键回填到 assetValuesByKey。
+  // pending（连了边但源未生成/待抽帧）本片先不显示空位（占位态留 S4b）；非档案模型仍走旧启发式路径。
+  const resolvedFillUrlsByMetaKey = new Map<string, string[]>()
+  if (archMode) {
+    for (const rs of resolveReferenceSlots(node, nodes, edges)) {
+      const storage = referenceSlotStorage({ kind: rs.slotKind })
+      if (storage) resolvedFillUrlsByMetaKey.set(storage.metaKey, rs.fills.map((f) => f.url).filter((u): u is string => Boolean(u)))
+    }
+  }
   const assetValuesByKey: Record<string, string | string[]> = {}
   for (const s of imageUrlSlots) {
+    if (archMode && resolvedFillUrlsByMetaKey.has(s.key)) {
+      assetValuesByKey[s.key] = resolvedFillUrlsByMetaKey.get(s.key)![0] || ''
+      continue
+    }
     const edgeSource = getEdgeSourceForSlot(s.group, edges, node.id)
     const nodeRef = edgeSource || getSlotNodeRef(meta, s.key)
     const thumbNode = nodeRef ? nodes.find((n) => n.id === nodeRef) : undefined
     assetValuesByKey[s.key] = (thumbNode ? resultPreviewUrl(thumbNode) : null) || getSlotThumbUrl(meta, s.key, nodes) || readMeta(meta, s.key) || ''
   }
-  for (const s of arraySlots) assetValuesByKey[s.metaKey] = readArchetypeArray(meta, s.metaKey)
-  if (sourceVideoSlot) assetValuesByKey[sourceVideoSlot.metaKey] = readMeta(meta, sourceVideoSlot.metaKey) || ''
+  for (const s of arraySlots) assetValuesByKey[s.metaKey] = resolvedFillUrlsByMetaKey.get(s.metaKey) ?? readArchetypeArray(meta, s.metaKey)
+  if (sourceVideoSlot) assetValuesByKey[sourceVideoSlot.metaKey] = resolvedFillUrlsByMetaKey.get(sourceVideoSlot.metaKey)?.[0] || readMeta(meta, sourceVideoSlot.metaKey) || ''
 
   const handleAssetPick = (slot: AssetSlot, asset: AssetRef) => {
     if (slot.form === 'array') {
