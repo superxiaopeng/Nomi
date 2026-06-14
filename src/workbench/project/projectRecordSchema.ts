@@ -35,6 +35,7 @@ export const workbenchProjectSummarySchema = z.object({
   thumbnail: z.string().optional(),
   thumbnailUrls: z.array(z.string()).optional(),
   seedKey: z.string().min(1).optional(),
+  draft: z.boolean().optional(),
 })
 
 export const workbenchProjectPayloadSchema = z.object({
@@ -106,6 +107,12 @@ export type WorkbenchProjectSummary = {
    * 用户手动新建的项目无此字段。
    */
   seedKey?: string
+  /**
+   * 草稿态：新建空白零编辑项目的标记。首次真实保存即清除（promote 为持久态）。
+   * 启动 GC 只回收带此标记且 revision===0 的 native 空壳 → 库不再堆「未命名」垃圾（审计 P0-3）。
+   * example（有 seedKey）/打开文件夹（有 rootPath）/老项目都无此字段，GC 永不碰。
+   */
+  draft?: boolean
   /** 仅桌面端有；Web 端无文件夹概念，缺省按 native 处理。 */
   source?: WorkbenchProjectSource
   /** 仅桌面端有；项目真实根目录，用于打开 assets / exports 所在文件夹。 */

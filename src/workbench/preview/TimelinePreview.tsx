@@ -8,6 +8,9 @@ import { resolveActiveTextClipsAtFrame } from '../timeline/timelineMath'
 import { resolveTextBox, resolveOverlayTransform } from '../timeline/textLayout'
 import { TEXT_FONTS, DEFAULT_TEXT_FONT_ID } from '../timeline/textFonts'
 import { SCALE_MIN, SCALE_MAX } from '../timeline/overlayTransform'
+import { resolveClipFraming, clampFramingScale, type ClipFit } from '../timeline/clipFraming'
+import { framingToMediaStyle, mediaFitClass, framingOffsetFromDrag } from './previewMediaFraming'
+import { fitPreviewStageSize } from './previewStageLayout'
 import OverlaySelectionBox from './OverlaySelectionBox'
 import type { PreviewAspectRatio } from '../workbenchTypes'
 import { resolveVideoClipMediaTimeSeconds } from '../player/timelinePlayback'
@@ -34,10 +37,6 @@ function findClip(activeClips: TimelineClip[], type: TimelineClip['type']): Time
   return activeClips.find((clip) => clip.type === type) || null
 }
 
-const PREVIEW_MAX_STAGE_WIDTH = 1040
-
-type PreviewFitMode = 'contain' | 'cover'
-
 const PREVIEW_RATIOS: Array<{ value: PreviewAspectRatio; label: string; title: string; css: string; width: number; height: number }> = [
   { value: '16:9', label: '16:9', title: '横屏 / YouTube / B站', css: '16 / 9', width: 16, height: 9 },
   { value: '9:16', label: '9:16', title: '竖屏 / 短视频', css: '9 / 16', width: 9, height: 16 },
@@ -47,40 +46,6 @@ const PREVIEW_RATIOS: Array<{ value: PreviewAspectRatio; label: string; title: s
   { value: '4:3', label: '4:3', title: '传统横屏', css: '4 / 3', width: 4, height: 3 },
   { value: '21:9', label: '21:9', title: '电影宽屏', css: '21 / 9', width: 21, height: 9 },
 ]
-
-export function fitPreviewStageSize(params: {
-  containerWidth: number
-  containerHeight: number
-  ratioWidth: number
-  ratioHeight: number
-  maxWidth?: number
-}): { width: number; height: number } {
-  const containerWidth = Math.max(0, Number(params.containerWidth) || 0)
-  const containerHeight = Math.max(0, Number(params.containerHeight) || 0)
-  const ratioWidth = Math.max(1, Number(params.ratioWidth) || 1)
-  const ratioHeight = Math.max(1, Number(params.ratioHeight) || 1)
-  const maxWidth = Math.max(1, Number(params.maxWidth) || PREVIEW_MAX_STAGE_WIDTH)
-  if (containerWidth <= 0 || containerHeight <= 0) {
-    return { width: 0, height: 0 }
-  }
-
-  const ratio = ratioWidth / ratioHeight
-  let width = Math.min(containerWidth, maxWidth, containerHeight * ratio)
-  let height = width / ratio
-  if (height > containerHeight) {
-    height = containerHeight
-    width = height * ratio
-  }
-  return {
-    width: Math.max(1, Math.floor(width)),
-    height: Math.max(1, Math.floor(height)),
-  }
-}
-
-function clampPreviewScale(value: number): number {
-  if (!Number.isFinite(value)) return 1
-  return Math.max(0.25, Math.min(4, value))
-}
 
 // 控制条圆形小图标按钮的统一样式。关键：cursor/hover 用 `enabled:` 变体门控——
 // disabled 按钮仍会收到 :hover，旧写法的无条件 `cursor-pointer hover:bg…` 会让禁用态
@@ -100,10 +65,12 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
   const dragRef = React.useRef<{
     pointerId: number
+    clipId: string
     startX: number
     startY: number
-    originX: number
-    originY: number
+    // 拖动起点时的取景偏移（归一化分数），moveDrag 据此 + 像素位移/stage 尺寸算新偏移
+    originOffsetX: number
+    originOffsetY: number
   } | null>(null)
   // 当前在跑导出的 jobId（供进度区「取消」按钮调 exports.cancel）。exportApi 内部生成 jobId
   // 不直接回传 UI，故这里订阅导出事件、按当前项目相关性捕获（per-project 单 active 锁 →
@@ -111,9 +78,6 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const cancelJobIdRef = React.useRef('')
   const [canCancelExport, setCanCancelExport] = React.useState(false)
   const [stageSize, setStageSize] = React.useState<{ width: number; height: number } | null>(null)
-  const [mediaScale, setMediaScale] = React.useState(1)
-  const [mediaOffset, setMediaOffset] = React.useState({ x: 0, y: 0 })
-  const [fitMode, setFitMode] = React.useState<PreviewFitMode>('contain')
   const [exportStatus, setExportStatus] = React.useState<PreviewExportStatus>('idle')
   const [exportRatio, setExportRatio] = React.useState(0)
   const [playbackError, setPlaybackError] = React.useState('')
@@ -130,6 +94,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const selectTimelineTextClip = useWorkbenchStore((state) => state.selectTimelineTextClip)
   const selectedTextClipId = useWorkbenchStore((state) => state.selectedTextClipId)
   const setPreviewAspectRatio = useWorkbenchStore((state) => state.setPreviewAspectRatio)
+  const setTimelineClipFraming = useWorkbenchStore((state) => state.setTimelineClipFraming)
   const playing = useWorkbenchStore((state) => state.timelinePlaying)
   const setTimelinePlaying = useWorkbenchStore((state) => state.setTimelinePlaying)
   const setTimelinePlayhead = useWorkbenchStore((state) => state.setTimelinePlayhead)
@@ -140,6 +105,11 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const activeRatio = PREVIEW_RATIOS.find((ratio) => ratio.value === aspectRatio) || PREVIEW_RATIOS[0]
   const activeMediaKey = videoClip?.url || imageClip?.url || ''
   const hasMedia = Boolean(activeMediaKey)
+  // 取景 per-clip（P0-5）：控件作用于主媒体 clip（视频优先，z-2 在上）；渲染时各媒体用自己的 framing。
+  const framingClipId = (videoClip ?? imageClip)?.id ?? ''
+  const imageFraming = resolveClipFraming(imageClip ?? undefined)
+  const videoFraming = resolveClipFraming(videoClip ?? undefined)
+  const framing = videoClip ? videoFraming : imageFraming
   const isEmpty = timeline.tracks.every(t => t.clips.length === 0) && (timeline.textClips ?? []).length === 0
   const totalFrames = computeTimelineDuration(timeline)
   const currentSeconds = (playheadFrame / (timeline.fps || 30)).toFixed(1)
@@ -219,19 +189,15 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     return () => window.removeEventListener('resize', measure)
   }, [activeRatio.height, activeRatio.width])
 
-  React.useEffect(() => {
-    setMediaScale(1)
-    setMediaOffset({ x: 0, y: 0 })
-  }, [activeMediaKey, aspectRatio])
-
   const updateMediaScale = React.useCallback((delta: number) => {
-    setMediaScale((prev) => clampPreviewScale(prev + delta))
-  }, [])
+    if (!framingClipId) return
+    setTimelineClipFraming(framingClipId, { scale: clampFramingScale(framing.scale + delta) }, { commit: true })
+  }, [framingClipId, framing.scale, setTimelineClipFraming])
 
   const resetMediaTransform = React.useCallback(() => {
-    setMediaScale(1)
-    setMediaOffset({ x: 0, y: 0 })
-  }, [])
+    if (!framingClipId) return
+    setTimelineClipFraming(framingClipId, { scale: 1, offsetX: 0, offsetY: 0 }, { commit: true })
+  }, [framingClipId, setTimelineClipFraming])
 
   const addText = React.useCallback((style: 'caption' | 'title') => {
     const id = addTimelineTextClip(style, playheadFrame)
@@ -341,45 +307,49 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   }, [playheadFrame, playing, setTimelinePlayhead, setTimelinePlaying, timeline])
 
   const beginDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!hasMedia) return
+    if (!framingClipId) return
     if ((event.target as HTMLElement).closest('button')) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = {
       pointerId: event.pointerId,
+      clipId: framingClipId,
       startX: event.clientX,
       startY: event.clientY,
-      originX: mediaOffset.x,
-      originY: mediaOffset.y,
+      originOffsetX: framing.offsetX,
+      originOffsetY: framing.offsetY,
     }
-  }, [hasMedia, mediaOffset.x, mediaOffset.y])
+  }, [framingClipId, framing.offsetX, framing.offsetY])
+
+  // 拖动中 commit:false，松手 commit:true 落盘一次。
+  const applyDragOffset = React.useCallback((drag: NonNullable<typeof dragRef.current>, event: React.PointerEvent<HTMLDivElement>, commit: boolean) => {
+    if (!stageSize) return
+    const next = framingOffsetFromDrag(drag, { x: event.clientX - drag.startX, y: event.clientY - drag.startY }, stageSize)
+    setTimelineClipFraming(drag.clipId, next, { commit })
+  }, [stageSize, setTimelineClipFraming])
 
   const moveDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
-    setMediaOffset({
-      x: drag.originX + event.clientX - drag.startX,
-      y: drag.originY + event.clientY - drag.startY,
-    })
-  }, [])
+    applyDragOffset(drag, event, false)
+  }, [applyDragOffset])
 
   const endDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
+    applyDragOffset(drag, event, true)
     dragRef.current = null
     try {
       event.currentTarget.releasePointerCapture(event.pointerId)
     } catch {
       // ignore
     }
-  }, [])
+  }, [applyDragOffset])
 
-  const mediaStyle = {
-    transform: `translate(${mediaOffset.x}px, ${mediaOffset.y}px) scale(${mediaScale})`,
-  }
-  // 「适应」=contain（整画面内缩、留边）/「填充」=cover（铺满、裁边）。
-  // 之前 object-contain 写死，fitMode 改了没人消费 → 点了没效果，这里 derive 出来。
-  const objectFitClass = fitMode === 'cover' ? 'object-cover' : 'object-contain'
+  const imageStyle = framingToMediaStyle(imageFraming, stageSize)
+  const videoStyle = framingToMediaStyle(videoFraming, stageSize)
+  const imageFitClass = mediaFitClass(imageFraming)
+  const videoFitClass = mediaFitClass(videoFraming)
 
   // 文字叠加层（字幕/标题卡）：当前帧 active 的文字 clip，按 stage 像素几何摆放。
   const activeTextClips = resolveActiveTextClipsAtFrame(timeline, playheadFrame)
@@ -420,7 +390,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           hasMedia && 'cursor-grab active:cursor-grabbing',
         )}
         data-aspect-ratio={activeRatio.value}
-        data-fit-mode={fitMode}
+        data-fit-mode={framing.fit}
         data-has-media={hasMedia ? 'true' : 'false'}
         style={{
           aspectRatio: activeRatio.css,
@@ -468,8 +438,8 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           <img className={cn(
             'workbench-preview-player__image',
             'absolute inset-0 z-[1] w-full h-full bg-transparent select-none will-change-transform',
-            objectFitClass,
-          )} src={imageClip.url} alt={imageClip.label || ''} style={mediaStyle} />
+            imageFitClass,
+          )} src={imageClip.url} alt={imageClip.label || ''} style={imageStyle} />
         ) : null}
         {videoUrl ? (
           <video
@@ -477,13 +447,13 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             className={cn(
               'workbench-preview-player__video',
               'absolute inset-0 z-[2] w-full h-full bg-transparent select-none will-change-transform',
-              objectFitClass,
+              videoFitClass,
             )}
             src={videoPlaybackUrl}
             crossOrigin="use-credentials"
             muted
             playsInline
-            style={mediaStyle}
+            style={videoStyle}
             onError={() => {
               void diagnoseVideoPlaybackFailure(videoUrl, videoRef.current?.error || null).then((diagnostics) => {
                 logVideoPlaybackFailure(diagnostics)
@@ -521,6 +491,9 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
                 background: box.hasBackdrop ? 'color-mix(in oklch, var(--nomi-paper) 86%, transparent)' : 'transparent',
                 border: box.hasBackdrop ? '1px solid var(--nomi-line-soft)' : 'none',
                 borderRadius: 'var(--nomi-radius-md)',
+                // 折行契约：预览用 CSS 原生折行，导出 canvas 用 textLayout.wrapTextToWidth 复刻同一语义
+                // （white-space:pre-wrap + word-break:break-word ⇔ 显式换行 + 优先整词断 + 超长词逐字断）。
+                // 两端共用 box 几何（resolveTextBox）与内边距（0.32em/0.7em ↔ 导出 fontSize*1.4 budget），断行一致。
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }
@@ -639,12 +612,12 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           ariaLabel="画面适配"
           leadingLabel="显示"
           size="xs"
-          value={fitMode}
+          value={framing.fit}
           options={[
             { value: 'contain', label: '适应' },
             { value: 'cover', label: '填充' },
           ]}
-          onChange={(value) => setFitMode(value as PreviewFitMode)}
+          onChange={(value) => { if (framingClipId) setTimelineClipFraming(framingClipId, { fit: value as ClipFit }, { commit: true }) }}
         />
         <div className={cn(
           'workbench-preview-player__control-separator',
@@ -658,7 +631,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           <span className={cn(
             'workbench-preview-player__zoom-label',
             'min-w-[38px] text-[var(--workbench-muted)] text-[11px] font-bold tabular-nums text-center',
-          )} aria-label="当前缩放">{Math.round(mediaScale * 100)}%</span>
+          )} aria-label="当前缩放">{Math.round(framing.scale * 100)}%</span>
           <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
           <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
         </div>

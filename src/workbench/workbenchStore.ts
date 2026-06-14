@@ -8,11 +8,14 @@ import {
   nudgeClipById,
   removeClipById,
   removeClipsByIds,
+  removeClipsBySourceNodeIds,
   resizeClipEdge,
+  setClipFraming,
   setTimelinePlayheadFrame,
   setTimelineScale,
   splitClipAtFrame,
 } from './timeline/timelineEdit'
+import type { ClipFraming } from './timeline/clipFraming'
 import {
   addTextClip,
   moveTextClip,
@@ -30,6 +33,7 @@ import type { WorkbenchAiMessage } from './ai/workbenchAiTypes'
 import type { StoryboardPlan } from './generationCanvas/agent/storyboardPlan'
 import type { ComposerAttachment } from './ai/composer/composerAttachmentTypes'
 import { createConversationBuckets } from './aiConversationBuckets'
+import { abandonCreationTurn } from './creation/creationTurnController'
 
 // 创作面板会话「会话域」per-project 桶(S1 治串台)。
 // 注:messages 已迁出本桶,改由 conversationThreads 模型按项目寻址(会话历史,2026-06-14);
@@ -131,10 +135,17 @@ type WorkbenchState = {
   setTimelineSnapGuide: (guide: TimelineSnapGuide | null) => void
   removeTimelineClip: (clipId: string) => void
   removeSelectedTimelineClips: () => void
+  /**
+   * 删画布节点后的时间轴对账：移除所有引用这些 sourceNodeId 的 clip。
+   * 由 canvasNodeActions 的 deleteNode/deleteSelectedNodes 删完节点后调用（跨 store 最小耦合）。
+   */
+  reconcileTimelineForDeletedNodes: (nodeIds: readonly string[]) => void
   resizeTimelineClip: (clipId: string, edge: 'left' | 'right', deltaFrame: number) => void
   splitTimelineClip: (clipId: string, frame: number) => void
   duplicateTimelineClip: (clipId: string) => void
   nudgeTimelineClip: (clipId: string, deltaFrame: number) => void
+  /** 设置 clip 取景（适应/填充 + 缩放 + 平移）。拖动/连续缩放传 commit:false，落定 commit:true 落盘一次。 */
+  setTimelineClipFraming: (clipId: string, patch: Partial<ClipFraming>, options?: { commit?: boolean }) => void
   /** additive(shift/⌘)：在集合中切换；否则替换为单选。 */
   selectTimelineClip: (clipId: string, options?: { additive?: boolean }) => void
   setTimelineSelection: (clipIds: string[]) => void
@@ -288,6 +299,9 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
     set({ creationAssistantAutoOpen })
   },
   swapCreationAiProject: (prevId, nextId) => {
+    // 结构性保证:任何「创作区切项目」都先中止在途流式轮次(中止流 + 作废 token +
+    // 拒绝清空待批写卡),否则旧轮回调会把内容写进新项目、写卡弹到新项目面板。
+    abandonCreationTurn()
     const state = get()
     set({
       ...creationAiBuckets.swap(prevId, nextId, {
@@ -375,6 +389,21 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
         selectedTimelineClipIds: [],
         timelinePlaying: false,
         persistRevision: changed ? state.persistRevision + 1 : state.persistRevision,
+      }
+    })
+  },
+  reconcileTimelineForDeletedNodes: (nodeIds) => {
+    set((state) => {
+      const nextTimeline = removeClipsBySourceNodeIds(state.timeline, nodeIds)
+      if (nextTimeline === state.timeline) return state // 无悬空 clip → 不动、不触发自动保存
+      // 被移除的 clip 可能正被选中/正在播 → 一并收口，避免选区指向已删 clip
+      const liveClipIds = new Set(
+        nextTimeline.tracks.flatMap((track) => track.clips.map((clip) => clip.id)),
+      )
+      return {
+        timeline: nextTimeline,
+        selectedTimelineClipIds: state.selectedTimelineClipIds.filter((id) => liveClipIds.has(id)),
+        persistRevision: state.persistRevision + 1,
       }
     })
   },
@@ -512,6 +541,17 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
     const commit = options?.commit !== false
     set((state) => {
       const next = updateTextClipTransform(state.timeline, id, patch)
+      const changed = next !== state.timeline
+      return {
+        timeline: next,
+        persistRevision: commit && changed ? state.persistRevision + 1 : state.persistRevision,
+      }
+    })
+  },
+  setTimelineClipFraming: (clipId, patch, options) => {
+    const commit = options?.commit !== false
+    set((state) => {
+      const next = setClipFraming(state.timeline, clipId, patch)
       const changed = next !== state.timeline
       return {
         timeline: next,

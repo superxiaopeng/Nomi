@@ -66,6 +66,33 @@ describe('projectRepository workspace project creation', () => {
     expect('seedKey' in record).toBe(false)
   })
 
+  it('stamps draft:true on a freshly created blank project (no seedKey, no rootPath)', () => {
+    // 草稿态：新建空白零编辑会被启动 GC 回收。example（有 seedKey）/打开文件夹（有 rootPath）不打标记。
+    const create = vi.fn((record: unknown) => record)
+    mockedGetDesktopBridge.mockReturnValue({
+      platform: 'darwin',
+      workspace: {} as never,
+      projects: { create } as never,
+      cost: {} as never,
+      assets: {} as never,
+      exports: {} as never,
+      tasks: {} as never,
+      agents: {} as never,
+      modelCatalog: {} as never,
+    })
+
+    createLocalProject('新建空白')
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ draft: true }))
+
+    create.mockClear()
+    createLocalProject('示例', undefined, { seedKey: 'example:product-demo' })
+    expect(create).toHaveBeenCalledWith(expect.not.objectContaining({ draft: true }))
+
+    create.mockClear()
+    createLocalProject('外部', undefined, { rootPath: '/Users/me/Work/Folder' })
+    expect(create).toHaveBeenCalledWith(expect.not.objectContaining({ draft: true }))
+  })
+
   it('reads a workspace manifest record (version 2, nested payload) without throwing', () => {
     // Regression: the workspace folder migration writes version:2 manifests
     // (.nomi/project.json) with a nested payload + lastKnownRootPath. The
