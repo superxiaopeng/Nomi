@@ -3,6 +3,7 @@ import path from "node:path";
 import type { CoreMessage } from "ai";
 import { resolveWorkspaceProjectDir } from "../workspace/workspaceRepository";
 import { getSettingsRoot, getWorkspaceRepositoryDeps } from "../runtimePaths";
+import { projectIdFromSessionKey } from "../events/eventLogRepository";
 
 /**
  * 战线 A / 选项②（用户拍板 2026-06-13）：把「喂给模型的对话工作缓存」落盘，重启读回，实现逐字续聊。
@@ -22,13 +23,13 @@ type PersistedAgentSessions = {
   sessions: Record<string, CoreMessage[]>;
 };
 
-/** sessionKey 形如 `nomi:workbench:<projectId>:<area>`（per-area）；兼容老的无 area 后缀。 */
-function projectIdFromSessionKey(sessionKey: string): string | null {
+// area 后缀剥离收口到 eventLogRepository 的单一导出(P1 不留第二份正则)。
+// 差异: 本存储要持久化 local 桶(落 settings root),而 EventLog 把 local 视作 null(不落盘)——
+// 故 local 策略留在本消费者,area 剥离逻辑(易错的那部分)复用 canonical。
+function projectIdForSession(sessionKey: string): string | null {
   const key = String(sessionKey || "").trim();
-  const withArea = /^nomi:workbench:(.+):(?:creation|generation)$/.exec(key);
-  if (withArea) return withArea[1];
-  const legacy = /^nomi:workbench:(.+)$/.exec(key);
-  return legacy ? legacy[1] : null;
+  if (/^nomi:workbench:local(?::(?:creation|generation))?$/.test(key)) return "local";
+  return projectIdFromSessionKey(key);
 }
 
 // 默认按 projectId 解析项目目录；`local` 桶（未开项目）落 settings root，互不污染。
@@ -42,7 +43,7 @@ export function setAgentSessionDirResolverForTests(resolver: (projectId: string)
 }
 
 function sessionFilePath(sessionKey: string): string | null {
-  const projectId = projectIdFromSessionKey(sessionKey);
+  const projectId = projectIdForSession(sessionKey);
   if (!projectId) return null;
   const root = dirResolver(projectId);
   if (!root) return null;

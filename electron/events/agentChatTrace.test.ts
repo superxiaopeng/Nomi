@@ -17,7 +17,8 @@ import {
 
 let tmpRoot = "";
 const SESSION = "sess-1";
-const SESSION_KEY = "nomi:workbench:p1";
+// 用渲染层真实格式(带 :area 后缀,cdc433c 起)——曾用无后缀的 `nomi:workbench:p1` 掩盖了 trace 全丢的回归。
+const SESSION_KEY = "nomi:workbench:p1:generation";
 
 beforeEach(() => {
   tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "nomi-trace-"));
