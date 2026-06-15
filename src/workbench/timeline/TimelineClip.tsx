@@ -210,7 +210,7 @@ export default function TimelineClip({ clip }: TimelineClipProps): JSX.Element {
   const clipBaseClasses = cn(
     'workbench-timeline-clip',
     'absolute top-[5px] h-9 flex items-center gap-0 p-0',
-    'rounded text-[var(--workbench-ink)] text-[11px] font-medium',
+    'rounded text-[var(--workbench-ink)] text-micro font-medium',
     'shadow-[inset_0_1px_0_rgba(255,255,255,0.62)] cursor-grab select-none active:cursor-grabbing',
     clip.type === 'image' && 'border border-[color-mix(in_srgb,var(--workbench-accent)_22%,transparent)] bg-[var(--workbench-accent-soft)]',
     clip.type === 'video' && 'border border-[color-mix(in_srgb,var(--workbench-video)_24%,transparent)] bg-[var(--workbench-video-soft)]',
@@ -285,7 +285,7 @@ export default function TimelineClip({ clip }: TimelineClipProps): JSX.Element {
         <span className={cn(
           'workbench-timeline-clip__label',
           'relative z-[1] min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap',
-          'rounded-[3px] text-[var(--nomi-ink)] backdrop-blur-[8px]',
+          'rounded-nomi-sm text-[var(--nomi-ink)] backdrop-blur-[8px]',
           'self-end mt-auto mx-1 mb-1 px-[5px] py-0.5 bg-[color-mix(in_oklch,var(--nomi-paper)_72%,transparent)]',
         )}>{title}</span>
       ) : null}

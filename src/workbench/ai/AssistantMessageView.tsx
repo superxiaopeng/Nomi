@@ -3,7 +3,7 @@
 // 纯展示组件：各面板把自己的状态模型（创作 message.status / 画布「处理中...」哨兵）映射成下面的 props。
 import React from 'react'
 import { IconPlayerStopFilled } from '@tabler/icons-react'
-import { NomiLoadingMark, NomiLogoMark } from '../../design'
+import { NomiLoadingMark, NomiLogoMark, NomiWordmark } from '../../design'
 import { cn } from '../../utils/cn'
 import { NomiMarkdown } from '../common/NomiMarkdown'
 import { AiReplyActionButton } from './AiReplyActionButton'
@@ -17,7 +17,7 @@ function NomiIdentityRow(): JSX.Element {
   return (
     <div className={cn('flex items-center gap-1.5 mb-1')} data-assistant-identity="true">
       <NomiLogoMark size={16} />
-      <span className={cn('text-micro font-semibold text-nomi-ink-60 leading-none')}>Nomi</span>
+      <NomiWordmark fontSize={12} className="text-nomi-ink-60" />
     </div>
   )
 }

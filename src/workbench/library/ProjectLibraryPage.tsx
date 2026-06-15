@@ -1,7 +1,7 @@
 import React from 'react'
 import { IconArrowRight, IconFolderOpen, IconFolderShare, IconGift, IconMovie, IconPlayerPlay, IconPlugConnected, IconPlus, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { ActionCard, NomiLogoMark } from '../../design'
+import { ActionCard, NomiLogoMark, NomiWordmark } from '../../design'
 import { NomiImage } from '../../design/media'
 import type { LocalProjectSummary } from './localProjectStore'
 import { DEFAULT_TRY_NOW_EXAMPLE, type TryNowExample } from './tryNowExamples'
@@ -125,14 +125,14 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
   const showModelEntry = Boolean(onOpenModelCatalog) && !textModelMissing
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-nomi-bg text-nomi-ink font-nomi-sans text-[13px] leading-normal antialiased">
+    <div className="flex flex-col h-screen overflow-hidden bg-nomi-bg text-nomi-ink font-nomi-sans text-body-sm leading-normal antialiased">
       <main className="flex-1 overflow-y-auto px-14 pt-[60px] pb-20 flex flex-col gap-5">
 
         {/* ── Header：品牌 + 右上弱入口（模型接入） ── */}
         <section className="shrink-0 flex items-start justify-between gap-6 mb-1">
-          <h1 className="flex items-center gap-[11px] font-nomi-display text-[28px] font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
+          <h1 className="flex items-center gap-[11px] font-nomi-display text-display font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
             <NomiLogoMark size={28} />
-            <span>No<span className="text-nomi-accent">m</span>i 项目库</span>
+            <span><NomiWordmark /> 项目库</span>
           </h1>
           {showModelEntry ? (
             <button
@@ -239,7 +239,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                 data-model-banner="true"
               >
                 <div>
-                  <div className="text-[13px] font-semibold text-nomi-ink">文本模型未接入</div>
+                  <div className="text-body-sm font-semibold text-nomi-ink">文本模型未接入</div>
                   <div className="mt-0.5 text-caption text-nomi-ink-60">写故事、拆镜头都需要它；图片 / 视频模型可以等到生成前再接。</div>
                 </div>
                 <button
@@ -247,7 +247,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   onClick={onOpenModelCatalog}
                   className={cn(
                     'inline-flex items-center h-8 px-4 rounded-pill border-0 cursor-pointer font-inherit',
-                    'bg-nomi-ink text-nomi-paper text-[13px] font-medium transition-colors hover:bg-nomi-accent',
+                    'bg-nomi-ink text-nomi-paper text-body-sm font-medium transition-colors hover:bg-nomi-accent',
                   )}
                 >
                   接入文本模型
@@ -289,7 +289,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   <circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>
                 </svg>
                 <input
-                  className="flex-1 border-none bg-transparent font-inherit text-[13px] text-nomi-ink outline-none placeholder:text-[var(--nomi-ink-30)] [&::-webkit-search-cancel-button]:hidden"
+                  className="flex-1 border-none bg-transparent font-inherit text-body-sm text-nomi-ink outline-none placeholder:text-[var(--nomi-ink-30)] [&::-webkit-search-cancel-button]:hidden"
                   type="search"
                   placeholder="搜索项目"
                   aria-label="搜索项目"
@@ -349,9 +349,9 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                         <button
                           className={cn(
                             'absolute top-[9px] right-[9px] w-[30px] h-[30px] rounded-nomi-sm border-none',
-                            'bg-white/90 text-[#b42318] grid place-items-center cursor-pointer',
+                            'bg-white/90 text-workbench-danger grid place-items-center cursor-pointer',
                             'transition-[background,color] duration-150',
-                            'hover:bg-[#b42318] hover:text-white',
+                            'hover:bg-workbench-danger hover:text-white',
                           )}
                           type="button"
                           aria-label={`删除项目 ${project.name}`}
@@ -381,7 +381,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                     </div>
                     <div className="px-[13px] pt-[10px] pb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-nomi-ink truncate mb-0.5">{project.name}</div>
+                        <div className="text-body-sm font-medium text-nomi-ink truncate mb-0.5">{project.name}</div>
                         <div className="text-micro text-nomi-ink-40">{formatUpdatedAt(project.updatedAt)}</div>
                       </div>
                       {onRevealProjectFolder && project.rootPath ? (

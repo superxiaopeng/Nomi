@@ -521,7 +521,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     <section
       className={cn(
         'generation-canvas-v2',
-        'grid grid-rows-[minmax(0,1fr)] w-full h-full min-w-0 min-h-0 bg-[#f7f7f9] text-workbench-ink',
+        'grid grid-rows-[minmax(0,1fr)] w-full h-full min-w-0 min-h-0 bg-workbench-bg text-workbench-ink',
       )}
       aria-label="AI 影像创作画布"
       data-ready={isReady ? 'true' : undefined}
@@ -533,7 +533,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
               'generation-canvas-v2__provider-popover',
               'absolute top-4 right-4 z-[12] grid gap-[10px]',
               'w-[min(360px,calc(100vw-40px))] p-3',
-              'border border-workbench-border rounded-[12px]',
+              'border border-workbench-border rounded-nomi',
               'bg-white/[0.98] shadow-workbench-pop pointer-events-auto',
             )}
             onPointerDown={(event) => event.stopPropagation()}
@@ -560,7 +560,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
                 className={cn(
                   'h-[34px] min-w-0 px-[10px]',
                   'border border-workbench-border rounded-workbench-control',
-                  'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-[13px]',
+                  'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-body-sm',
                 )}
                 type="password"
                 value={apiKey}
@@ -577,7 +577,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
                 className={cn(
                   'h-[34px] min-w-0 px-[10px]',
                   'border border-workbench-border rounded-workbench-control',
-                  'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-[13px]',
+                  'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-body-sm',
                 )}
                 value={baseUrl}
                 placeholder={GENERATION_DEFAULT_BASE_URL}
@@ -665,7 +665,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
                 aria-label="选中区域操作"
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                <span className={cn('px-[6px] text-nomi-ink-60 text-[11px] whitespace-nowrap')}>{selectedCount} 个节点</span>
+                <span className={cn('px-[6px] text-nomi-ink-60 text-micro whitespace-nowrap')}>{selectedCount} 个节点</span>
                 <WorkbenchIconButton label="创建分组 (⌘G)" icon={<IconFolderPlus size={14} />} onClick={handleGroupSelectedNodes} />
                 <WorkbenchIconButton label="复制选中节点" icon={<IconCopy size={14} />} onClick={copySelectedNodes} />
                 <WorkbenchIconButton label="剪切选中节点" icon={<IconCut size={14} />} onClick={cutSelectedNodes} />

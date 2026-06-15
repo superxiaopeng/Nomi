@@ -515,7 +515,7 @@ function BaseGenerationNodeImpl({
                         "generation-canvas-v2-node__panorama-toolbar",
                         "absolute left-1/2 bottom-[calc(100%+18px)] z-[12]",
                         "inline-flex items-center gap-1 min-h-[44px] py-[5px] px-2",
-                        "border border-[rgba(18,24,38,0.08)] rounded-[14px]",
+                        "border border-[rgba(18,24,38,0.08)] rounded-nomi-lg",
                         "bg-white/[0.96] shadow-[0_12px_34px_rgba(18,24,38,0.14)]",
                         "-translate-x-1/2 backdrop-blur-[12px]",
                     )}
@@ -525,8 +525,8 @@ function BaseGenerationNodeImpl({
                     <button
                         className={cn(
                             "inline-flex items-center justify-center gap-[7px]",
-                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-[9px]",
-                            "bg-transparent text-nomi-ink-80 font-[inherit] text-[13px] leading-none whitespace-nowrap cursor-pointer",
+                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-nomi",
+                            "bg-transparent text-nomi-ink-80 font-[inherit] text-body-sm leading-none whitespace-nowrap cursor-pointer",
                             "hover:bg-nomi-ink-05 hover:text-nomi-ink",
                         )}
                         type='button'
@@ -537,8 +537,8 @@ function BaseGenerationNodeImpl({
                     <button
                         className={cn(
                             "inline-flex items-center justify-center gap-[7px]",
-                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-[9px]",
-                            "bg-transparent text-nomi-ink-80 font-[inherit] text-[13px] leading-none whitespace-nowrap cursor-pointer",
+                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-nomi",
+                            "bg-transparent text-nomi-ink-80 font-[inherit] text-body-sm leading-none whitespace-nowrap cursor-pointer",
                             "hover:bg-nomi-ink-05 hover:text-nomi-ink",
                         )}
                         type='button'
@@ -554,8 +554,8 @@ function BaseGenerationNodeImpl({
                     <label
                         className={cn(
                             "inline-flex items-center justify-center gap-[7px]",
-                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-[9px]",
-                            "bg-transparent text-nomi-ink-80 font-[inherit] text-[13px] leading-none whitespace-nowrap cursor-pointer",
+                            "min-w-0 min-h-[34px] px-[11px] border-0 rounded-nomi",
+                            "bg-transparent text-nomi-ink-80 font-[inherit] text-body-sm leading-none whitespace-nowrap cursor-pointer",
                             "hover:bg-nomi-ink-05 hover:text-nomi-ink",
                         )}>
                         <IconUpload size={16} stroke={1.8} />
@@ -600,8 +600,8 @@ function BaseGenerationNodeImpl({
                 {showStatusBadge ? (
                     <span
                         className={cn(
-                            "text-[10.5px] font-medium tracking-[0.06em] uppercase",
-                            "py-[3px] px-2 rounded-[4px] backdrop-blur-[8px]",
+                            "text-micro font-medium tracking-[0.06em] uppercase",
+                            "py-[3px] px-2 rounded-nomi-sm backdrop-blur-[8px]",
                             "bg-nomi-paper/[0.82] text-nomi-ink-60",
                             "data-[status=success]:text-workbench-success-ink data-[status=success]:bg-workbench-success-soft",
                             "data-[status=error]:text-workbench-danger data-[status=error]:bg-workbench-danger-soft",
@@ -741,7 +741,7 @@ function BaseGenerationNodeImpl({
                                 className={cn(
                                     "inline-flex items-center justify-center",
                                     "min-w-[156px] min-h-[48px] px-[18px]",
-                                    "text-nomi-ink-60 text-[13px] cursor-pointer",
+                                    "text-nomi-ink-60 text-body-sm cursor-pointer",
                                 )}
                                 onPointerDown={(event) =>
                                     event.stopPropagation()
@@ -861,7 +861,7 @@ function BaseGenerationNodeImpl({
                         className={cn(
                             "pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2",
                             "whitespace-nowrap rounded-full px-2.5 py-1.5",
-                            "bg-[rgba(18,24,38,0.92)] text-white text-[11px] font-medium leading-none",
+                            "bg-[rgba(18,24,38,0.92)] text-white text-micro font-medium leading-none",
                             "opacity-0 translate-x-[-4px] transition-[opacity,transform] duration-150",
                             "group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0",
                         )}>

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, HTMLAttributes } from 'react'
 import { cn } from '../utils/cn'
 
 type NomiBrandProps = {
@@ -30,6 +30,29 @@ type NomiStepperProps = {
   onChange: (mode: 'creation' | 'generation' | 'preview') => void
 }
 
+type NomiWordmarkProps = {
+  /** 字号 px；缺省则继承父级 font-size（如放进 h1 用 text-display）。 */
+  fontSize?: number
+  className?: string
+} & HTMLAttributes<HTMLSpanElement>
+
+/**
+ * Nomi 文字标志「No·m·i」的**唯一真相源**（P1）：中间的 m 永远 accent 色、Fraunces 字体。
+ * No/i 颜色由 className/父级控制（品牌处 text-nomi-ink、消息标签处可灰）；m 的 accent 是品牌不变量。
+ * 任何要显示「Nomi」字标的地方都用它，别再手写 `No<span>m</span>i`。
+ */
+export function NomiWordmark({ fontSize, className, ...rest }: NomiWordmarkProps): JSX.Element {
+  return (
+    <span
+      className={cn('nomi-wordmark', 'font-nomi-display font-normal tracking-[-0.02em] leading-none', className)}
+      style={fontSize ? { fontSize } : undefined}
+      {...rest}
+    >
+      No<span className={cn('nomi-wordmark__accent', 'text-nomi-accent')}>m</span>i
+    </span>
+  )
+}
+
 export function NomiBrand({ markSize = 26, wordSize = 17, className }: NomiBrandProps): JSX.Element {
   const rx = Math.round((markSize / 28) * 7)
 
@@ -48,9 +71,7 @@ export function NomiBrand({ markSize = 26, wordSize = 17, className }: NomiBrand
         <rect x="18.5" y="5.5" width="4" height="17" rx="1.2" fill="white" />
         <polygon points="9.5,5.5 13.5,5.5 18.5,22.5 14.5,22.5" fill="white" />
       </svg>
-      <span className={cn('nomi-brand__word', 'font-nomi-display font-normal tracking-[-0.02em] text-nomi-ink leading-none')} style={{ fontSize: wordSize }} aria-hidden="true">
-        No<span className={cn('nomi-brand__accent', 'text-nomi-accent')}>m</span>i
-      </span>
+      <NomiWordmark fontSize={wordSize} className="nomi-brand__word text-nomi-ink" aria-hidden="true" />
     </div>
   )
 }
@@ -90,9 +111,9 @@ export function NomiAILabel({ markSize = 22, wordSize = 14, className, suffix = 
   return (
     <div className={cn('nomi-ai-label', 'inline-flex items-center gap-2 shrink-0', className)} aria-label={`Nomi ${suffix}`}>
       <NomiLogoMark size={markSize} />
-      <span className={cn('nomi-ai-label__text', 'font-nomi-display font-normal tracking-[-0.02em] text-nomi-ink leading-none')} style={{ fontSize: wordSize }}>
-        No<span className={cn('nomi-ai-label__accent', 'text-nomi-accent')}>m</span>i
-        <span className={cn('nomi-ai-label__suffix', 'text-nomi-ink-60 tracking-[-0.01em]')}> {suffix}</span>
+      <span className={cn('nomi-ai-label__text', 'leading-none')} style={{ fontSize: wordSize }}>
+        <NomiWordmark className="nomi-ai-label__word text-nomi-ink" />
+        <span className={cn('nomi-ai-label__suffix', 'font-nomi-display text-nomi-ink-60 tracking-[-0.01em]')}> {suffix}</span>
       </span>
     </div>
   )
@@ -112,7 +133,7 @@ export function NomiStepper({ value, onChange }: NomiStepperProps): JSX.Element 
           key={tab.mode}
           className={cn(
             'nomi-stepper__step',
-            'inline-flex items-center px-3.5 py-[5px] border-0 rounded-full bg-transparent text-nomi-ink-60 font-inherit text-[13px] font-medium cursor-pointer',
+            'inline-flex items-center px-3.5 py-[5px] border-0 rounded-full bg-transparent text-nomi-ink-60 font-inherit text-body-sm font-medium cursor-pointer',
             'transition-[background,color,box-shadow] ease-nomi-fast',
             'hover:text-nomi-ink',
             'data-[state=active]:bg-nomi-paper data-[state=active]:text-nomi-ink data-[state=active]:shadow-nomi-sm',

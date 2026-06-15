@@ -43,7 +43,7 @@ export default function NodeItem({ node, active = false, depth = 0, onSelect, on
       data-active={active ? 'true' : 'false'}
       className={cn(
         'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-        'text-[11px] leading-tight border border-transparent',
+        'text-micro leading-tight border border-transparent',
         active
           ? 'bg-nomi-accent/10 text-nomi-accent border-nomi-accent/20'
           : 'text-nomi-ink-60 hover:bg-nomi-ink-05 hover:text-nomi-ink',
@@ -51,12 +51,12 @@ export default function NodeItem({ node, active = false, depth = 0, onSelect, on
       style={{ paddingLeft: `${8 + depth * 10}px` }}
       title={node.title || node.id}
     >
-      <span className="grid place-items-center h-4 w-4 shrink-0 rounded bg-nomi-ink-05 text-[9px] text-nomi-ink-50" aria-hidden>
+      <span className="grid place-items-center h-4 w-4 shrink-0 rounded bg-nomi-ink-05 text-micro text-nomi-ink-50" aria-hidden>
         {NODE_KIND_LABEL[node.kind] || '节'}
       </span>
       <span className="min-w-0 flex-1 truncate">{node.title || node.id}</span>
       {node.derivedFrom ? (
-        <span className="shrink-0 rounded-full bg-nomi-accent/10 px-1.5 py-0.5 text-[9px] text-nomi-accent" title="由其他节点派生">
+        <span className="shrink-0 rounded-full bg-nomi-accent/10 px-1.5 py-0.5 text-micro text-nomi-accent" title="由其他节点派生">
           ↩
         </span>
       ) : null}

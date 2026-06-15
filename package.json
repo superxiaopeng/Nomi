@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:build": "pnpm run build",
     "check:filesize": "node ./scripts/check-file-sizes.mjs",
+    "check:tokens": "node ./scripts/check-design-tokens.mjs",
     "check:audit": "node ./scripts/check-audit-cadence.mjs && node ./scripts/check-eval-cadence.mjs",
     "typecheck": "tsc -p tsconfig.app.json && tsc -p electron/tsconfig.json",
     "lint": "eslint .",

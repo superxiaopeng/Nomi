@@ -23,7 +23,7 @@ export default function NodeResultDownloadButton({ node, selected }: Props): JSX
         'generation-canvas-v2-node__panorama-toolbar',
         'absolute left-1/2 bottom-[calc(100%+18px)] z-[12]',
         'inline-flex items-center gap-1 min-h-[44px] py-[5px] px-2',
-        'border border-[rgba(18,24,38,0.08)] rounded-[14px]',
+        'border border-[rgba(18,24,38,0.08)] rounded-nomi-lg',
         'bg-white/[0.96] shadow-[0_12px_34px_rgba(18,24,38,0.14)]',
         '-translate-x-1/2 backdrop-blur-[12px]',
       )}
@@ -34,8 +34,8 @@ export default function NodeResultDownloadButton({ node, selected }: Props): JSX
       <button
         className={cn(
           'inline-flex items-center justify-center gap-[7px]',
-          'min-w-0 min-h-[34px] px-[11px] border-0 rounded-[9px]',
-          'bg-transparent text-nomi-ink-80 font-[inherit] text-[13px] leading-none whitespace-nowrap cursor-pointer',
+          'min-w-0 min-h-[34px] px-[11px] border-0 rounded-nomi',
+          'bg-transparent text-nomi-ink-80 font-[inherit] text-body-sm leading-none whitespace-nowrap cursor-pointer',
           'hover:bg-nomi-ink-05 hover:text-nomi-ink',
           'disabled:opacity-[0.45] disabled:cursor-wait',
         )}

@@ -25,10 +25,11 @@ Nomi：本地优先 AI 视频创作工作台。
 | `pnpm run lint:ci` | Lint + max-warnings=98 棘轮（新增 1 个 warning 即红）|
 | `pnpm run typecheck` | TypeScript 双向类型检查 |
 | `pnpm run check:filesize` | 巨壳文件门岗 |
+| `pnpm run check:tokens` | 设计 token 门岗（禁任意 px 字号/圆角、hex 色、默认色板；棘轮只减不增）|
 | `pnpm run check:audit` | 审计节奏提醒（≥25 commit 提示） |
 | `npx skills experimental_install` | 从 `skills-lock.json` 还原 `.claude/skills/`（换机/协作者用） |
 
-**Push 前必须全过**：`check:filesize` → `lint:ci` → `typecheck` → `test` → `build`
+**Push 前必须全过**：`check:filesize` → `check:tokens` → `lint:ci` → `typecheck` → `test` → `build`
 
 ## 五条核心原则
 
