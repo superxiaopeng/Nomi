@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ 下载最新版</strong></a>
   ·
+  <a href="https://nomiaqm.com">官网</a>
+  ·
   <a href="docs/user-guide.md">使用指南</a>
   ·
   <a href="https://github.com/aqm857886159/Nomi/issues/new/choose">反馈</a>
