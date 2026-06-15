@@ -12,7 +12,6 @@
  */
 import React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { IconRefresh, IconReplace } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { NomiBrand } from '../../design'
 
@@ -32,6 +31,9 @@ const CAPTIONS = [
   '排进时间轴，导出成片',
   '', // 标版段：slogan 已紧随 logo，不复用底部字幕位
 ] as const
+
+// 段 2/3 三张节点卡 label（蓝本：镜 1·开场 / 镜 2·特写 / 镜 3·收尾）。
+const NODE_LABELS = ['镜 1 · 开场', '镜 2 · 特写', '镜 3 · 收尾'] as const
 
 // 画布点阵背景（spec §3A：radial-gradient(var(--nomi-ink-20) 1px, transparent 1px) 20px）。
 const DOT_GRID: React.CSSProperties = {
@@ -195,6 +197,18 @@ export function SplashIntro({ onDone }: SplashIntroProps): JSX.Element {
               </motion.p>
             </AnimatePresence>
           </div>
+
+          {/* 底部 5 段进度点：当前及之前 accent，其余 tertiary（蓝本） */}
+          <div className="absolute bottom-7 left-0 right-0 flex justify-center gap-2">
+            {Array.from({ length: SCENE_COUNT }).map((_, i) => (
+              <span
+                key={i}
+                className={cn('rounded-pill transition-colors', i <= step ? 'bg-nomi-accent' : 'bg-nomi-ink-20')}
+                style={{ width: 'clamp(16px,1.4vw,22px)', height: '3px' }}
+                aria-hidden="true"
+              />
+            ))}
+          </div>
         </motion.div>
       ) : (
         // exit 期间保留覆盖层做淡出（leaving 后 AnimatePresence 走 exit）
@@ -238,10 +252,11 @@ function SceneCreationCard(): JSX.Element {
       animate={{ scale: 1 }}
       transition={{ duration: 0.5, ease: EASE }}
     >
+      {/* 顶部 3 个小方点：第 1 深(secondary)、后 2 浅(tertiary)，9px 圆角方 */}
       <div className="flex items-center gap-2 mb-[clamp(20px,2vw,32px)]">
-        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
-        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
-        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-60" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-30" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-30" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
       </div>
       <p
         className="font-nomi-display text-nomi-ink m-0 mb-[clamp(20px,2vw,32px)] leading-snug"
@@ -249,10 +264,11 @@ function SceneCreationCard(): JSX.Element {
       >
         把你的一句话…
       </p>
+      {/* 3 行文字线：宽 92%/78%/85%、secondary、高 3px 圆角 */}
       <div className="flex flex-col gap-[clamp(12px,1.1vw,18px)]">
-        <span className="rounded-pill bg-nomi-ink-10 w-full" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
-        <span className="rounded-pill bg-nomi-ink-10 w-5/6" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
-        <span className="rounded-pill bg-nomi-ink-10 w-3/5" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-30" style={{ width: '92%', height: 'clamp(10px,0.9vw,15px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-30" style={{ width: '78%', height: 'clamp(10px,0.9vw,15px)' }} />
+        <span className="rounded-nomi-sm bg-nomi-ink-30" style={{ width: '85%', height: 'clamp(10px,0.9vw,15px)' }} />
       </div>
     </motion.div>
   )
@@ -284,15 +300,16 @@ function NodeCard({ index, selected }: { index: number; selected: boolean }): JS
       transition={{ duration: 0.45, ease: EASE }}
     >
       {selected ? (
+        // chip 浮在中卡正上方、紧贴卡顶（蓝本：top≈-34px、left:50% translateX(-50%)、gap:6px）。
         <motion.div
           className="absolute left-1/2 -translate-x-1/2 flex items-center"
-          style={{ top: 'clamp(-22px,-1.6vw,-16px)', gap: 'clamp(6px,0.6vw,10px)' }}
+          style={{ top: 'clamp(-40px,-3vw,-30px)', gap: 'clamp(6px,0.6vw,8px)' }}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: EASE, delay: 0.18 }}
         >
-          <OpChip icon={<IconReplace size={14} stroke={1.8} />} label="切模型" />
-          <OpChip icon={<IconRefresh size={14} stroke={1.8} />} label="重生成" />
+          <OpChip glyph="◇" label="切模型" tone="accent" />
+          <OpChip glyph="↻" label="重生成" tone="secondary" />
         </motion.div>
       ) : null}
 
@@ -306,26 +323,37 @@ function NodeCard({ index, selected }: { index: number; selected: boolean }): JS
           <span className="rounded-nomi-sm bg-nomi-ink-10" style={{ width: 'clamp(28px,2.4vw,44px)', height: 'clamp(28px,2.4vw,44px)' }} aria-hidden="true" />
         </div>
         <div className="px-[clamp(12px,1.1vw,18px)] py-[clamp(10px,0.9vw,14px)]">
-          <p className="text-nomi-ink m-0" style={{ fontSize: 'clamp(13px,1.1vw,17px)' }}>镜 {index + 1}</p>
+          <p className="text-nomi-ink-60 m-0" style={{ fontSize: 'clamp(12px,1vw,15px)' }}>{NODE_LABELS[index]}</p>
         </div>
       </div>
     </motion.div>
   )
 }
 
-function OpChip({ icon, label }: { icon: React.ReactNode; label: string }): JSX.Element {
+/**
+ * 操作 pill（蓝本段 3）：bg-paper + border(accent/secondary) + 文字同色 + radius 999px。
+ * 文案用符号 + 文字「◇ 切模型」「↻ 重生成」，不换 Tabler 图标。
+ */
+function OpChip({ glyph, label, tone }: { glyph: string; label: string; tone: 'accent' | 'secondary' }): JSX.Element {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-pill bg-nomi-paper border border-nomi-line shadow-nomi-sm text-nomi-ink-60 whitespace-nowrap"
-      style={{ height: 'clamp(24px,2.2vw,32px)', paddingInline: 'clamp(8px,0.7vw,12px)', fontSize: 'clamp(11px,0.85vw,14px)' }}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-pill bg-nomi-paper border whitespace-nowrap',
+        tone === 'accent' ? 'border-nomi-accent text-nomi-accent' : 'border-nomi-line text-nomi-ink-60',
+      )}
+      style={{ paddingBlock: 'clamp(3px,0.3vw,5px)', paddingInline: 'clamp(9px,0.8vw,13px)', fontSize: 'clamp(11px,0.85vw,14px)' }}
     >
-      {icon}
+      <span aria-hidden="true">{glyph}</span>
       {label}
     </span>
   )
 }
 
-/** 4 时间轴轨：画面轨 + 声音轨，clip 块（中段 accent）。占满舞台大半宽。 */
+/**
+ * 4 时间轴（蓝本）：一张白卡内两行轨。
+ * 画面轨 = 正好 3 个等宽 clip，第 2 个(中间)=accent 半透明，余 secondary 灰；
+ * 声音轨 = 一条整轨(单块, tertiary 灰)，不拆 clip。
+ */
 function SceneTimeline(): JSX.Element {
   return (
     <motion.div
@@ -335,30 +363,38 @@ function SceneTimeline(): JSX.Element {
       animate={{ scale: 1 }}
       transition={{ duration: 0.5, ease: EASE }}
     >
-      <TimelineTrack label="画面" clips={[1, 1, 1.4, 0.8]} accentIndex={2} />
-      <TimelineTrack label="声音" clips={[2, 1.2]} accentIndex={-1} />
+      {/* 画面轨：3 等宽 clip，中间 accent 半透明 */}
+      <TimelineTrack label="画面">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className={cn('flex-1 h-full rounded-nomi-sm', i === 1 ? 'bg-nomi-accent' : 'bg-nomi-ink-20')}
+            initial={{ scaleX: 0.7, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: i === 1 ? 0.5 : 1 }}
+            transition={{ duration: 0.4, ease: EASE, delay: 0.1 + i * 0.07 }}
+          />
+        ))}
+      </TimelineTrack>
+      {/* 声音轨：一条整轨（tertiary 灰），不拆 clip */}
+      <TimelineTrack label="声音">
+        <motion.span
+          className="flex-1 h-full rounded-nomi-sm bg-nomi-ink-10"
+          initial={{ scaleX: 0.7, opacity: 0 }}
+          animate={{ scaleX: 1, opacity: 1 }}
+          transition={{ duration: 0.4, ease: EASE, delay: 0.24 }}
+        />
+      </TimelineTrack>
     </motion.div>
   )
 }
 
-function TimelineTrack({ label, clips, accentIndex }: { label: string; clips: number[]; accentIndex: number }): JSX.Element {
+function TimelineTrack({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
     <div className="flex items-center gap-[clamp(12px,1.2vw,20px)]">
       <span className="shrink-0 text-nomi-ink-40" style={{ width: 'clamp(34px,3vw,52px)', fontSize: 'clamp(11px,0.9vw,15px)' }}>{label}</span>
-      <div className="flex-1 flex items-center gap-[clamp(6px,0.6vw,10px)]" style={{ height: 'clamp(28px,2.8vh,48px)' }}>
-        {clips.map((w, i) => (
-          <motion.span
-            key={i}
-            className={cn(
-              'h-full rounded-nomi-sm',
-              i === accentIndex ? 'bg-nomi-accent' : 'bg-nomi-ink-10',
-            )}
-            style={{ flexGrow: w }}
-            initial={{ scaleX: 0.7, opacity: 0 }}
-            animate={{ scaleX: 1, opacity: 1 }}
-            transition={{ duration: 0.4, ease: EASE, delay: 0.1 + i * 0.07 }}
-          />
-        ))}
+      {/* 轨容器：clip 间距 4px、clip 高 14px（随视口放大） */}
+      <div className="flex-1 flex items-center gap-[clamp(4px,0.4vw,8px)]" style={{ height: 'clamp(14px,1.6vh,26px)' }}>
+        {children}
       </div>
     </div>
   )
