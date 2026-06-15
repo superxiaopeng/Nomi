@@ -29,6 +29,8 @@ import { getDesktopBridge } from "../desktop/bridge";
 import { listWorkbenchModelCatalogModels } from "./api/modelCatalogApi";
 import { useHasTextModel } from "./library/useHasTextModel";
 import { requestWorkbenchTour } from "./onboarding/workbenchTourState";
+import { SplashIntro } from "./onboarding/SplashIntro";
+import { hasSeenSplash, markSplashSeen } from "./onboarding/onboardingState";
 import { buildStudioUrl } from "../utils/appRoutes";
 import { openWorkspaceFromLibrary } from "./library/openWorkspaceFlow";
 import { lazyWithChunkBoundary } from "../ui/chunkBoundary";
@@ -106,6 +108,8 @@ export default function NomiStudioApp(): JSX.Element {
         React.useState(true);
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
     const [assetLibraryOpened, setAssetLibraryOpened] = React.useState(false);
+    // 首启开屏：仅首次未看过时自动放；看过后可经项目库「看看 Nomi」重看。
+    const [splashDone, setSplashDone] = React.useState(() => hasSeenSplash());
     const { hasTextModel, refresh: refreshModelStatus } = useHasTextModel();
     // 模型接入面板关闭后重查（用户可能刚接完模型 → 状态条/弱入口要立即翻面）
     React.useEffect(() => {
@@ -604,8 +608,17 @@ export default function NomiStudioApp(): JSX.Element {
                     onRevealProjectFolder={revealProjectFolder}
                     onTryExample={(example) => void tryExample(example)}
                     onOpenModelCatalog={() => setModelCatalogOpened(true)}
+                    onReplaySplash={() => setSplashDone(false)}
                     hasTextModel={hasTextModel}
                 />
+                {!splashDone ? (
+                    <SplashIntro
+                        onDone={() => {
+                            markSplashSeen();
+                            setSplashDone(true);
+                        }}
+                    />
+                ) : null}
                 {/* 模型接入面板也要在首页可用：全新安装零模型时，「30 秒体验」会派发
                     nomi-open-model-catalog 引导接入；之前此面板只挂在 studio 视图 →
                     首页派发事件无人响应，用户卡死（冷启动 J3 P0）。 */}
