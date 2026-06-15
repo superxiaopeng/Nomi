@@ -274,7 +274,7 @@ function SceneCreationCard(): JSX.Element {
   )
 }
 
-/** 2/3 画布节点卡行：点阵背景 + 3 张节点卡铺满舞台宽；selected 时中卡点亮 + 操作 chip。 */
+/** 2/3 画布节点卡行：点阵背景 + 3 张节点卡铺满舞台宽；selected 时中卡点亮（无操作 chip）。 */
 function SceneNodeRow({ selected }: { selected: boolean }): JSX.Element {
   return (
     <div className="relative w-full flex items-center justify-center py-[clamp(40px,5vh,72px)]">
@@ -299,20 +299,6 @@ function NodeCard({ index, selected }: { index: number; selected: boolean }): JS
       animate={{ y: selected ? -12 : 0 }}
       transition={{ duration: 0.45, ease: EASE }}
     >
-      {selected ? (
-        // chip 浮在中卡正上方、紧贴卡顶（蓝本：top≈-34px、left:50% translateX(-50%)、gap:6px）。
-        <motion.div
-          className="absolute left-1/2 -translate-x-1/2 flex items-center"
-          style={{ top: 'clamp(-40px,-3vw,-30px)', gap: 'clamp(6px,0.6vw,8px)' }}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: EASE, delay: 0.18 }}
-        >
-          <OpChip glyph="◇" label="切模型" tone="accent" />
-          <OpChip glyph="↻" label="重生成" tone="secondary" />
-        </motion.div>
-      ) : null}
-
       <div
         className={cn(
           'w-full bg-nomi-paper rounded-nomi overflow-hidden',
@@ -327,25 +313,6 @@ function NodeCard({ index, selected }: { index: number; selected: boolean }): JS
         </div>
       </div>
     </motion.div>
-  )
-}
-
-/**
- * 操作 pill（蓝本段 3）：bg-paper + border(accent/secondary) + 文字同色 + radius 999px。
- * 文案用符号 + 文字「◇ 切模型」「↻ 重生成」，不换 Tabler 图标。
- */
-function OpChip({ glyph, label, tone }: { glyph: string; label: string; tone: 'accent' | 'secondary' }): JSX.Element {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-pill bg-nomi-paper border whitespace-nowrap',
-        tone === 'accent' ? 'border-nomi-accent text-nomi-accent' : 'border-nomi-line text-nomi-ink-60',
-      )}
-      style={{ paddingBlock: 'clamp(3px,0.3vw,5px)', paddingInline: 'clamp(9px,0.8vw,13px)', fontSize: 'clamp(11px,0.85vw,14px)' }}
-    >
-      <span aria-hidden="true">{glyph}</span>
-      {label}
-    </span>
   )
 }
 
