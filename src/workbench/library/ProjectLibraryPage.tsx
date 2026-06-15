@@ -1,10 +1,10 @@
 import React from 'react'
-import { IconArrowRight, IconFolderOpen, IconFolderShare, IconGift, IconMovie, IconPlayerPlay, IconPlugConnected, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react'
+import { IconFolderOpen, IconFolderShare, IconMovie, IconPlugConnected, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { ActionCard, NomiLogoMark, NomiWordmark } from '../../design'
 import { NomiImage } from '../../design/media'
 import type { LocalProjectSummary } from './localProjectStore'
-import { DEFAULT_TRY_NOW_EXAMPLE, type TryNowExample } from './tryNowExamples'
+import { type TryNowExample } from './tryNowExamples'
 import type { ProjectTemplateId } from './projectTemplates'
 
 type Props = {
@@ -51,55 +51,7 @@ const ThumbnailMosaic = React.memo(function ThumbnailMosaic({ urls }: { urls: st
   return <NomiImage className="absolute inset-0 w-full h-full object-cover block" src={urls[0]} alt="" />
 }, (prev, next) => (prev.urls[0] || '') === (next.urls[0] || ''))
 
-const SECONDARY_PILL_CLASS = cn(
-  'inline-flex items-center gap-1.5 h-8 px-3 rounded-pill cursor-pointer font-inherit',
-  'border border-nomi-line bg-nomi-paper text-nomi-ink-80 text-body-sm transition-colors hover:border-nomi-ink-20',
-)
-
-// 「打开已有文件夹」弱化：新用户没有现成文件夹，降为无框文字链接，让主线「30 秒体验」+「新建空白」更突出。
-const WEAK_LINK_CLASS = cn(
-  'inline-flex items-center gap-1.5 h-8 px-1.5 rounded-pill border-0 bg-transparent cursor-pointer font-inherit',
-  'text-nomi-ink-40 text-body-sm transition-colors hover:text-nomi-ink-60',
-)
-
-// 空库 hero 的「文字 → 分镜 → 成品」示意条：一眼说明 app 把文字变成分镜再变成片，
-// 同时给空旷的首屏一个视觉锚点。纯占位图形（非真实素材），避免「这是什么项目」的误读。
-function StoryboardHintStrip(): JSX.Element {
-  const cardClass = 'w-28 shrink-0 bg-nomi-paper border border-nomi-line rounded-nomi-sm px-2.5 py-2.5 text-left'
-  const labelClass = 'text-micro text-nomi-ink-40 mb-1.5'
-  return (
-    <div className="flex items-center gap-2.5" aria-hidden="true">
-      <div className={cardClass}>
-        <div className={labelClass}>文字稿</div>
-        <div className="flex flex-col gap-1">
-          <div className="h-0.5 w-full rounded-pill bg-nomi-ink-20" />
-          <div className="h-0.5 w-3/4 rounded-pill bg-nomi-ink-20" />
-          <div className="h-0.5 w-1/2 rounded-pill bg-nomi-ink-20" />
-        </div>
-      </div>
-      <IconArrowRight size={15} stroke={1.6} className="shrink-0 text-nomi-ink-30" />
-      <div className={cardClass}>
-        <div className={labelClass}>分镜</div>
-        <div className="grid grid-cols-2 gap-0.5">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="aspect-video rounded-nomi-sm bg-nomi-ink-10" />
-          ))}
-        </div>
-      </div>
-      <IconArrowRight size={15} stroke={1.6} className="shrink-0 text-nomi-ink-30" />
-      <div className={cardClass}>
-        <div className={labelClass}>成品</div>
-        <div className="aspect-video rounded-nomi-sm bg-nomi-accent-soft grid place-items-center">
-          <span className="grid place-items-center size-5 rounded-pill bg-nomi-accent text-nomi-paper">
-            <IconPlayerPlay size={11} stroke={1.8} />
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onNewProject, onOpenFolder, onRevealProjectFolder, onTryExample, onOpenModelCatalog, onReplaySplash, hasTextModel = null, projects }: Props): JSX.Element {
+export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onNewProject, onOpenFolder, onRevealProjectFolder, onOpenModelCatalog, onReplaySplash, hasTextModel = null, projects }: Props): JSX.Element {
   const [query, setQuery] = React.useState('')
   const [sourceFilter, setSourceFilter] = React.useState<'all' | 'native' | 'folder'>('all')
   const normalizedQuery = query.trim().toLowerCase()
@@ -121,7 +73,6 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
     { id: 'native', label: '本地新建', count: sourceCounts.native },
     { id: 'folder', label: '外部文件夹', count: sourceCounts.folder },
   ]
-  const isEmptyLibrary = projects.length === 0
   const textModelMissing = hasTextModel === false
   // 单一入口互斥：缺文本模型时弱入口隐藏，模型入口 = 状态条（有项目）/ 主 CTA 自动带入（空库）
   const showModelEntry = Boolean(onOpenModelCatalog) && !textModelMissing
@@ -169,65 +120,9 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
           </div>
         </section>
 
-        {isEmptyLibrary ? (
-          /* ── 空库 = 引导态：单主线「30 秒体验」，库非空后此态永久消失 ── */
-          <section className="flex-1 grid place-items-center py-12" aria-label="开始使用">
-            <div className="max-w-[480px] flex flex-col items-center gap-4 text-center">
-              <h2 data-hero-title="true" className="m-0 font-nomi-display text-h1 font-medium tracking-[-0.018em] text-nomi-ink">
-                把一段文字，变成可生成的分镜
-              </h2>
-              <p className="m-0 text-body-sm text-nomi-ink-60">用一个示例项目，30 秒走完 创作 → 生成 → 预览。</p>
-              <StoryboardHintStrip />
-              {onTryExample ? (
-                <div className="flex items-center gap-2.5 mt-1.5">
-                  <button
-                    type="button"
-                    data-try-now-hero-cta="true"
-                    onClick={() => onTryExample(DEFAULT_TRY_NOW_EXAMPLE)}
-                    className={cn(
-                      'inline-flex items-center gap-2 h-9 px-5 rounded-pill border-0 cursor-pointer font-inherit',
-                      'bg-nomi-ink text-nomi-paper text-body font-medium transition-colors hover:bg-nomi-accent',
-                    )}
-                  >
-                    <IconPlayerPlay size={15} stroke={1.8} aria-hidden="true" />
-                    30 秒体验
-                  </button>
-                  <span
-                    className="inline-flex items-center gap-1 h-6 px-2.5 rounded-pill bg-nomi-accent-soft text-nomi-accent text-caption font-medium"
-                    data-free-badge="true"
-                  >
-                    <IconGift size={13} stroke={1.6} aria-hidden="true" />
-                    免费 · 无需绑卡
-                  </span>
-                </div>
-              ) : null}
-              {textModelMissing ? (
-                <p className="m-0 text-caption text-nomi-ink-40" data-model-hint="true">
-                  体验时引导你连接 AI 服务（用你自己的 Key，Nomi 不另收费）。
-                </p>
-              ) : null}
-              <div className="w-full grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-micro text-nomi-ink-30" aria-hidden="true">
-                <span className="h-px bg-nomi-line" />
-                <span>或</span>
-                <span className="h-px bg-nomi-line" />
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => onNewProject()} className={SECONDARY_PILL_CLASS}>
-                  <IconPlus size={15} stroke={1.8} aria-hidden="true" />
-                  新建空白项目
-                </button>
-                {onOpenFolder ? (
-                  <button type="button" onClick={onOpenFolder} className={WEAK_LINK_CLASS}>
-                    <IconFolderOpen size={15} stroke={1.6} aria-hidden="true" />
-                    打开已有文件夹
-                  </button>
-                ) : null}
-              </div>
-              <p className="m-0 text-caption text-nomi-ink-40">项目保存在本地：新建到 Nomi Projects，或直接绑定你已有的文件夹。</p>
-            </div>
-          </section>
-        ) : (
-          <>
+        {/* 进来直接落项目库：空库与有项目走同一套布局（新建空白/打开文件夹 + 最近项目，空库显空态）。
+            产品理念交给开屏动画 + 顶栏「上手」引导，不再来一整屏介绍页。 */}
+        <>
             {/* ── 主入口：动作卡片（O2 拍板，尺寸/形态/位置三重区隔） ── */}
             <section className="shrink-0 flex items-center gap-3" aria-label="开始一个项目">
               <ActionCard
@@ -427,7 +322,6 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
               })}
             </div>
           </>
-        )}
 
       </main>
     </div>
