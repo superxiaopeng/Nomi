@@ -1,7 +1,7 @@
 import React from 'react'
 import { IconArrowRight, IconFolderOpen, IconFolderShare, IconGift, IconMovie, IconPlayerPlay, IconPlugConnected, IconPlus, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { ActionCard, NomiLogoMark } from '../../design'
+import { ActionCard, NomiLogoMark, NomiWordmark } from '../../design'
 import { NomiImage } from '../../design/media'
 import type { LocalProjectSummary } from './localProjectStore'
 import { DEFAULT_TRY_NOW_EXAMPLE, type TryNowExample } from './tryNowExamples'
@@ -132,7 +132,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
         <section className="shrink-0 flex items-start justify-between gap-6 mb-1">
           <h1 className="flex items-center gap-[11px] font-nomi-display text-display font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
             <NomiLogoMark size={28} />
-            <span>No<span className="text-nomi-accent">m</span>i 项目库</span>
+            <span><NomiWordmark /> 项目库</span>
           </h1>
           {showModelEntry ? (
             <button
