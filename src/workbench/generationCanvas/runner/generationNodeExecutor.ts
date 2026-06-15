@@ -1,6 +1,7 @@
 import type { GenerationCanvasEdge, GenerationCanvasNode, GenerationNodeResult } from '../model/generationCanvasTypes'
 import type { CatalogTaskActionOptions } from './catalogTaskResolve'
 import { getGenerationNodeExecutionKind } from '../model/generationNodeKinds'
+import { generateAudio } from './audioActions'
 import { generateImage } from './imageActions'
 import { resolveGenerationReferences } from './generationReferenceResolver'
 import { generateText } from './textActions'
@@ -31,6 +32,10 @@ export const generationNodeExecutor: GenerationNodeExecutor = async (node, conte
   }
   if (executionKind === 'text') {
     return generateText(node, onProgress ? { onProgress } : undefined)
+  }
+  if (executionKind === 'audio') {
+    const references = resolveGenerationReferences(node, context)
+    return generateAudio(node, { references, ...(onProgress ? { onProgress } : {}) })
   }
   throw new Error(`${node.kind} generation is not implemented yet`)
 }
