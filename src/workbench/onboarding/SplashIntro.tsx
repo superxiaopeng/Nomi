@@ -24,12 +24,13 @@ const EASE = [0.22, 1, 0.36, 1] as const
 const SCENE_MS = 2600
 const SCENE_COUNT = 5
 
+// 中段（1-4）字幕在底部逐段淡入；第 5 段标版自带 slogan，故底部留空（见 SceneBrand）。
 const CAPTIONS = [
   '从你的一句话开始',
   '几秒，铺成一张分镜画布',
   '每一格，你说了算',
   '排进时间轴，导出成片',
-  'AI 起草，你定稿',
+  '', // 标版段：slogan 已紧随 logo，不复用底部字幕位
 ] as const
 
 // 画布点阵背景（spec §3A：radial-gradient(var(--nomi-ink-20) 1px, transparent 1px) 20px）。
@@ -159,8 +160,11 @@ export function SplashIntro({ onDone }: SplashIntroProps): JSX.Element {
             跳过 ›
           </button>
 
-          {/* 舞台 */}
-          <div className="relative flex items-center justify-center w-full max-w-[760px] h-[360px] px-10">
+          {/* 舞台：相对视口大尺寸，元素铺开占满，留白克制（草稿 v4）。 */}
+          <div
+            className="relative flex items-center justify-center w-full px-[6vw]"
+            style={{ maxWidth: 'min(1180px, 82vw)', height: 'min(560px, 56vh)' }}
+          >
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -175,12 +179,13 @@ export function SplashIntro({ onDone }: SplashIntroProps): JSX.Element {
             </AnimatePresence>
           </div>
 
-          {/* 字幕 */}
+          {/* 字幕（中段 1-4 底部；标版段为空字符串故不渲染文字） */}
           <div className="absolute bottom-[9%] left-0 right-0 flex justify-center px-10">
             <AnimatePresence mode="wait">
               <motion.p
                 key={step}
-                className="text-body text-nomi-ink-60 text-center m-0"
+                className="text-nomi-ink-60 text-center m-0 leading-snug"
+                style={{ fontSize: 'clamp(15px, 1.6vw, 24px)' }}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
@@ -223,38 +228,43 @@ function SplashScene({ step }: { step: number }): JSX.Element {
   }
 }
 
-/** 1 创作卡：编辑器抽象——工具点 + Fraunces 标题 + 文字行。 */
+/** 1 创作卡：编辑器抽象——工具点 + Fraunces 标题 + 文字行。占满舞台大半宽。 */
 function SceneCreationCard(): JSX.Element {
   return (
     <motion.div
-      className="w-full max-w-[420px] bg-nomi-paper border border-nomi-line rounded-nomi shadow-nomi-md p-6"
+      className="w-full bg-nomi-paper border border-nomi-line rounded-nomi-lg shadow-nomi-md"
+      style={{ maxWidth: 'min(720px, 68vw)', padding: 'clamp(28px, 3.2vw, 52px)' }}
       initial={{ scale: 0.96 }}
       animate={{ scale: 1 }}
       transition={{ duration: 0.5, ease: EASE }}
     >
-      <div className="flex items-center gap-1.5 mb-5">
-        <span className="size-2 rounded-pill bg-nomi-ink-20" />
-        <span className="size-2 rounded-pill bg-nomi-ink-20" />
-        <span className="size-2 rounded-pill bg-nomi-ink-20" />
+      <div className="flex items-center gap-2 mb-[clamp(20px,2vw,32px)]">
+        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
+        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
+        <span className="rounded-pill bg-nomi-ink-20" style={{ width: 'clamp(8px,0.7vw,12px)', height: 'clamp(8px,0.7vw,12px)' }} />
       </div>
-      <p className="font-nomi-display text-title text-nomi-ink m-0 mb-5 leading-snug">
+      <p
+        className="font-nomi-display text-nomi-ink m-0 mb-[clamp(20px,2vw,32px)] leading-snug"
+        style={{ fontSize: 'clamp(24px, 3vw, 48px)' }}
+      >
         把你的一句话…
       </p>
-      <div className="flex flex-col gap-2.5">
-        <span className="h-2 rounded-pill bg-nomi-ink-10 w-full" />
-        <span className="h-2 rounded-pill bg-nomi-ink-10 w-5/6" />
-        <span className="h-2 rounded-pill bg-nomi-ink-10 w-3/5" />
+      <div className="flex flex-col gap-[clamp(12px,1.1vw,18px)]">
+        <span className="rounded-pill bg-nomi-ink-10 w-full" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
+        <span className="rounded-pill bg-nomi-ink-10 w-5/6" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
+        <span className="rounded-pill bg-nomi-ink-10 w-3/5" style={{ height: 'clamp(10px,0.9vw,15px)' }} />
       </div>
     </motion.div>
   )
 }
 
-/** 2/3 画布节点卡行：点阵背景 + 3 张节点卡；selected 时中卡点亮 + 操作 chip。 */
+/** 2/3 画布节点卡行：点阵背景 + 3 张节点卡铺满舞台宽；selected 时中卡点亮 + 操作 chip。 */
 function SceneNodeRow({ selected }: { selected: boolean }): JSX.Element {
   return (
-    <div className="relative w-full flex items-center justify-center py-6">
+    <div className="relative w-full flex items-center justify-center py-[clamp(40px,5vh,72px)]">
       <div className="absolute inset-0 rounded-nomi-lg opacity-70" style={DOT_GRID} aria-hidden="true" />
-      <div className="relative flex items-center justify-center gap-4">
+      {/* 卡间距与卡宽随视口放大；上方留 chip 浮出空间，不裁剪。 */}
+      <div className="relative w-full flex items-stretch justify-center" style={{ gap: 'clamp(16px,2vw,36px)' }}>
         {[0, 1, 2].map((i) => (
           <NodeCard key={i} index={i} selected={selected && i === 1} />
         ))}
@@ -265,51 +275,62 @@ function SceneNodeRow({ selected }: { selected: boolean }): JSX.Element {
 
 function NodeCard({ index, selected }: { index: number; selected: boolean }): JSX.Element {
   return (
+    // 外层不裁剪（chip 上浮要留空间）；圆角裁剪只落在内部缩略图块上。
     <motion.div
-      className={cn(
-        'relative w-[176px] bg-nomi-paper rounded-nomi overflow-hidden',
-        selected ? 'border-2 border-nomi-accent shadow-nomi-md' : 'border border-nomi-line',
-      )}
+      className="relative flex-1"
+      style={{ maxWidth: 'min(300px, 22vw)' }}
       initial={{ y: 0 }}
-      animate={{ y: selected ? -10 : 0 }}
+      animate={{ y: selected ? -12 : 0 }}
       transition={{ duration: 0.45, ease: EASE }}
     >
-      <div className="aspect-video bg-nomi-ink-05 grid place-items-center">
-        <span className="size-7 rounded-nomi-sm bg-nomi-ink-10" aria-hidden="true" />
-      </div>
-      <div className="px-3 py-2.5">
-        <p className="text-caption text-nomi-ink m-0">镜 {index + 1}</p>
-      </div>
-
       {selected ? (
         <motion.div
-          className="absolute -top-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5"
+          className="absolute left-1/2 -translate-x-1/2 flex items-center"
+          style={{ top: 'clamp(-22px,-1.6vw,-16px)', gap: 'clamp(6px,0.6vw,10px)' }}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: EASE, delay: 0.18 }}
         >
-          <OpChip icon={<IconReplace size={12} stroke={1.8} />} label="切模型" />
-          <OpChip icon={<IconRefresh size={12} stroke={1.8} />} label="重生成" />
+          <OpChip icon={<IconReplace size={14} stroke={1.8} />} label="切模型" />
+          <OpChip icon={<IconRefresh size={14} stroke={1.8} />} label="重生成" />
         </motion.div>
       ) : null}
+
+      <div
+        className={cn(
+          'w-full bg-nomi-paper rounded-nomi overflow-hidden',
+          selected ? 'border-2 border-nomi-accent shadow-nomi-md' : 'border border-nomi-line',
+        )}
+      >
+        <div className="aspect-video bg-nomi-ink-05 grid place-items-center">
+          <span className="rounded-nomi-sm bg-nomi-ink-10" style={{ width: 'clamp(28px,2.4vw,44px)', height: 'clamp(28px,2.4vw,44px)' }} aria-hidden="true" />
+        </div>
+        <div className="px-[clamp(12px,1.1vw,18px)] py-[clamp(10px,0.9vw,14px)]">
+          <p className="text-nomi-ink m-0" style={{ fontSize: 'clamp(13px,1.1vw,17px)' }}>镜 {index + 1}</p>
+        </div>
+      </div>
     </motion.div>
   )
 }
 
 function OpChip({ icon, label }: { icon: React.ReactNode; label: string }): JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1 h-6 px-2 rounded-pill bg-nomi-paper border border-nomi-line shadow-nomi-sm text-micro text-nomi-ink-60">
+    <span
+      className="inline-flex items-center gap-1 rounded-pill bg-nomi-paper border border-nomi-line shadow-nomi-sm text-nomi-ink-60 whitespace-nowrap"
+      style={{ height: 'clamp(24px,2.2vw,32px)', paddingInline: 'clamp(8px,0.7vw,12px)', fontSize: 'clamp(11px,0.85vw,14px)' }}
+    >
       {icon}
       {label}
     </span>
   )
 }
 
-/** 4 时间轴轨：画面轨 + 声音轨，clip 块（中段 accent）。 */
+/** 4 时间轴轨：画面轨 + 声音轨，clip 块（中段 accent）。占满舞台大半宽。 */
 function SceneTimeline(): JSX.Element {
   return (
     <motion.div
-      className="w-full max-w-[460px] bg-nomi-paper border border-nomi-line rounded-nomi shadow-nomi-md p-5 flex flex-col gap-3"
+      className="w-full bg-nomi-paper border border-nomi-line rounded-nomi-lg shadow-nomi-md flex flex-col gap-[clamp(12px,1.2vw,20px)]"
+      style={{ maxWidth: 'min(760px, 70vw)', padding: 'clamp(20px,2.2vw,36px)' }}
       initial={{ scale: 0.96 }}
       animate={{ scale: 1 }}
       transition={{ duration: 0.5, ease: EASE }}
@@ -322,9 +343,9 @@ function SceneTimeline(): JSX.Element {
 
 function TimelineTrack({ label, clips, accentIndex }: { label: string; clips: number[]; accentIndex: number }): JSX.Element {
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-8 shrink-0 text-micro text-nomi-ink-40">{label}</span>
-      <div className="flex-1 flex items-center gap-1.5 h-7">
+    <div className="flex items-center gap-[clamp(12px,1.2vw,20px)]">
+      <span className="shrink-0 text-nomi-ink-40" style={{ width: 'clamp(34px,3vw,52px)', fontSize: 'clamp(11px,0.9vw,15px)' }}>{label}</span>
+      <div className="flex-1 flex items-center gap-[clamp(6px,0.6vw,10px)]" style={{ height: 'clamp(28px,2.8vh,48px)' }}>
         {clips.map((w, i) => (
           <motion.span
             key={i}
@@ -343,16 +364,41 @@ function TimelineTrack({ label, clips, accentIndex }: { label: string; clips: nu
   )
 }
 
-/** 5 标版：真 NomiBrand（深圆角块 + 两白竖条）+ Fraunces「Nomi」+ slogan。 */
+/** 5 标版：真 NomiBrand（mark + Fraunces「Nomi」字标）+ slogan 紧随其下，整组垂直居中。 */
 function SceneBrand(): JSX.Element {
+  // NomiBrand 只接受 px 数值；按视口实测推一个大尺寸（min(96, 7vmin)），让标版随全屏放大。
+  const { markSize, wordSize } = useBrandSize()
   return (
     <motion.div
-      className="flex flex-col items-center gap-4"
+      className="flex flex-col items-center"
+      style={{ gap: 'clamp(16px, 1.8vw, 28px)' }}
       initial={{ opacity: 0, scale: 0.94 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.6, ease: EASE }}
     >
-      <NomiBrand markSize={52} wordSize={40} />
+      <NomiBrand markSize={markSize} wordSize={wordSize} />
+      <p
+        className="text-nomi-ink-60 text-center m-0 tracking-[0.04em]"
+        style={{ fontSize: 'clamp(15px, 1.6vw, 24px)' }}
+      >
+        AI 起草，你定稿
+      </p>
     </motion.div>
   )
+}
+
+/** 据视口实测推标版尺寸（mark 约 7vmin、clamp 56–96px；字标按比例），随窗口变化重算。 */
+function useBrandSize(): { markSize: number; wordSize: number } {
+  const compute = React.useCallback((): number => {
+    if (typeof window === 'undefined') return 72
+    const vmin = Math.min(window.innerWidth, window.innerHeight)
+    return Math.round(Math.max(56, Math.min(96, vmin * 0.09)))
+  }, [])
+  const [markSize, setMarkSize] = React.useState(compute)
+  React.useEffect(() => {
+    const onResize = () => setMarkSize(compute())
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [compute])
+  return { markSize, wordSize: Math.round(markSize * 0.82) }
 }
