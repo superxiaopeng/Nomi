@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 import { resolveFfmpegPath } from "./ffmpegRunner";
+import { ensureExecutable } from "./ensureExecutable";
 
 export type MediaProbeMetadata = {
   kind: "image" | "video" | "audio" | "unknown";
@@ -203,6 +204,7 @@ function resolveFfprobePath(explicitFfprobePath?: string, explicitFfmpegPath?: s
 
 function defaultRunProcess(command: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    ensureExecutable(command);
     const child = spawn(command, args, { windowsHide: true });
     let stdout = "";
     let stderr = "";
