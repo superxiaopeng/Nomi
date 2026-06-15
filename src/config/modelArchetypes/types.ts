@@ -48,7 +48,7 @@ export type ArchetypeIntent = "text" | "single" | "firstlast" | "character" | "e
  * 视频档案所有模式同一个值（供应商按 model enum 自分流）；图像档案的文生图/改图 taskKind 不同，
  * 由各模式的 `ArchetypeMode.transportTaskKind` 覆盖档案级值。
  */
-export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video" | "text_to_image" | "image_edit";
+export type ArchetypeTransportTaskKind = "text_to_video" | "image_to_video" | "text_to_image" | "image_edit" | "text_to_audio" | "transcribe";
 
 export type ArchetypeMode = {
   id: string;

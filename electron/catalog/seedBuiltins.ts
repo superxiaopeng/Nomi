@@ -33,6 +33,7 @@ import { KLING_3_I2V_MAPPING, KLING_3_MODEL_SEED, KLING_3_T2V_MAPPING } from "./
 import { APIMART_VENDOR_SEED } from "./apimartVendor";
 import { APIMART_IMAGE_MODELS, APIMART_IMAGE_QUERY, APIMART_IMAGE_STATUS } from "./apimartImages";
 import { APIMART_VIDEO_MODELS, APIMART_VIDEO_QUERY, APIMART_VIDEO_STATUS } from "./apimartVideos";
+import { APIMART_AUDIO_MODELS } from "./apimartAudios";
 
 /** curated 模型/mapping 的内部类型（reconcile 两函数的输入）。 */
 type CuratedModel = { modelKey: string; labelZh: string; kind: Model["kind"]; archetypeId?: string };
@@ -88,6 +89,7 @@ const KIE_CURATED_MAPPINGS: CuratedMapping[] = [
 const APIMART_CURATED_MODELS: CuratedModel[] = [
   ...APIMART_IMAGE_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId })),
   ...APIMART_VIDEO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "video" as const, archetypeId: m.archetypeId })),
+  ...APIMART_AUDIO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: m.kind, archetypeId: m.archetypeId })),
 ];
 const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
   ...APIMART_IMAGE_MODELS.flatMap((m) =>
@@ -100,6 +102,12 @@ const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
     m.mappings.map((mp) => ({
       id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
       create: mp.create, query: APIMART_VIDEO_QUERY, statusMapping: APIMART_VIDEO_STATUS,
+    })),
+  ),
+  // 音频同步族：无 query / 无 statusMapping（响应即结果，runtime 第四路收口）。
+  ...APIMART_AUDIO_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name, create: mp.create,
     })),
   ),
 ];

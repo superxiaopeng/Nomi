@@ -169,7 +169,7 @@ export function resolveTaskKind(node: GenerationCanvasNode, references: Partial<
   // 认得档案的模型（视频**或图像**）：mapping 桶**显式**由档案声明（当前模式 transportTaskKind 覆盖 > 档案级），
   // 不靠参考启发式猜——否则 Seedance omni（无首帧）会被误判 text_to_video 撞到别的模型；图像档案的文生图/改图
   // taskKind 也得各走各的桶。modelKey 精确路由（findTaskMapping）再保证打到本模型的 mapping。
-  if (executionKind === 'video' || executionKind === 'image') {
+  if (executionKind === 'video' || executionKind === 'image' || executionKind === 'audio') {
     const archetype = resolveArchetypeForModel({ modelKey: asTrimmedString(meta.modelKey), modelAlias: asTrimmedString(meta.modelAlias), meta })
     if (archetype) return currentArchetypeMode(archetype, meta).transportTaskKind ?? archetype.transportTaskKind
   }
@@ -187,5 +187,7 @@ export function resolveTaskKind(node: GenerationCanvasNode, references: Partial<
   }
   // C5: 文本节点走 chat（runtime 的 wantedKind=text 分支 → /v1/chat/completions）。
   if (executionKind === 'text') return 'chat'
+  // 音频节点档案缺失时的兜底（正常 AUDIO_MODELS 都带档案，走上面的 transportTaskKind）。
+  if (executionKind === 'audio') return 'text_to_audio'
   throw new Error(`${node.kind} generation is not implemented yet`)
 }
