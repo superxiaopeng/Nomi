@@ -28,7 +28,6 @@ import { setDesktopActiveProjectId } from "../desktop/activeProject";
 import { getDesktopBridge } from "../desktop/bridge";
 import { listWorkbenchModelCatalogModels } from "./api/modelCatalogApi";
 import { useHasTextModel } from "./library/useHasTextModel";
-import { requestWorkbenchTour } from "./onboarding/workbenchTourState";
 import { SplashIntro } from "./onboarding/SplashIntro";
 import { hasSeenSplash, markSplashSeen } from "./onboarding/onboardingState";
 import { buildStudioUrl } from "../utils/appRoutes";
@@ -373,8 +372,8 @@ export default function NomiStudioApp(): JSX.Element {
             // 打开后落「创作」（mode 已由 createAndOpenProject 设好）、不自动拆镜（不偷偷耗
             // LLM 额度、用户掌控节奏）。展开创作助手让「拆镜头」CTA 一眼可见。
             store.setCreationAssistantAutoOpen(true);
-            // 首次体验自动开三步引导（已看过的用户由 WorkbenchTour 端按标记过滤）
-            requestWorkbenchTour();
+            // 上手引导改为常驻「上手 4 步」清单（WorkbenchShell 挂载、随真实行为打勾），
+            // 不再在此主动触发浮层引导。
         },
         [hydrateProject, createAndOpenProject],
     );

@@ -360,49 +360,48 @@ try {
   assert(!prev.barOverflowsX, "控制条横向无溢出（无多余滚动条「杠」）", `overflowsX=${prev.barOverflowsX}`);
   assert(prev.barInViewport, "控制条整体在视口内（不溢出/不被裁）", `barInViewport=${prev.barInViewport}`);
 
-  // ── 工作台三步引导（v3 spec C 屏）：零额度走完整 tour ──
-  // 推进只依赖 workspaceMode/节点数，不点「拆镜头」（那是真实 LLM 调用）。
-  // 当前在预览区 → 先切回创作，再清标记 + 派请求事件激活。
-  await win.getByRole("button", { name: "创作", exact: false }).first().click().catch(() => {});
-  await win.waitForTimeout(800);
+  // ── 上手 4 步清单（替代旧三步 tour）：被动常驻、可折叠、不裁不溢出 ──
+  // 清掉清单标记保证「未全完成」(否则 4/4 会自动隐藏整卡)；默认展开。
   await win.evaluate(() => {
-    window.localStorage.removeItem("nomi:tour:v1");
-    window.dispatchEvent(new CustomEvent("nomi-workbench-tour-request"));
+    window.localStorage.removeItem("nomi:checklist:v1");
+    window.localStorage.removeItem("nomi:checklist-collapsed:v1");
   });
+  await win.getByRole("button", { name: "生成", exact: false }).first().click().catch(() => {});
   await win.waitForTimeout(800);
-  const tourGeom = async () => win.evaluate(() => {
-    const callout = document.querySelector("[data-workbench-tour-callout]");
-    const ring = document.querySelector("[data-workbench-tour-ring]");
-    if (!callout || !ring) return { present: false };
-    const c = callout.getBoundingClientRect();
-    const r = ring.getBoundingClientRect();
-    const overlap = !(c.right <= r.left || c.left >= r.right || c.bottom <= r.top || c.top >= r.bottom);
-    const inViewport = c.left >= 0 && c.top >= 0 && c.right <= window.innerWidth && c.bottom <= window.innerHeight;
-    return { present: true, overlap, inViewport, title: callout.textContent || "" };
+  const checklistGeom = async () => win.evaluate(() => {
+    const card = document.querySelector('[data-onboarding-checklist="expanded"]');
+    if (!card) return { present: false };
+    const c = card.getBoundingClientRect();
+    const inViewport = c.left >= 0 && c.top >= 0 && c.right <= window.innerWidth + 0.5 && c.bottom <= window.innerHeight + 0.5;
+    const rows = card.querySelectorAll("li[data-step]").length;
+    // minimap 在则不得与清单重叠（同为右下角常驻）
+    const map = document.querySelector(".generation-canvas-v2__minimap");
+    let overlapMinimap = false;
+    if (map) {
+      const m = map.getBoundingClientRect();
+      overlapMinimap = !(c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom);
+    }
+    return { present: true, inViewport, rows, hasMinimap: !!map, overlapMinimap };
   });
-  let tour = await tourGeom();
-  console.log("\n── 工作台三步引导 ──");
-  assert(tour.present, "第 1 步 callout + 焦点环渲染", JSON.stringify(tour));
-  if (tour.present) {
-    assert(!tour.overlap, "第 1 步 callout 不遮挡焦点元素", `overlap=${tour.overlap}`);
-    assert(tour.inViewport, "第 1 步 callout 完整在视口内", `inViewport=${tour.inViewport}`);
-    assert(tour.title.includes("先有故事"), "第 1 步文案锚定创作", tour.title.slice(0, 40));
-    // 推进 = 真实模式切换（用户点 stepper 与点「拆镜头」走同一条 setWorkspaceMode 路径）
-    await win.getByRole("button", { name: "生成", exact: false }).first().click();
-    await win.waitForTimeout(900);
-    tour = await tourGeom();
-    assert(tour.present && !tour.overlap, "第 2 步 callout 跟随生成区且不遮挡", JSON.stringify({ present: tour.present, overlap: tour.overlap }));
-    await win.getByRole("button", { name: "预览", exact: false }).first().click();
-    await win.waitForTimeout(900);
-    tour = await tourGeom();
-    assert(tour.present && tour.title.includes("连起来看"), "第 3 步锚定导出", tour.title.slice(0, 40));
-    await win.locator("[data-workbench-tour-callout] button", { hasText: "开始创作" }).first().click().catch(() => {});
-    await win.waitForTimeout(400);
-    const after = await win.evaluate(() => ({
-      gone: !document.querySelector("[data-workbench-tour-callout]"),
-      flag: window.localStorage.getItem("nomi:tour:v1"),
+  const checklist = await checklistGeom();
+  console.log("\n── 上手 4 步清单 ──");
+  assert(checklist.present, "上手清单（展开态）已渲染", JSON.stringify(checklist));
+  if (checklist.present) {
+    assert(checklist.inViewport, "清单完整在视口内（不溢出/不被裁）", `inViewport=${checklist.inViewport}`);
+    assert(checklist.rows === 4, "清单恰为 4 步", `rows=${checklist.rows}`);
+    assert(!checklist.overlapMinimap, "清单不遮挡画布 minimap", `hasMinimap=${checklist.hasMinimap} overlap=${checklist.overlapMinimap}`);
+    // 折叠 → 小 pill；再展开 → 卡片回来
+    await win.locator('[data-onboarding-checklist="expanded"] button[aria-label="收起"]').first().click().catch(() => {});
+    await win.waitForTimeout(300);
+    const collapsed = await win.evaluate(() => ({
+      pill: !!document.querySelector('[data-onboarding-checklist="collapsed"]'),
+      cardGone: !document.querySelector('[data-onboarding-checklist="expanded"]'),
     }));
-    assert(after.gone && after.flag === "done", "完成后 callout 消失且写入 done 标记", JSON.stringify(after));
+    assert(collapsed.pill && collapsed.cardGone, "收起后只剩小 pill 入口", JSON.stringify(collapsed));
+    await win.locator('[data-onboarding-checklist="collapsed"]').first().click().catch(() => {});
+    await win.waitForTimeout(300);
+    const reExpanded = await win.evaluate(() => !!document.querySelector('[data-onboarding-checklist="expanded"]'));
+    assert(reExpanded, "点 pill 重新展开清单", `reExpanded=${reExpanded}`);
   }
 
   console.log(`\n设计保真：${passed} 通过，${fails.length} 不一致`);

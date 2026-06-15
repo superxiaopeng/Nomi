@@ -6,8 +6,8 @@
  *   1 创作卡 → 2 画布节点卡行 → 3 中卡选中 + 操作 chip → 4 时间轴轨 → 5 真 logo 标版
  * 字幕在底部逐段淡入；右上「跳过 ›」随时可退。
  *
- * 渲染在 React 树内（**不 BodyPortal**——portal 到 body 会丢 --nomi-* token 作用域，
- * 见 WorkbenchTour.tsx:12 注释）。framer-motion AnimatePresence + motion 内联模式，
+ * 渲染在 React 树内（**不 BodyPortal**——portal 到 body 会丢 --nomi-* token 作用域）。
+ * framer-motion AnimatePresence + motion 内联模式，
  * 缓动 [0.22,1,0.36,1]（抄 Scene3DFullscreen.tsx:3680）。token-only，禁非 token px/hex。
  */
 import React from 'react'

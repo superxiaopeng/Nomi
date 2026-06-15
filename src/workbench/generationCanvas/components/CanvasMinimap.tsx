@@ -6,7 +6,7 @@ import { cn } from '../../../utils/cn'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getNodeSize } from './generationCanvasGeometry'
 
-const MINIMAP_MIN_NODES = 6
+export const MINIMAP_MIN_NODES = 6
 const MAP_W = 180
 const MAP_H = 120
 const MAP_PAD = 10

@@ -4,6 +4,8 @@ import {
   markSplashSeen,
   readChecklist,
   markChecklistStep,
+  readChecklistCollapsed,
+  writeChecklistCollapsed,
 } from './onboardingState'
 
 // 测试环境是 node（无 jsdom），用最小 localStorage 桩模拟 window（照 activeProject.test.ts）。
@@ -53,5 +55,13 @@ describe('onboardingState', () => {
       generated: false,
       exported: false,
     })
+  })
+
+  it('折叠态默认展开（false），写入后可读回', () => {
+    expect(readChecklistCollapsed()).toBe(false)
+    writeChecklistCollapsed(true)
+    expect(readChecklistCollapsed()).toBe(true)
+    writeChecklistCollapsed(false)
+    expect(readChecklistCollapsed()).toBe(false)
   })
 })

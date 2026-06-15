@@ -15,6 +15,7 @@ import OverlaySelectionBox from './OverlaySelectionBox'
 import type { PreviewAspectRatio } from '../workbenchTypes'
 import { resolveVideoClipMediaTimeSeconds } from '../player/timelinePlayback'
 import { exportTimelineToMp4, type ExportTimelineToMp4Options } from '../export/exportApi'
+import { markChecklistStep } from '../onboarding/onboardingState'
 import { buildMp4ExportButtonTitle } from '../export/exportCopy'
 import { toast } from '../../ui/toast'
 import { buildVideoPlaybackUrl } from '../../media/videoPlaybackUrl'
@@ -232,6 +233,8 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
         },
       })
       toast(`已导出到项目 exports 文件夹：${result.relativePath}`, 'success')
+      // 上手清单第 4 步「导出成片」打勾（导出 fire-and-forget 无持久历史，靠这里标记）。
+      markChecklistStep('exported')
       void getDesktopBridge()?.exports.showInFolder({ projectId, relativePath: result.relativePath }).catch(() => undefined)
       setExportStatus('idle')
     } catch (error) {
