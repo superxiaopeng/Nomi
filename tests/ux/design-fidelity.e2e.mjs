@@ -372,48 +372,62 @@ try {
   assert(!prev.barOverflowsX, "控制条横向无溢出（无多余滚动条「杠」）", `overflowsX=${prev.barOverflowsX}`);
   assert(prev.barInViewport, "控制条整体在视口内（不溢出/不被裁）", `barInViewport=${prev.barInViewport}`);
 
-  // ── 上手 4 步清单（替代旧三步 tour）：被动常驻、可折叠、不裁不溢出 ──
-  // 清掉清单标记保证「未全完成」(否则 4/4 会自动隐藏整卡)；默认展开。
+  // ── 上手 4 步引导（顶栏入口 → 下拉清单 → 带我去 spotlight 精准指控件）──
+  // 清标记保证「未全完成」(否则 4/4 自动隐藏入口)。加一个空节点 → storyboard 打勾 →
+  // 当前步=「生成一张」→ 带我去会聚光到节点的「生成」按钮（验画布目标的精准）。
   await win.evaluate(() => {
     window.localStorage.removeItem("nomi:checklist:v1");
     window.localStorage.removeItem("nomi:checklist-collapsed:v1");
   });
   await win.getByRole("button", { name: "生成", exact: false }).first().click().catch(() => {});
   await win.waitForTimeout(800);
-  const checklistGeom = async () => win.evaluate(() => {
-    const card = document.querySelector('[data-onboarding-checklist="expanded"]');
-    if (!card) return { present: false };
-    const c = card.getBoundingClientRect();
-    const inViewport = c.left >= 0 && c.top >= 0 && c.right <= window.innerWidth + 0.5 && c.bottom <= window.innerHeight + 0.5;
-    const rows = card.querySelectorAll("li[data-step]").length;
-    // minimap 在则不得与清单重叠（同为右下角常驻）
-    const map = document.querySelector(".generation-canvas-v2__minimap");
-    let overlapMinimap = false;
-    if (map) {
-      const m = map.getBoundingClientRect();
-      overlapMinimap = !(c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom);
-    }
-    return { present: true, inViewport, rows, hasMinimap: !!map, overlapMinimap };
+  await win.getByText("新建画面", { exact: false }).first().click().catch(() => {});
+  await win.waitForTimeout(1000);
+  console.log("\n── 上手 4 步引导（顶栏入口 + 带我去 spotlight）──");
+  // 触发钮在顶栏(始终高、不遮画布)
+  const trig = await win.evaluate(() => {
+    const t = document.querySelector("[data-onboarding-checklist-trigger]");
+    if (!t) return { present: false };
+    const r = t.getBoundingClientRect();
+    return { present: true, inBar: r.top < 56, inViewport: r.right <= window.innerWidth + 1 };
   });
-  const checklist = await checklistGeom();
-  console.log("\n── 上手 4 步清单 ──");
-  assert(checklist.present, "上手清单（展开态）已渲染", JSON.stringify(checklist));
-  if (checklist.present) {
-    assert(checklist.inViewport, "清单完整在视口内（不溢出/不被裁）", `inViewport=${checklist.inViewport}`);
-    assert(checklist.rows === 4, "清单恰为 4 步", `rows=${checklist.rows}`);
-    assert(!checklist.overlapMinimap, "清单不遮挡画布 minimap", `hasMinimap=${checklist.hasMinimap} overlap=${checklist.overlapMinimap}`);
-    // 折叠 → 小 pill；再展开 → 卡片回来
-    await win.locator('[data-onboarding-checklist="expanded"] button[aria-label="收起"]').first().click().catch(() => {});
-    await win.waitForTimeout(300);
-    const collapsed = await win.evaluate(() => ({
-      pill: !!document.querySelector('[data-onboarding-checklist="collapsed"]'),
-      cardGone: !document.querySelector('[data-onboarding-checklist="expanded"]'),
-    }));
-    assert(collapsed.pill && collapsed.cardGone, "收起后只剩小 pill 入口", JSON.stringify(collapsed));
-    await win.locator('[data-onboarding-checklist="collapsed"]').first().click().catch(() => {});
-    await win.waitForTimeout(300);
-    const reExpanded = await win.evaluate(() => !!document.querySelector('[data-onboarding-checklist="expanded"]'));
-    assert(reExpanded, "点 pill 重新展开清单", `reExpanded=${reExpanded}`);
+  assert(trig.present, "上手入口已渲染", JSON.stringify(trig));
+  if (trig.present) {
+    assert(trig.inBar, "上手入口停靠在顶栏内（不靠下）", `top<56=${trig.inBar}`);
+    await win.locator("[data-onboarding-checklist-trigger]").first().click().catch(() => {});
+    await win.waitForTimeout(400);
+    const panel = await win.evaluate(() => {
+      const p = document.querySelector('[data-onboarding-checklist="panel"]');
+      if (!p) return { present: false };
+      const r = p.getBoundingClientRect();
+      return {
+        present: true,
+        rows: p.querySelectorAll("li[data-step]").length,
+        next: p.querySelector("[data-take-me-there]")?.getAttribute("data-take-me-there") || null,
+        inViewport: r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1,
+      };
+    });
+    assert(panel.present && panel.rows === 4, "下拉清单恰为 4 步", JSON.stringify(panel));
+    assert(panel.inViewport, "下拉清单完整在视口内（不溢出/不被裁）", `inVp=${panel.inViewport}`);
+    if (panel.next) {
+      await win.locator(`[data-take-me-there="${panel.next}"]`).first().click().catch(() => {});
+      await win.waitForTimeout(1200);
+      const spot = await win.evaluate(() => {
+        const ring = document.querySelector("[data-onboarding-spotlight-ring]");
+        const callout = document.querySelector("[data-onboarding-spotlight-callout]");
+        if (!ring) return { ring: false };
+        const r = ring.getBoundingClientRect();
+        const c = callout ? callout.getBoundingClientRect() : null;
+        return {
+          ring: true,
+          ringInViewport: r.left >= -2 && r.top >= -2 && r.right <= window.innerWidth + 2 && r.bottom <= window.innerHeight + 2,
+          calloutInViewport: c ? c.left >= 0 && c.top >= 0 && c.right <= window.innerWidth + 1 && c.bottom <= window.innerHeight + 1 : null,
+        };
+      });
+      assert(spot.ring, `带我去「${panel.next}」聚光环出现`, JSON.stringify(spot));
+      assert(spot.ringInViewport, "聚光环精准落在视口内的目标上", `inVp=${spot.ringInViewport}`);
+      assert(spot.calloutInViewport !== false, "气泡不溢出视口", `co=${spot.calloutInViewport}`);
+    }
   }
 
   console.log(`\n设计保真：${passed} 通过，${fails.length} 不一致`);

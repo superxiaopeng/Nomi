@@ -2,6 +2,7 @@ import React from 'react'
 import { IconDownload, IconPhoto, IconPlugConnected } from '@tabler/icons-react'
 import type { WorkspaceMode } from '../../workbench/workbenchStore'
 import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
+import { OnboardingChecklist } from '../../workbench/onboarding/OnboardingChecklist'
 import { cn } from '../../utils/cn'
 
 // 「素材库」点击 → 打开真实素材库面板（不再直接弹文件对话框）。
@@ -155,6 +156,8 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
         role="toolbar"
         aria-label="全局操作"
       >
+        {/* 上手 4 步引导入口：停靠顶栏(始终高/不遮画布)，4/4 自动消失。 */}
+        <OnboardingChecklist />
         <WorkbenchButton
           className={cn(
             'nomi-appbar__ghost',

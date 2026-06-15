@@ -10,7 +10,6 @@ import {
 } from "./workbenchStore";
 import { cn } from "../utils/cn";
 import ProjectExplorerSidebar from "./explorer/ProjectExplorerSidebar";
-import { OnboardingChecklist } from "./onboarding/OnboardingChecklist";
 import { lazyWithChunkBoundary } from "../ui/chunkBoundary";
 
 // 工作区懒加载走容错域（审计 A5）：单个工作区 chunk 失败不拖死其余工作区。
@@ -221,9 +220,6 @@ export default function WorkbenchShell({
                     ) : null}
                 </div>
             </main>
-            {/* 上手清单：挂 shell 根内 fixed（main 之外不被 overflow 裁剪；body portal 会丢 token 作用域）。
-                被动常驻右下角、随真实行为打勾、4/4 自动消失。 */}
-            <OnboardingChecklist />
         </div>
     );
 }

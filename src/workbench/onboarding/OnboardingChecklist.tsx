@@ -1,27 +1,26 @@
 /**
- * 上手 4 步清单（替代旧的三步 spotlight 引导 WorkbenchTour）。
+ * 上手 4 步引导（替代旧三步 spotlight 引导 WorkbenchTour）。
  *
- * 原则：被动、克制、不压暗、不抢点击——常驻工作区右下角的可折叠小卡，
- * 四步随**真实行为**自动打勾，全部完成后整卡自动消失（密度优先 R2）。
- *   1 接入模型     = 有可用文本模型（hasTextModel）
- *   2 拆一个镜头   = 画布出现节点（canvas nodes 非空）
- *   3 生成一张     = 任一节点 status === 'success'
- *   4 导出成片     = 一次 MP4 导出成功（TimelinePreview 导出成功处 markChecklistStep）
+ * 形态：**停靠在顶栏右簇**的一颗紧凑「上手 N/4」入口（始终高、不遮画布、不撞 AI 启动器/
+ * 时间轴/创作助手——工作区每个角落都被占了，顶栏是唯一干净又显眼的位置）。点开是下拉清单，
+ * 四步随**真实行为**自动打勾：
+ *   1 接入模型   = 有可用文本模型（hasTextModel）
+ *   2 拆一个镜头 = 画布出现节点
+ *   3 生成一张   = 任一节点 status === 'success'
+ *   4 导出成片   = 一次 MP4 导出成功（TimelinePreview 处 markChecklistStep）
  *
- * 打勾单调：一旦达成即写 localStorage（markChecklistStep），之后即使用户删节点也保持已勾。
- * 渲染在 WorkbenchShell 根内 fixed 定位（不 BodyPortal——portal 到 body 会丢
- * --nomi-* token 作用域）。
+ * 「带我去」：当前步给一个按钮，点了 → 切到该步所在模式 + 在真实控件上打高亮圈 + 气泡指明
+ * （OnboardingSpotlight，不压暗）。完成一步自动跳下一步；4/4 后整个入口消失。
  *
- * 位置：bottom-right。生成区且节点 ≥6 时画布右下角有 minimap(180×120@bottom-6)，
- * 此时把清单上抬到 minimap 之上（bottom-40 = 160px，清掉 24+120 的占用带），不遮挡。
+ * 打勾单调持久（localStorage）。渲染在 NomiAppBar 内（React 树内，保 --nomi-* token）。
  */
 import React from 'react'
-import { IconCheck, IconChevronDown, IconListCheck } from '@tabler/icons-react'
+import { IconCheck, IconChevronDown, IconListCheck, IconArrowRight } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { useWorkbenchStore } from '../workbenchStore'
+import { useWorkbenchStore, type WorkspaceMode } from '../workbenchStore'
 import { useGenerationCanvasStore } from '../generationCanvas/store/generationCanvasStore'
 import { useHasTextModel } from '../library/useHasTextModel'
-import { MINIMAP_MIN_NODES } from '../generationCanvas/components/CanvasMinimap'
+import { OnboardingSpotlight } from './OnboardingSpotlight'
 import {
   type ChecklistStep,
   type ChecklistState,
@@ -31,37 +30,45 @@ import {
   writeChecklistCollapsed,
 } from './onboardingState'
 
-type StepMeta = { key: ChecklistStep; label: string; hint: string }
+type StepMeta = {
+  key: ChecklistStep
+  label: string
+  hint: string
+  /** 「带我去」要切到的模式；null = 目标在顶栏常驻，不用切。 */
+  mode: WorkspaceMode | null
+}
 
 const STEPS: StepMeta[] = [
-  { key: 'model', label: '接入模型', hint: '连一个 AI 服务（用你自己的 Key）。' },
-  { key: 'storyboard', label: '拆一个镜头', hint: '在创作区说「拆成镜头」，铺成画布。' },
-  { key: 'generated', label: '生成一张', hint: '在镜头卡里选模型，点「生成」出图。' },
-  { key: 'exported', label: '导出成片', hint: '排进时间轴，右上「导出」输出 MP4。' },
+  { key: 'model', label: '接入模型', hint: '连一个 AI 服务（用你自己的 Key）。', mode: null },
+  { key: 'storyboard', label: '拆一个镜头', hint: '在创作区说「拆成镜头」，铺成画布。', mode: 'creation' },
+  { key: 'generated', label: '生成一张', hint: '在镜头卡里选模型，点「生成」出图。', mode: 'generation' },
+  { key: 'exported', label: '导出成片', hint: '排进时间轴，右上「导出」输出 MP4。', mode: 'preview' },
 ]
 
 const ALL_KEYS = STEPS.map((s) => s.key)
 
 export function OnboardingChecklist(): JSX.Element | null {
-  const workspaceMode = useWorkbenchStore((state) => state.workspaceMode)
+  const setWorkspaceMode = useWorkbenchStore((state) => state.setWorkspaceMode)
   const nodes = useGenerationCanvasStore((state) => state.nodes)
   const { hasTextModel: textModelReady } = useHasTextModel()
 
-  // 真实行为派生（live）：达成即往持久层写一次，render 用 persisted||live 立刻反映。
   const live = React.useMemo<ChecklistState>(
     () => ({
       model: textModelReady === true,
       storyboard: nodes.length > 0,
       generated: nodes.some((node) => node.status === 'success'),
-      exported: false, // 导出无 live 派生源（fire-and-forget），只走 TimelinePreview 的持久标记
+      exported: false, // 导出 fire-and-forget 无 live 源，只走 TimelinePreview 持久标记
     }),
     [textModelReady, nodes],
   )
 
   const [persisted, setPersisted] = React.useState<ChecklistState>(() => readChecklist())
-  const [collapsed, setCollapsed] = React.useState<boolean>(() => readChecklistCollapsed())
+  const [open, setOpen] = React.useState<boolean>(() => !readChecklistCollapsed())
+  const [guideStep, setGuideStep] = React.useState<ChecklistStep | null>(null)
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null)
+  const [anchor, setAnchor] = React.useState<{ top: number; right: number } | null>(null)
 
-  // live 新达成 → 落盘 + 刷新本地态。导出标记由别处写盘，靠 storage 事件 + 焦点回读同步。
+  // live 新达成 → 落盘 + 刷新；跨组件写盘（导出）靠 storage/focus 回读。
   React.useEffect(() => {
     let changed = false
     for (const key of ALL_KEYS) {
@@ -73,7 +80,6 @@ export function OnboardingChecklist(): JSX.Element | null {
     if (changed) setPersisted(readChecklist())
   }, [live, persisted])
 
-  // 跨组件写盘（如导出成功 markChecklistStep('exported')）回读：storage 事件 + 窗口聚焦。
   React.useEffect(() => {
     const sync = () => setPersisted(readChecklist())
     window.addEventListener('storage', sync)
@@ -98,135 +104,178 @@ export function OnboardingChecklist(): JSX.Element | null {
   const allDone = doneCount === ALL_KEYS.length
   const nextKey = STEPS.find((s) => !effective[s.key])?.key ?? null
 
-  const toggleCollapsed = React.useCallback(() => {
-    setCollapsed((prev) => {
+  // 正在引导的步骤一旦完成 → 自动收起聚光。
+  React.useEffect(() => {
+    if (guideStep && effective[guideStep]) setGuideStep(null)
+  }, [guideStep, effective])
+
+  // 下拉锚定在触发钮正下方、右对齐（实测触发钮几何，精准跟随顶栏布局）。
+  const measureAnchor = React.useCallback(() => {
+    const el = triggerRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setAnchor({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) })
+  }, [])
+
+  React.useEffect(() => {
+    if (!open) return
+    measureAnchor()
+    window.addEventListener('resize', measureAnchor)
+    return () => window.removeEventListener('resize', measureAnchor)
+  }, [open, measureAnchor])
+
+  // 点下拉外 → 关闭（不影响聚光，聚光有自己的 dismiss）。
+  React.useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      const el = e.target as Element | null
+      if (el && el.closest('[data-onboarding-checklist-root]')) return
+      setOpen(false)
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    return () => window.removeEventListener('pointerdown', onDown, true)
+  }, [open])
+
+  const toggleOpen = React.useCallback(() => {
+    setOpen((prev) => {
       const next = !prev
-      writeChecklistCollapsed(next)
+      writeChecklistCollapsed(!next)
       return next
     })
   }, [])
 
+  const takeMeThere = React.useCallback(
+    (step: StepMeta) => {
+      setOpen(false)
+      if (step.mode && step.mode !== useWorkbenchStore.getState().workspaceMode) {
+        setWorkspaceMode(step.mode)
+      }
+      setGuideStep(step.key)
+    },
+    [setWorkspaceMode],
+  )
+
   if (allDone) return null
-  // 仅在生成/预览出现：四步(拆镜/生成/导出)都活在画布→时间轴这条流水线，这里也有干净的
-  // 「浮在时间轴之上」落点；创作区右侧是创作助手(含输入框/建议 chip)自带引导，挂清单会撞它的
-  // composer(实测遮挡)。模型步在创作区点全局入口接入,切到生成区即见已勾。
-  if (workspaceMode !== 'generation' && workspaceMode !== 'preview') return null
 
-  // 锚点：右下角，浮在工作区底部时间轴之上（沿用 workbench-ai.css 的同款约定）。
-  //  - 生成区：浮在 --workbench-timeline-height 之上；≥6 节点时画布右下角有 minimap(120 高@bottom-6)
-  //            → 再抬到 minimap 之上(≈160px)避遮挡。
-  //  - 预览区：浮在 --workbench-preview-timeline-height 之上。
-  const minimapPresent = workspaceMode === 'generation' && nodes.length >= MINIMAP_MIN_NODES
-  const timelineVar =
-    workspaceMode === 'preview'
-      ? 'var(--workbench-preview-timeline-height)'
-      : 'var(--workbench-timeline-height)'
-  const bottom = `calc(${timelineVar} + ${minimapPresent ? '10rem' : '1.25rem'})`
-  const anchorStyle: React.CSSProperties = { bottom, right: '1.25rem' }
-
-  if (collapsed) {
-    return (
+  return (
+    <div data-onboarding-checklist-root="true" className="contents">
       <button
         type="button"
-        onClick={toggleCollapsed}
-        data-onboarding-checklist="collapsed"
-        style={anchorStyle}
+        ref={triggerRef}
+        onClick={toggleOpen}
+        data-onboarding-checklist-trigger="true"
         aria-label={`上手 4 步，已完成 ${doneCount} / ${ALL_KEYS.length}`}
+        aria-expanded={open}
         className={cn(
-          'fixed z-[40]',
-          'inline-flex items-center gap-2 h-8 px-2.5 cursor-pointer font-inherit',
-          'rounded-full border border-nomi-line bg-nomi-paper shadow-nomi-sm',
-          'text-body-sm text-nomi-ink-80 transition-colors hover:border-nomi-ink-20',
+          'inline-flex items-center gap-1.5 h-[30px] px-2.5 cursor-pointer font-inherit',
+          'rounded-[var(--nomi-radius-sm)] border border-transparent bg-transparent',
+          'text-body-sm text-nomi-ink-80 transition-[background,color] duration-[var(--nomi-transition-fast)]',
+          'hover:bg-nomi-ink-05 hover:text-nomi-ink',
+          open && 'bg-nomi-ink-05 text-nomi-ink',
         )}
       >
-        <IconListCheck size={15} stroke={1.6} className="text-nomi-ink-60" aria-hidden="true" />
-        上手 4 步
+        <IconListCheck size={15} stroke={1.7} aria-hidden="true" />
+        <span className="max-[700px]:hidden">上手</span>
         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-nomi-accent-soft text-nomi-accent text-micro font-semibold tabular-nums">
           {doneCount}/{ALL_KEYS.length}
         </span>
       </button>
-    )
-  }
 
-  return (
-    <section
-      data-onboarding-checklist="expanded"
-      aria-label="上手 4 步"
-      style={anchorStyle}
-      className={cn(
-        'fixed z-[40]',
-        'w-64 overflow-hidden',
-        'rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-md',
-      )}
-    >
-      <header className="flex items-center gap-2 pl-4 pr-2 pt-3 pb-2">
-        <span className="text-body font-semibold text-nomi-ink">上手 4 步</span>
-        <span className="text-caption font-medium text-nomi-ink-40 tabular-nums">
-          {doneCount} / {ALL_KEYS.length}
-        </span>
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label="收起"
+      {open && anchor ? (
+        <section
+          data-onboarding-checklist="panel"
+          aria-label="上手 4 步"
+          style={{ top: anchor.top, right: anchor.right }}
           className={cn(
-            'ml-auto grid place-items-center size-6 rounded-nomi-sm border-0 bg-transparent cursor-pointer',
-            'text-nomi-ink-40 transition-colors hover:bg-nomi-ink-10 hover:text-nomi-ink',
+            'fixed z-[60] w-64 overflow-hidden',
+            'rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-lg',
           )}
         >
-          <IconChevronDown size={16} stroke={1.8} aria-hidden="true" />
-        </button>
-      </header>
-
-      <div className="h-1 mx-4 mb-2 rounded-full bg-nomi-ink-10 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-nomi-accent transition-[width] duration-[var(--nomi-transition-fast)]"
-          style={{ width: `${(doneCount / ALL_KEYS.length) * 100}%` }}
-        />
-      </div>
-
-      <ul className="flex flex-col px-1.5 pb-2 m-0 list-none">
-        {STEPS.map((step) => {
-          const done = effective[step.key]
-          const isNext = !done && step.key === nextKey
-          return (
-            <li
-              key={step.key}
-              data-step={step.key}
-              data-done={done ? 'true' : 'false'}
+          <header className="flex items-center gap-2 pl-4 pr-2 pt-3 pb-2">
+            <span className="text-body font-semibold text-nomi-ink">上手 4 步</span>
+            <span className="text-caption font-medium text-nomi-ink-40 tabular-nums">
+              {doneCount} / {ALL_KEYS.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => toggleOpen()}
+              aria-label="收起"
               className={cn(
-                'flex items-start gap-2.5 p-2 rounded-nomi-sm',
-                isNext ? 'bg-nomi-accent-soft' : '',
+                'ml-auto grid place-items-center size-6 rounded-nomi-sm border-0 bg-transparent cursor-pointer',
+                'text-nomi-ink-40 transition-colors hover:bg-nomi-ink-10 hover:text-nomi-ink',
               )}
             >
-              <span
-                className={cn(
-                  'shrink-0 grid place-items-center size-5 rounded-full mt-px',
-                  done
-                    ? 'bg-nomi-accent text-nomi-paper'
-                    : isNext
-                      ? 'border-2 border-nomi-accent'
-                      : 'border-2 border-nomi-ink-20',
-                )}
-              >
-                {done ? <IconCheck size={12} stroke={3} aria-hidden="true" /> : null}
-              </span>
-              <span className="min-w-0">
-                <span
-                  className={cn(
-                    'block text-body-sm font-medium leading-snug',
-                    done ? 'text-nomi-ink-40' : isNext ? 'text-nomi-accent' : 'text-nomi-ink',
-                  )}
+              <IconChevronDown size={16} stroke={1.8} aria-hidden="true" />
+            </button>
+          </header>
+
+          <div className="h-1 mx-4 mb-2 rounded-full bg-nomi-ink-10 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-nomi-accent transition-[width] duration-[var(--nomi-transition-fast)]"
+              style={{ width: `${(doneCount / ALL_KEYS.length) * 100}%` }}
+            />
+          </div>
+
+          <ul className="flex flex-col px-1.5 pb-2 m-0 list-none">
+            {STEPS.map((step) => {
+              const done = effective[step.key]
+              const isNext = !done && step.key === nextKey
+              return (
+                <li
+                  key={step.key}
+                  data-step={step.key}
+                  data-done={done ? 'true' : 'false'}
+                  className={cn('flex flex-col gap-1.5 p-2 rounded-nomi-sm', isNext && 'bg-nomi-accent-soft')}
                 >
-                  {step.label}
-                </span>
-                {!done ? (
-                  <span className="block text-caption text-nomi-ink-40 leading-snug mt-px">{step.hint}</span>
-                ) : null}
-              </span>
-            </li>
-          )
-        })}
-      </ul>
-    </section>
+                  <div className="flex items-start gap-2.5">
+                    <span
+                      className={cn(
+                        'shrink-0 grid place-items-center size-5 rounded-full mt-px',
+                        done
+                          ? 'bg-nomi-accent text-nomi-paper'
+                          : isNext
+                            ? 'border-2 border-nomi-accent'
+                            : 'border-2 border-nomi-ink-20',
+                      )}
+                    >
+                      {done ? <IconCheck size={12} stroke={3} aria-hidden="true" /> : null}
+                    </span>
+                    <span className="min-w-0">
+                      <span
+                        className={cn(
+                          'block text-body-sm font-medium leading-snug',
+                          done ? 'text-nomi-ink-40' : isNext ? 'text-nomi-accent' : 'text-nomi-ink',
+                        )}
+                      >
+                        {step.label}
+                      </span>
+                      {!done ? (
+                        <span className="block text-caption text-nomi-ink-40 leading-snug mt-px">{step.hint}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                  {isNext ? (
+                    <button
+                      type="button"
+                      onClick={() => takeMeThere(step)}
+                      data-take-me-there={step.key}
+                      className={cn(
+                        'self-start ml-[30px] inline-flex items-center gap-1 h-7 px-3 rounded-full border-0 cursor-pointer font-inherit',
+                        'bg-nomi-accent text-nomi-paper text-caption font-medium transition-colors hover:bg-nomi-ink',
+                      )}
+                    >
+                      带我去
+                      <IconArrowRight size={13} stroke={2} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {guideStep ? <OnboardingSpotlight step={guideStep} onDismiss={() => setGuideStep(null)} /> : null}
+    </div>
   )
 }
