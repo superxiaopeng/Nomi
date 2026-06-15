@@ -12,8 +12,8 @@ export default function CreationWorkspace(): JSX.Element {
   // 一次性信号：打开示例/新项目时自动展开助手，让「拆镜头」CTA 一眼可见，消费后清掉。
   const autoOpen = useWorkbenchStore((s) => s.creationAssistantAutoOpen)
   const setAutoOpen = useWorkbenchStore((s) => s.setCreationAssistantAutoOpen)
-  // 方案存在时主列展开分镜方案编辑器，替换文档编辑器（剧本→方案→确认落画布主链路 S3）。
-  const hasStoryboardPlan = useWorkbenchStore((s) => s.storyboardPlan !== null)
+  // 编辑器「打开」时主列展开分镜方案编辑器，替换文档编辑器；收起则回文档、方案以卡片留在对话流（回看链路）。
+  const storyboardEditorOpen = useWorkbenchStore((s) => s.storyboardEditorOpen)
   React.useEffect(() => {
     if (autoOpen) {
       setCollapsed(false)
@@ -37,7 +37,7 @@ export default function CreationWorkspace(): JSX.Element {
       )}
       aria-label="创作区"
     >
-      {hasStoryboardPlan ? <StoryboardPlanEditor /> : <WorkbenchEditor />}
+      {storyboardEditorOpen ? <StoryboardPlanEditor /> : <WorkbenchEditor />}
       {collapsed ? (
         <WorkbenchButton
           className={cn(

@@ -96,8 +96,12 @@ type WorkbenchState = {
   creationAiMessages: WorkbenchAiMessage[]
   creationAiAttachments: ComposerAttachment[]
   creationAiError: string
-  /** 分镜方案对象（planner 产出，创作区审/改后确认落画布）。null=本项目暂无方案。切项目清空。 */
+  /** 分镜方案对象（planner 产出，创作区审/改后确认落画布）。null=本项目暂无方案。随项目持久化。 */
   storyboardPlan: StoryboardPlan | null
+  /** 方案是否已落画布：false=草稿，true=已落画布（落后卡片留痕，不再即焚）。随项目持久化。 */
+  storyboardPlanCommitted: boolean
+  /** 主列是否展开全宽编辑器（UI 瞬态，不持久化；重开项目默认收起成卡片）。 */
+  storyboardEditorOpen: boolean
   timeline: TimelineState
   timelinePlaying: boolean
   previewAspectRatio: PreviewAspectRatio
@@ -117,8 +121,16 @@ type WorkbenchState = {
   setCreationAiMessages: (messages: WorkbenchAiMessage[] | ((messages: WorkbenchAiMessage[]) => WorkbenchAiMessage[])) => void
   setCreationAiAttachments: (attachments: ComposerAttachment[] | ((attachments: ComposerAttachment[]) => ComposerAttachment[])) => void
   setCreationAiError: (error: string) => void
-  /** 写入/清空分镜方案对象（propose_storyboard_plan 落库、确认落画布后清）。 */
+  /** 写入/改写分镜方案对象（planner 落库、编辑器逐字段编辑）：置草稿态；editorOpen 由调用方管。 */
   setStoryboardPlan: (plan: StoryboardPlan | null) => void
+  /** 卡片「打开编辑」/「收起」：仅切主列编辑器显隐，不动方案。 */
+  setStoryboardEditorOpen: (open: boolean) => void
+  /** 确认落画布后：方案保留、转「已落画布」、收起编辑器（卡片留痕）。 */
+  commitStoryboardPlan: () => void
+  /** 丢弃方案：清空 plan + 收起编辑器（卡片随之消失）。 */
+  discardStoryboardPlan: () => void
+  /** 项目载入专用：恢复 plan + committed，编辑器收起、不标脏（区别于用户动作 setStoryboardPlan）。 */
+  hydrateStoryboardPlan: (plan: StoryboardPlan | null, committed: boolean) => void
   /** 切项目时交换对话桶(S1 治串台):存旧项目的对话,载入新项目的(没有则空)。 */
   swapCreationAiProject: (prevId: string | null, nextId: string | null) => void
   /** 一次性信号：打开示例/新项目时请求创作助手默认展开（让「拆镜头」CTA 一眼可见），消费后清掉。 */
@@ -248,6 +260,8 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   creationAiAttachments: [],
   creationAiError: '',
   storyboardPlan: null,
+  storyboardPlanCommitted: false,
+  storyboardEditorOpen: false,
   creationAssistantAutoOpen: false,
   timeline: createDefaultTimeline(),
   timelinePlaying: false,
@@ -293,7 +307,37 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   },
   setStoryboardPlan: (storyboardPlan) => {
     // P0-6:方案是 per-project 持久化产物 → bump persistRevision 触发防抖落盘(否则用户手改的方案不保存)。
-    set((state) => ({ storyboardPlan, persistRevision: state.persistRevision + 1 }))
+    // 写/改方案一律置草稿态(被编辑即与画布上旧节点不一致)。editorOpen 不在此强制开 —— 它既被
+    // planner 产出后显式打开、也被编辑器内逐字段编辑频繁调用,强制开会打架;由调用方管。置 null 时顺手收起。
+    set((state) => ({
+      storyboardPlan,
+      storyboardPlanCommitted: false,
+      ...(storyboardPlan === null ? { storyboardEditorOpen: false } : {}),
+      persistRevision: state.persistRevision + 1,
+    }))
+  },
+  setStoryboardEditorOpen: (storyboardEditorOpen) => {
+    set({ storyboardEditorOpen })
+  },
+  commitStoryboardPlan: () => {
+    // 确认落画布:方案保留(卡片留痕)、转已落画布、收起编辑器。bump 落盘 committed 状态。
+    set((state) => ({
+      storyboardPlanCommitted: true,
+      storyboardEditorOpen: false,
+      persistRevision: state.persistRevision + 1,
+    }))
+  },
+  discardStoryboardPlan: () => {
+    set((state) => ({
+      storyboardPlan: null,
+      storyboardPlanCommitted: false,
+      storyboardEditorOpen: false,
+      persistRevision: state.persistRevision + 1,
+    }))
+  },
+  hydrateStoryboardPlan: (storyboardPlan, storyboardPlanCommitted) => {
+    // 载入态:一次性设三字段、编辑器收起、不 bump persistRevision(restore 非用户编辑,别标脏触发回存)。
+    set({ storyboardPlan, storyboardPlanCommitted: storyboardPlan ? storyboardPlanCommitted : false, storyboardEditorOpen: false })
   },
   setCreationAssistantAutoOpen: (creationAssistantAutoOpen) => {
     set({ creationAssistantAutoOpen })
@@ -311,8 +355,10 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
       }),
       // messages 由 conversationThreads 模型按项目持有;切项目先清空,载入由 loadProjectConversations 投影回。
       creationAiMessages: [],
-      // 方案(storyboardPlan)不再在此清:它已随项目持久化(P0-6),hydrate 里 restore 先于本 swap 跑、
-      // 已按新项目 payload 载入(无则 null)。此处再清会清掉刚 restore 的方案 → 切项目即丢。防串台职责移交 restore。
+      // 编辑器展开态(UI 瞬态,不持久化)切项目复位为收起:重开项目以「卡片·收起」休息态出现。
+      storyboardEditorOpen: false,
+      // 方案(storyboardPlan)与 committed 不在此清:随项目持久化(P0-6),hydrate restore 先于本 swap 跑、
+      // 已按新项目 payload 载入(无则 null/false)。此处再清会清掉刚 restore 的 → 切项目即丢。防串台职责移交 restore。
     })
   },
   setTimeline: (timeline) => {

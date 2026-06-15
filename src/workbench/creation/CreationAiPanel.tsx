@@ -8,6 +8,7 @@ import { startNewConversation } from '../ai/conversationPersistence'
 import { clearWorkbenchAgentSession } from '../../api/desktopClient'
 import { AssistantMessageView, UserMessageBubble } from '../ai/AssistantMessageView'
 import AssistantModelPicker from '../ai/AssistantModelPicker'
+import StoryboardPlanCard from './storyboard/StoryboardPlanCard'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
 import { routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
@@ -170,7 +171,7 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         if (!handle.isCurrent()) return // 轮次已被切项目/新对话作废:别把旧项目内容写进新项目
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, content: text || '分镜方案已生成，请在左侧审阅、修改后确认落画布。', status: 'done' as const } : m,
+            m.id === assistantId ? { ...m, content: text || '分镜方案已生成，见下方卡片——可打开编辑、修改后确认落画布。', status: 'done' as const } : m,
           ),
         )
       } catch (error: unknown) {
@@ -533,6 +534,9 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
             ))}
           </div>
         ) : null}
+
+        {/* 分镜方案卡片(回看链路):拆镜头产出常驻对话流尾部,自 storyboardPlan 自门控,null 不渲染。 */}
+        <StoryboardPlanCard />
       </div>
 
       {error ? (

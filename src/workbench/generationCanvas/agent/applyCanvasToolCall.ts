@@ -103,6 +103,7 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
     const plan = parseStoryboardPlan(record)
     const store = useWorkbenchStore.getState()
     store.setStoryboardPlan(plan)
+    store.setStoryboardEditorOpen(true) // 拆完自动打开编辑器(沿用「立刻看到方案」);卡片同时进对话流。
     store.setWorkspaceMode('creation')
     return `已生成分镜方案「${plan.title || '未命名'}」：${plan.anchors.length} 个锚 · ${plan.shots.length} 个镜头，已放到创作区，待你审阅/修改后确认落画布。`
   }

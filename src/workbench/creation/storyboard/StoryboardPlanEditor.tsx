@@ -46,6 +46,9 @@ function firstIssueLabel(issue: PlanIssue): string {
 export default function StoryboardPlanEditor(): JSX.Element | null {
   const plan = useWorkbenchStore((s) => s.storyboardPlan)
   const setStoryboardPlan = useWorkbenchStore((s) => s.setStoryboardPlan)
+  const setStoryboardEditorOpen = useWorkbenchStore((s) => s.setStoryboardEditorOpen)
+  const commitStoryboardPlan = useWorkbenchStore((s) => s.commitStoryboardPlan)
+  const discardStoryboardPlan = useWorkbenchStore((s) => s.discardStoryboardPlan)
   const setWorkspaceMode = useWorkbenchStore((s) => s.setWorkspaceMode)
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
   const [overIndex, setOverIndex] = React.useState<number | null>(null)
@@ -64,7 +67,7 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
       confirmLabel: '丢弃',
       danger: true,
     })
-    if (ok) setStoryboardPlan(null)
+    if (ok) discardStoryboardPlan()
   }
 
   const onConfirm = async () => {
@@ -81,7 +84,8 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
         ...(imageDefault.refModeId ? { defaultImageRefModeId: imageDefault.refModeId } : {}),
       })
       await applyCanvasToolCall('create_canvas_nodes', args)
-      setStoryboardPlan(null)
+      // 不再即焚:方案保留、转「已落画布」、收起编辑器 → 卡片留在对话流可回看/再编辑。
+      commitStoryboardPlan()
       setWorkspaceMode('generation')
     } catch (error: unknown) {
       await alertDialog({
@@ -107,13 +111,22 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
           />
           <span className="shrink-0 text-micro text-nomi-ink-40 bg-nomi-ink-05 px-2 py-0.5 rounded-full">{plan.shots.length} 镜</span>
         </div>
-        <button
-          type="button"
-          onClick={onDiscard}
-          className="shrink-0 h-7 px-2.5 rounded-full border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-60 hover:text-nomi-ink-80 hover:border-nomi-ink-20"
-        >
-          丢弃方案
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setStoryboardEditorOpen(false)}
+            className="h-7 px-2.5 rounded-full border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-60 hover:text-nomi-ink-80 hover:border-nomi-ink-20"
+          >
+            收起
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="h-7 px-2.5 rounded-full border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-60 hover:text-nomi-ink-80 hover:border-nomi-ink-20"
+          >
+            丢弃方案
+          </button>
+        </div>
       </header>
 
       <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-nomi-accent-soft text-nomi-accent text-caption">

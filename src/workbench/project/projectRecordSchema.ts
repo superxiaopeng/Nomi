@@ -81,6 +81,8 @@ export const workbenchProjectPayloadSchema = z.object({
    * 可选 + nullable 让老项目向后兼容(无此字段即无方案)。
    */
   storyboardPlan: storyboardPlanSchema.nullable().optional(),
+  /** 方案落画布状态(草稿/已落画布)。老项目无字段 → 归一化为 false(当草稿)。 */
+  storyboardPlanCommitted: z.boolean().optional(),
 })
 
 export const workbenchProjectRecordSchema = workbenchProjectSummarySchema.extend({
@@ -130,6 +132,8 @@ export type WorkbenchProjectPayload = {
   generationCanvasLastSeq?: number
   /** P0-6:创作分镜方案(per-project 工作产物);无则 null/缺省。 */
   storyboardPlan?: StoryboardPlan | null
+  /** 方案落画布状态(草稿/已落画布);无则 false。 */
+  storyboardPlanCommitted?: boolean
 }
 
 export type WorkbenchProjectRecordV1 = WorkbenchProjectSummary & {
