@@ -3,7 +3,7 @@ import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { dataUrlToFile, persistNodeImageFile } from '../adapters/persistNodeImage'
 import type { CropGridResult, CropGridSize } from './render/ImageCropGridOverlay'
-import { computeGridCells } from './render/cropGridGeometry'
+import { computeGridCells, computeSplitLayout } from './render/cropGridGeometry'
 
 // 裁切 / 旋转 / 网格切分都用 canvas.toDataURL 产出 PNG base64。先用 base64 给即时预览，
 // 紧接着把它落盘换成 nomi-local:// 替换掉 —— 避免 PNG base64 永久挂在 store（图多即卡）。
@@ -163,36 +163,35 @@ export function useNodeImageEditing(
       const cells = computeGridCells(confirmed.rect, confirmed.cols, confirmed.rows)
       const isSplit = cells.length > 1
       const createdAt = Date.now()
-      const baseX = Math.round(nodePositionX + visualWidth + 80)
+      // 落点紧贴原图右侧(小偏移)，不再 +80 远铺。
+      const baseX = Math.round(nodePositionX + visualWidth + 40)
       const baseY = Math.round(nodePositionY)
 
       const crops = await Promise.all(cells.map((cell) => cropImageRegion(imageUrl, cell)))
-      // 切图每格目标宽 ≈ 源宽/grid；裁剪沿用源节点宽。各自夹在节点上下界内。
-      const preferredWidth = isSplit
-        ? Math.max(MIN_NODE_WIDTH, Math.round(visualWidth / grid))
-        : clampNumber(visualWidth, MIN_NODE_WIDTH, MAX_NODE_WIDTH)
-      const sizes = crops.map((crop) => (crop ? imageGridTileNodeSize(crop.width, crop.height, preferredWidth) : null))
 
-      // 不等分 cell 尺寸不一：列宽=该列各行最大、行高=该行各列最大，累加成展开网格的落点。
-      const gap = 42
-      const colCount = isSplit ? Math.max(...cells.map((c) => c.column)) + 1 : 1
-      const rowCount = isSplit ? Math.max(...cells.map((c) => c.row)) + 1 : 1
-      const colWidths = Array.from({ length: colCount }, (_, c) =>
-        Math.max(MIN_NODE_WIDTH, ...cells.map((cell, i) => (cell.column === c ? sizes[i]?.width ?? MIN_NODE_WIDTH : 0))))
-      const rowHeights = Array.from({ length: rowCount }, (_, r) =>
-        Math.max(1, ...cells.map((cell, i) => (cell.row === r ? sizes[i]?.previewHeight ?? 1 : 0))))
-      const colX = colWidths.map((_, c) => baseX + colWidths.slice(0, c).reduce((sum, w) => sum + w + gap, 0))
-      const rowY = rowHeights.map((_, r) => baseY + rowHeights.slice(0, r).reduce((sum, h) => sum + h + gap, 0))
+      // 落点/尺寸由纯函数 computeSplitLayout 算（已单测锁「紧凑方块」不变量）：整块≈源宽、小间距、
+      // 行列对齐。裁剪(1 格)退化为单盒，与切图共用同一布局（P1）。块原点紧贴原图右侧。
+      const aspects = cells.map((cell, i) => {
+        const crop = crops[i]
+        return crop && crop.height ? crop.width / crop.height : cell.w / Math.max(0.0001, cell.h)
+      })
+      const blockWidth = clampNumber(visualWidth, MIN_NODE_WIDTH, MAX_NODE_WIDTH)
+      const layout = computeSplitLayout(cells, confirmed.rect.w, blockWidth, aspects).map((box) => ({
+        x: baseX + box.x,
+        y: baseY + box.y,
+        width: box.width,
+        height: box.height,
+      }))
 
       cells.forEach((cell, index) => {
         const crop = crops[index]
         if (!crop) return
-        const size = sizes[index]
+        const slot = layout[index]
         const newNode = addNode({
           kind: 'asset',
           title: isSplit ? `${nodeTitle || '图片'} ${grid}x${grid} 切片 ${index + 1}` : `${nodeTitle || '图片'} 裁剪`,
           prompt: isSplit ? `${grid}x${grid} 图片切片 ${cell.row + 1}-${cell.column + 1}` : '图片裁剪',
-          position: isSplit ? { x: colX[cell.column], y: rowY[cell.row] } : { x: baseX, y: baseY },
+          position: { x: slot.x, y: slot.y },
           select: !isSplit,
         })
         const resultAsset = {
@@ -205,7 +204,7 @@ export function useNodeImageEditing(
           result: resultAsset,
           history: [resultAsset],
           status: 'success',
-          ...(size ? { size: { width: size.width, height: size.height } } : {}),
+          size: { width: slot.width, height: slot.height },
           meta: {
             ...(newNode.meta || {}),
             source: isSplit ? `image-grid-split-${grid}x${grid}` : 'image-crop',
@@ -215,7 +214,7 @@ export function useNodeImageEditing(
             imageWidth: crop.width,
             imageHeight: crop.height,
             imageAspectRatio: crop.width / Math.max(1, crop.height),
-            previewHeight: size?.previewHeight,
+            previewHeight: slot.height,
           },
         })
         storeConnectNodes(nodeId, newNode.id, 'reference')
