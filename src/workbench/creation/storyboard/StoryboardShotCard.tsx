@@ -98,16 +98,23 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
         <span className="text-micro text-nomi-ink-40 mr-0.5">参考</span>
         {selected.map((id) => {
           const anchor = byId.get(id)!
+          // chip 本体不再点一下就删（误删源）；末尾加明确的 × 才移除引用。
           return (
-            <button
+            <span
               key={id}
-              type="button"
-              onClick={() => onToggleAnchor(id)}
-              title={`点一下取消引用 ${anchor.name || '该锚'}`}
-              className="h-6 px-2.5 rounded-full bg-nomi-ink-05 text-nomi-ink-80 text-caption inline-flex items-center hover:bg-nomi-ink-10"
+              className="h-6 pl-2.5 pr-1 rounded-full bg-nomi-ink-05 text-nomi-ink-80 text-caption inline-flex items-center gap-1"
             >
               {anchor.name || '未命名'}
-            </button>
+              <button
+                type="button"
+                aria-label={`移除参考 ${anchor.name || '该锚'}`}
+                title={`移除参考 ${anchor.name || '该锚'}`}
+                onClick={() => onToggleAnchor(id)}
+                className="grid place-items-center size-4 rounded-full text-nomi-ink-40 hover:bg-nomi-ink-20 hover:text-nomi-ink-80"
+              >
+                <IconX size={11} stroke={2} aria-hidden />
+              </button>
+            </span>
           )
         })}
         {danglingIds.map((id) => (
