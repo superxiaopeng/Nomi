@@ -25,18 +25,10 @@ export const KIE_VENDOR_SEED = {
   authHeader: "Authorization",
 } as const;
 
-/** Seedance 2.0 模型种子（modelKey 直接就是 kie 要的 model enum，故 body 用 {{model.modelKey}} 即可，无需 per-mode 覆盖）。 */
+/** Seedance 2.0 模型种子（catalog 行 = 基础 modelKey；标准/快速两变体由档案 variants 承载，2026-06-16 合并）。 */
 export const SEEDANCE_2_MODEL_SEED = {
   modelKey: "bytedance/seedance-2",
   labelZh: "Seedance 2.0",
-  kind: "video" as const,
-} as const;
-
-/** Seedance 2.0 Fast 模型种子。与 2.0 同形、**复用同一条 (kie, image_to_video) mapping**——
- *  body 的 {{model.modelKey}} 自动取到 fast 的 enum。只是 catalog 多一行 + 档案多一份（480/720 清晰度）。 */
-export const SEEDANCE_2_FAST_MODEL_SEED = {
-  modelKey: "bytedance/seedance-2-fast",
-  labelZh: "Seedance 2.0 Fast",
   kind: "video" as const,
 } as const;
 
@@ -53,7 +45,9 @@ export const SEEDANCE_2_CREATE_OP: HttpOperation = {
     "Content-Type": "application/json",
   },
   body: {
-    model: "{{model.modelKey}}",
+    // 变体合并（2026-06-16）：model 取档案当前变体的 modelKey（{{request.params.model}}，
+    // 标准 bytedance/seedance-2 或快速 -fast；由 buildArchetypeInputParams out.model 落库），同 apimart Seedance。
+    model: "{{request.params.model}}",
     input: {
       prompt: "{{request.prompt}}",
       // 一条 body 覆盖三模式：模板引擎对值为 undefined 的键整键丢弃（requestPipeline.renderTemplateValue），

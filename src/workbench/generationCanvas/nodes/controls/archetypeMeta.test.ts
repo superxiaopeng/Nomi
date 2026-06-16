@@ -80,8 +80,8 @@ describe('ensureArchetypeNodeMeta — 初次落地', () => {
     expect((patch!.archetype as { id: string; modeId: string }).id).toBe('seedance-2')
     expect((patch!.archetype as { modeId: string }).modeId).toBe('first')
   })
-  it('已是该档案 → 幂等返回 null（不循环）', () => {
-    expect(ensureArchetypeNodeMeta({ archetype: { id: 'seedance-2', modeId: 'firstlast' } }, SEEDANCE)).toBeNull()
+  it('已是该档案（含 variantId）→ 幂等返回 null（不循环）', () => {
+    expect(ensureArchetypeNodeMeta({ archetype: { id: 'seedance-2', modeId: 'firstlast', variantId: 'standard' } }, SEEDANCE)).toBeNull()
   })
 })
 
@@ -104,19 +104,19 @@ describe('applyArchetypeModeSwitch — 只改 modeId，参考值全局保留', (
 describe('buildArchetypeInputParams — M2 互斥发生在档案驱动的 input 构建（snake 键）', () => {
   it('首帧模式：即便 meta 残留 lastFrameUrl，也只出 first_frame_url（不进 body，避免 422）', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }
-    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png', model: 'bytedance/seedance-2' })
   })
   it('首尾帧模式：first + last 两帧都出', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'firstlast' }, firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }
-    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png', last_frame_url: 'L.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png', last_frame_url: 'L.png', model: 'bytedance/seedance-2' })
   })
   it('references（画布连线）优先于 meta 全局值', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'stale.png' }
-    expect(buildArchetypeInputParams(meta, SEEDANCE, { firstFrameUrl: 'edge.png' })).toEqual({ first_frame_url: 'edge.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE, { firstFrameUrl: 'edge.png' })).toEqual({ first_frame_url: 'edge.png', model: 'bytedance/seedance-2' })
   })
-  it('空值不出键；Seedance 各模式同 model → 不带 model（body 用 modelKey）', () => {
+  it('空值不出键；Seedance 有变体 → 带 model=默认变体 modelKey（body 用 {{request.params.model}}）', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'firstlast' }, firstFrameUrl: '  ' }
-    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({})
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ model: 'bytedance/seedance-2' })
   })
 })
 
@@ -172,6 +172,7 @@ describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snak
     expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({
       reference_image_urls: ['c1.png', 'c2.png', 'c3.png'],
       reference_video_urls: ['v1.mp4'],
+      model: 'bytedance/seedance-2',
     })
   })
   it('首帧模式：即便 meta 残留 omni 的角色图数组，也不出（互斥）', () => {
@@ -180,7 +181,7 @@ describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snak
       firstFrameUrl: 'F.png',
       referenceImageUrls: ['c1.png', 'c2.png'],
     }
-    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE)).toEqual({ first_frame_url: 'F.png', model: 'bytedance/seedance-2' })
   })
 })
 
@@ -189,12 +190,14 @@ describe('切片1 — 画布边参考图喂进档案 image 槽（修边投递裂
     const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: ['c1.png', 'c2.png'] }
     expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['c2.png', 'e1.png'] })).toEqual({
       reference_image_urls: ['c1.png', 'c2.png', 'e1.png'], // c2 去重，e1 追加在 meta 之后
+      model: 'bytedance/seedance-2',
     })
   })
   it('纯边参考（meta 无数组）也进槽——agent 连 character_ref 边的常见场景，此前被丢', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'omni' } }
     expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1.png'] })).toEqual({
       reference_image_urls: ['e1.png'],
+      model: 'bytedance/seedance-2',
     })
   })
   it('截到 slot.max（omni image ≤9）：meta 8 + 边 3 → 9，封死 vendor 422', () => {
@@ -207,11 +210,12 @@ describe('切片1 — 画布边参考图喂进档案 image 槽（修边投递裂
     expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1.png'] })).toEqual({
       reference_image_urls: ['e1.png'],
       reference_video_urls: ['v1.mp4'],
+      model: 'bytedance/seedance-2',
     })
   })
   it('M2：首帧模式无 image_ref 槽，边参考图不泄漏进 body', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png' }
-    expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1.png'] })).toEqual({ first_frame_url: 'F.png' })
+    expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1.png'] })).toEqual({ first_frame_url: 'F.png', model: 'bytedance/seedance-2' })
   })
 })
 
@@ -386,8 +390,13 @@ describe('变体轴 — currentArchetypeVariant 回落', () => {
     expect(currentArchetypeVariant(SEEDANCE_APIMART, { archetype: { id: 'seedance-2-apimart', modeId: 't2v', variantId: 'ghost' } })?.id).toBe('standard')
     expect(currentArchetypeVariant(SEEDANCE_APIMART, { archetype: { id: 'other', modeId: 't2v', variantId: 'fast' } })?.id).toBe('standard')
   })
-  it('无 variants 档案 → null（如 kie Seedance）', () => {
-    expect(currentArchetypeVariant(getArchetypeById('seedance-2')!, {})).toBeNull()
+  it('无 variants 档案 → null（如 HappyHorse）', () => {
+    expect(currentArchetypeVariant(getArchetypeById('happyhorse')!, {})).toBeNull()
+  })
+  it('kie Seedance 合并后有标准/快速两变体（默认标准）', () => {
+    const kie = getArchetypeById('seedance-2')!
+    expect(currentArchetypeVariant(kie, {})?.id).toBe('standard')
+    expect(currentArchetypeVariant(kie, { archetype: { id: 'seedance-2', modeId: 'first', variantId: 'fast' } })?.id).toBe('fast')
   })
   it('archetypeVariantChoices 列出 4 变体（标签用变体自己的名字）', () => {
     expect(archetypeVariantChoices(SEEDANCE_APIMART)).toEqual([
@@ -396,8 +405,13 @@ describe('变体轴 — currentArchetypeVariant 回落', () => {
       { id: 'face', label: '真人' },
       { id: 'fast-face', label: '真人快速' },
     ])
+    // kie Seedance 合并后 2 变体。
+    expect(archetypeVariantChoices(getArchetypeById('seedance-2')!)).toEqual([
+      { id: 'standard', label: '标准' },
+      { id: 'fast', label: '快速' },
+    ])
     // 无 variants → 空（UI 不显示该段）。
-    expect(archetypeVariantChoices(getArchetypeById('seedance-2')!)).toEqual([])
+    expect(archetypeVariantChoices(getArchetypeById('happyhorse')!)).toEqual([])
   })
 })
 
@@ -501,8 +515,26 @@ describe('变体轴 — 旧项目迁移 normalizeArchetypeVariantMeta（最大�
     expect(normalizeArchetypeVariantMeta(meta, SEEDANCE_APIMART)).toBeNull()
   })
   it('无 variants 档案 / 认不出的 modelKey → null', () => {
-    expect(normalizeArchetypeVariantMeta({ modelKey: 'bytedance/seedance-2' }, getArchetypeById('seedance-2')!)).toBeNull()
+    expect(normalizeArchetypeVariantMeta({ modelKey: 'whatever' }, getArchetypeById('happyhorse')!)).toBeNull()
     expect(normalizeArchetypeVariantMeta({ modelKey: 'unknown' }, SEEDANCE_APIMART)).toBeNull()
+  })
+})
+
+describe('KIE Seedance 标准/Fast 合并到变体轴（2026-06-16）', () => {
+  const KIE = getArchetypeById('seedance-2')!
+  it('旧 fast 节点 bytedance/seedance-2-fast → 折叠成基础 + variantId=fast', () => {
+    const patch = normalizeArchetypeVariantMeta({ modelKey: 'bytedance/seedance-2-fast', archetype: { id: 'seedance-2', modeId: 'first' } }, KIE)
+    expect(patch?.modelKey).toBe('bytedance/seedance-2')
+    expect(patch?.archetype).toEqual({ id: 'seedance-2', modeId: 'first', variantId: 'fast' })
+  })
+  it('旧标准节点 modelKey 已是基础 → 不迁移（回落 standard）', () => {
+    expect(normalizeArchetypeVariantMeta({ modelKey: 'bytedance/seedance-2', archetype: { id: 'seedance-2', modeId: 'first' } }, KIE)).toBeNull()
+  })
+  it('变体 model 串：标准发 bytedance/seedance-2、快速发 -fast（body {{request.params.model}} 读它）', () => {
+    const std = { archetype: { id: 'seedance-2', modeId: 'first', variantId: 'standard' }, firstFrameUrl: 'F.png' }
+    const fast = { archetype: { id: 'seedance-2', modeId: 'first', variantId: 'fast' }, firstFrameUrl: 'F.png' }
+    expect(buildArchetypeInputParams(std, KIE).model).toBe('bytedance/seedance-2')
+    expect(buildArchetypeInputParams(fast, KIE).model).toBe('bytedance/seedance-2-fast')
   })
 })
 

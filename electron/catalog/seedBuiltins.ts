@@ -14,7 +14,6 @@ import type { CatalogState, HttpOperation, Mapping, Model, Vendor } from "./type
 import {
   KIE_VENDOR_SEED,
   SEEDANCE_2_CREATE_OP,
-  SEEDANCE_2_FAST_MODEL_SEED,
   SEEDANCE_2_IMAGE_TO_VIDEO_MAPPING,
   SEEDANCE_2_MODEL_SEED,
   SEEDANCE_2_QUERY_OP,
@@ -62,7 +61,6 @@ const KLING_3_I2V_MAPPING_ID = "seed-kie-kling-3-image_to_video";
 /** kie 的 curated 内置模型（archetypeId = 能力档案指针，代码所有；enabled/labelZh = 用户所有）。 */
 const KIE_CURATED_MODELS: CuratedModel[] = [
   { modelKey: SEEDANCE_2_MODEL_SEED.modelKey, labelZh: SEEDANCE_2_MODEL_SEED.labelZh, kind: SEEDANCE_2_MODEL_SEED.kind, archetypeId: "seedance-2" },
-  { modelKey: SEEDANCE_2_FAST_MODEL_SEED.modelKey, labelZh: SEEDANCE_2_FAST_MODEL_SEED.labelZh, kind: SEEDANCE_2_FAST_MODEL_SEED.kind, archetypeId: "seedance-2-fast" },
   { modelKey: HAPPYHORSE_MODEL_SEED.modelKey, labelZh: HAPPYHORSE_MODEL_SEED.labelZh, kind: HAPPYHORSE_MODEL_SEED.kind, archetypeId: "happyhorse" },
   { modelKey: GPT_IMAGE_2_T2I_MODEL_SEED.modelKey, labelZh: GPT_IMAGE_2_T2I_MODEL_SEED.labelZh, kind: GPT_IMAGE_2_T2I_MODEL_SEED.kind, archetypeId: "gpt-image-2" },
   { modelKey: GPT_IMAGE_2_I2I_MODEL_SEED.modelKey, labelZh: GPT_IMAGE_2_I2I_MODEL_SEED.labelZh, kind: GPT_IMAGE_2_I2I_MODEL_SEED.kind, archetypeId: "gpt-image-2" },
@@ -123,6 +121,11 @@ const RETIRED_APIMART_VIDEO_MODEL_KEYS: readonly string[] = [
   "doubao-seedance-2.0-fast",
   "doubao-seedance-2.0-face",
   "doubao-seedance-2.0-fast-face",
+];
+// KIE Seedance 标准/Fast 合并成 1 行 + 2 变体（2026-06-16）→ 老装机里残留的 fast catalog 行成孤儿，删掉。
+// 无孤儿 mapping（标准/fast 共用 SEEDANCE_MAPPING_ID，body 改 {{request.params.model}} 由 reconcileMappings 自愈）。
+const RETIRED_KIE_VIDEO_MODEL_KEYS: readonly string[] = [
+  "bytedance/seedance-2-fast",
 ];
 const RETIRED_APIMART_VIDEO_MAPPING_IDS: readonly string[] = [
   "seed-apimart-seedance-2-apimart-fast-text_to_video",
@@ -246,9 +249,10 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   if (seedVendor(vendors, KIE_VENDOR_SEED, now)) changed = true;
   if (seedVendor(vendors, APIMART_VENDOR_SEED, now)) changed = true;
 
-  // 退役 curated 记录清理（变体合并迁移：删 Seedance 旧 3 变体模型 + 6 mapping 孤儿，picker 收成 1 项）。
+  // 退役 curated 记录清理（变体合并迁移：删 Seedance 旧变体模型 + mapping 孤儿，picker 收成 1 项）。
   if (pruneRetiredModels(models, APIMART_VENDOR_SEED.key, RETIRED_APIMART_VIDEO_MODEL_KEYS)) changed = true;
   if (pruneRetiredMappings(mappings, RETIRED_APIMART_VIDEO_MAPPING_IDS)) changed = true;
+  if (pruneRetiredModels(models, KIE_VENDOR_SEED.key, RETIRED_KIE_VIDEO_MODEL_KEYS)) changed = true;
 
   // 模型 insert + 对账（两家各跑同一套逻辑）。
   if (reconcileModels(models, KIE_VENDOR_SEED.key, KIE_CURATED_MODELS, now)) changed = true;

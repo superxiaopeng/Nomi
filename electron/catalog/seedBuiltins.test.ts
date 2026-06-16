@@ -34,10 +34,11 @@ describe("applyBuiltinSeeds", () => {
     expect(model).toMatchObject({ vendorKey: "kie", kind: "video", enabled: true });
     expect(model?.meta).toMatchObject({ archetypeId: "happyhorse" });
 
-    // Seedance Fast：同族扩展只多 1 行 model，复用 Seedance 的 image_to_video mapping（不新增 mapping）。
-    const fast = state.models.find((m) => m.modelKey === "bytedance/seedance-2-fast");
-    expect(fast?.meta).toMatchObject({ archetypeId: "seedance-2-fast" });
-    // Fast 不新增 image_to_video mapping → 只有一条**generic**（Seedance）；Kling 等带 modelKey 的不算在内。
+    // Seedance 标准/Fast 合并成 1 行 + 2 变体（2026-06-16）：catalog 只剩基础行，无独立 fast 行。
+    expect(state.models.find((m) => m.modelKey === "bytedance/seedance-2-fast")).toBeUndefined();
+    const seedance = state.models.find((m) => m.modelKey === "bytedance/seedance-2");
+    expect(seedance?.meta).toMatchObject({ archetypeId: "seedance-2" });
+    // 仍只一条 generic（Seedance）image_to_video mapping；Kling 等带 modelKey 的不算在内。
     expect(state.mappings.filter((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video" && !mp.modelKey)).toHaveLength(1);
     const mapping = state.mappings.find((mp) => mp.id === "seed-kie-happyhorse-text_to_video");
     expect(mapping?.enabled).toBe(true);

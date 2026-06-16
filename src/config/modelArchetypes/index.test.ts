@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getArchetypeById, resolveArchetypeForModel } from "./index";
+import { getArchetypeById, resolveArchetypeForModel, specializeArchetypeForVariant } from "./index";
 
 // 钉死「通用第一」：同一个模型，经任意供应商接入，都解析到同一套档案 —— 解析器**不看 vendor**。
 // 认不出的模型 → null（渲染层走通用回退）。'seedance-2' 不误命中 'seedance-2-fast'。
@@ -27,16 +27,19 @@ describe("resolveArchetypeForModel — 供应商无关的识别桥", () => {
     }
   });
 
-  it("seedance-2 与 seedance-2-fast 是两份档案，互不误命中（前缀相近也分得清）", () => {
-    expect(resolveArchetypeForModel({ modelKey: "bytedance/seedance-2-fast" })?.id).toBe("seedance-2-fast");
+  it("kie Seedance 变体合并：标准/Fast 两 modelKey 都解析到同一基础档案 seedance-2（不再两份）", () => {
+    // 合并后只剩 1 份 seedance-2；标准 + Fast 的 modelKey 都命中它（identifierPatterns 收纳），fast 不再是独立档案。
     expect(resolveArchetypeForModel({ modelKey: "bytedance/seedance-2" })?.id).toBe("seedance-2");
+    expect(resolveArchetypeForModel({ modelKey: "bytedance/seedance-2-fast" })?.id).toBe("seedance-2");
+    expect(getArchetypeById("seedance-2-fast")).toBeNull();
   });
 
-  it("seedance-2-fast 同族扩展：同模式形状，唯清晰度收成 480/720（无 1080）", () => {
-    const fast = getArchetypeById("seedance-2-fast");
-    expect(fast?.modes.map((m) => m.id)).toEqual(["first", "firstlast", "omni"]);
-    const firstRes = fast?.modes[0].params.find((p) => p.key === "resolution");
-    expect(firstRes?.options.map((o) => o.value)).toEqual(["480p", "720p"]);
+  it("kie Seedance fast 变体：specialize 后清晰度收成 480/720（无 1080），标准是 480/720/1080", () => {
+    const base = getArchetypeById("seedance-2")!;
+    const resOf = (variantId: string) =>
+      specializeArchetypeForVariant(base, variantId).modes[0].params.find((p) => p.key === "resolution")!.options.map((o) => o.value);
+    expect(resOf("standard")).toEqual(["480p", "720p", "1080p"]);
+    expect(resOf("fast")).toEqual(["480p", "720p"]);
   });
 
   it("apimart Seedance 变体合并：4 个旧变体 modelKey 全解析到同一基础档案（迁移层据 variant 落到对应 variantId）", () => {

@@ -24,6 +24,58 @@ const FIRST_MODE_PARAMS: ModelParameterControl[] = [
   { key: "generate_audio", label: "生成音频", type: "boolean", options: [], defaultValue: true },
 ];
 
+const SEEDANCE_2_MODES: ModelArchetype["modes"] = [
+  {
+    id: "first",
+    intent: "single",
+    vendorTerm: "首帧",
+    hint: "单张首帧图驱动生成",
+    promptRequired: true,
+    slots: [{ kind: "first_frame", label: "首帧", min: 1, max: 1 }],
+    params: FIRST_MODE_PARAMS,
+  },
+  {
+    id: "firstlast",
+    intent: "firstlast",
+    vendorTerm: "首尾帧",
+    hint: "首帧 + 尾帧，过渡更可控",
+    promptRequired: true,
+    slots: [
+      { kind: "first_frame", label: "首帧", min: 1, max: 1 },
+      { kind: "last_frame", label: "尾帧", min: 1, max: 1 },
+    ],
+    params: FIRST_MODE_PARAMS,
+  },
+  {
+    // 全能参考（omni）：多模态参考数组。kie 文档：reference_image_urls[≤9]（按序 = character1..9）、
+    // reference_video_urls[≤3]、reference_audio_urls[≤3]。三者与 first/last 帧互斥（§2 坑2）。
+    // 角色图数组用**有序的画布边**表达（edge.order 保住 character1..N）+ 可手动上传（audit 2026-06-16 §1d
+    // 收口；此前 meta-only 不画线的旧设计因 edge 无 order 字段而权宜，现已补 order）。
+    id: "omni",
+    intent: "character",
+    vendorTerm: "全能参考",
+    hint: "多模态参考；最多 9 角色 / 3 视频 / 3 音频",
+    promptRequired: true,
+    slots: [
+      { kind: "image_ref", label: "角色参考", min: 0, max: 9, characterIndexed: true },
+      { kind: "video_ref", label: "参考视频", min: 0, max: 3 },
+      { kind: "audio_ref", label: "参考音频", min: 0, max: 3 },
+    ],
+    params: FIRST_MODE_PARAMS,
+  },
+];
+
+// Fast 变体清晰度仅 480/720（无 1080，kie 文档）。运行时按 variantId 叠加（specializeArchetypeForVariant），
+// 不再档案级复制——变体是正交轴，跨所有 mode 收窄 resolution。
+const FAST_RES: ModelParameterControl = {
+  key: "resolution", label: "清晰度", type: "select", options: toOptions(["480p", "720p"]), defaultValue: "720p",
+};
+const narrowResolutionToFast = (params: ModelParameterControl[]): ModelParameterControl[] =>
+  params.map((p) => (p.key === "resolution" ? FAST_RES : p));
+const FAST_OVERRIDES = Object.fromEntries(
+  SEEDANCE_2_MODES.map((m) => [m.id, narrowResolutionToFast] as const),
+);
+
 export const SEEDANCE_2_ARCHETYPE: ModelArchetype = {
   id: "seedance-2",
   family: "seedance",
@@ -31,62 +83,14 @@ export const SEEDANCE_2_ARCHETYPE: ModelArchetype = {
   kind: "video",
   defaultModeId: "first",
   transportTaskKind: "image_to_video",
-  identifierPatterns: ["bytedance/seedance-2", "seedance-2", "seedance2"],
-  modes: [
-    {
-      id: "first",
-      intent: "single",
-      vendorTerm: "首帧",
-      hint: "单张首帧图驱动生成",
-      promptRequired: true,
-      slots: [{ kind: "first_frame", label: "首帧", min: 1, max: 1 }],
-      params: FIRST_MODE_PARAMS,
-    },
-    {
-      id: "firstlast",
-      intent: "firstlast",
-      vendorTerm: "首尾帧",
-      hint: "首帧 + 尾帧，过渡更可控",
-      promptRequired: true,
-      slots: [
-        { kind: "first_frame", label: "首帧", min: 1, max: 1 },
-        { kind: "last_frame", label: "尾帧", min: 1, max: 1 },
-      ],
-      params: FIRST_MODE_PARAMS,
-    },
-    {
-      // 全能参考（omni）：多模态参考数组。kie 文档：reference_image_urls[≤9]（按序 = character1..9）、
-      // reference_video_urls[≤3]、reference_audio_urls[≤3]。三者与 first/last 帧互斥（§2 坑2）。
-      // 角色图数组用**有序的画布边**表达（edge.order 保住 character1..N）+ 可手动上传（audit 2026-06-16 §1d
-      // 收口；此前 meta-only 不画线的旧设计因 edge 无 order 字段而权宜，现已补 order）。
-      id: "omni",
-      intent: "character",
-      vendorTerm: "全能参考",
-      hint: "多模态参考；最多 9 角色 / 3 视频 / 3 音频",
-      promptRequired: true,
-      slots: [
-        { kind: "image_ref", label: "角色参考", min: 0, max: 9, characterIndexed: true },
-        { kind: "video_ref", label: "参考视频", min: 0, max: 3 },
-        { kind: "audio_ref", label: "参考音频", min: 0, max: 3 },
-      ],
-      params: FIRST_MODE_PARAMS,
-    },
+  // 收纳标准 + Fast 两变体 modelKey → 旧 fast 节点仍解析到本档案（迁移层据 variant.identifierPatterns 归一）。
+  identifierPatterns: ["bytedance/seedance-2", "seedance-2", "seedance2", "bytedance/seedance-2-fast", "seedance-2-fast", "seedance2fast"],
+  modes: SEEDANCE_2_MODES,
+  // 变体轴：标准 / 快速（kie 的 model enum bytedance/seedance-2 与 -fast）。快速仅 480/720（FAST_OVERRIDES
+  // 按 modeId 收窄 resolution）。catalog body 取 {{request.params.model}} 读当前变体 modelKey（同 apimart Seedance）。
+  variants: [
+    { id: "standard", label: "标准", modelKey: "bytedance/seedance-2", identifierPatterns: ["seedance-2", "seedance2"] },
+    { id: "fast", label: "快速", modelKey: "bytedance/seedance-2-fast", identifierPatterns: ["seedance-2-fast", "seedance2fast"], paramOverrides: FAST_OVERRIDES },
   ],
-};
-
-// Seedance 2.0 Fast：与 2.0 **同形**——同模式、同参考槽、同传输 mapping（kie 的 image_to_video，body
-// 用 {{model.modelKey}} 自动取到 fast 的 enum，无需 per-mode 覆盖）。唯一差异：清晰度仅 480/720（无 1080，
-// kie 文档）。这正是「同族扩展 = 改几行数据」的样板：复用 2.0 的 modes，只换 resolution 选项。
-const FAST_RES: ModelParameterControl = {
-  key: "resolution", label: "清晰度", type: "select", options: toOptions(["480p", "720p"]), defaultValue: "720p",
-};
-const withFastResolution = (params: ModelParameterControl[]): ModelParameterControl[] =>
-  params.map((p) => (p.key === "resolution" ? FAST_RES : p));
-
-export const SEEDANCE_2_FAST_ARCHETYPE: ModelArchetype = {
-  ...SEEDANCE_2_ARCHETYPE,
-  id: "seedance-2-fast",
-  label: "Seedance 2.0 Fast",
-  identifierPatterns: ["bytedance/seedance-2-fast", "seedance-2-fast", "seedance2fast"],
-  modes: SEEDANCE_2_ARCHETYPE.modes.map((mode) => ({ ...mode, params: withFastResolution(mode.params) })),
+  defaultVariantId: "standard",
 };
