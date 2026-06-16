@@ -192,6 +192,14 @@ export type GenerationCanvasEdge = {
   source: string
   target: string
   mode?: GenerationCanvasEdgeMode
+  /**
+   * 落入同一 target 的放入顺序（0,1,2…）。数组参考槽（image_ref，characterIndexed）按它对应
+   * prompt 的 character1..N；保住「谁是 character1」。建边时由 connectNodes 按「该 target 现有边数」
+   * 赋递增值（全模式单调，全局插入序）。显示(resolveReferenceSlots)与生成(resolveGenerationReferences)
+   * 都按 order 排序落槽——同一真相源、顺序稳定，杜绝「显示读 meta、生成读边」分裂（audit 2026-06-16 §1d）。
+   * 旧快照无此字段：排序退化为保持原数组序（与历史行为一致），故 optional、向后兼容。
+   */
+  order?: number
 }
 
 export type GenerationCanvasEdgeMode =

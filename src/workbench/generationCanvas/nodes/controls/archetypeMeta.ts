@@ -35,8 +35,10 @@ const FRAME_SLOT_FLAT: Partial<Record<ArchetypeReferenceSlotKind, { urlKey: stri
 }
 
 /**
- * 多参考**数组**槽（C3，meta-only 不走画布边，评审 M6）→ 路由键。
- * - metaKey：渲染层把数组存这（camelCase，全局持久，跨模式保留）。
+ * 多参考**数组**槽（C3）→ 路由键。值有两个来源：① 有序画布边（edge.order 保 character1..N，
+ * audit 2026-06-16 §1d 收口）② 手动上传存 meta（无源节点的真上传）；两者在 resolveReferenceSlots/
+ * buildArchetypeInputParams 合并去重、按序。
+ * - metaKey：渲染层把**手动上传**的数组存这（camelCase，全局持久，跨模式保留）。
  * - paramKey：runtime taskTemplateParams 映射出的**通用 snake 参数键**（与供应商无关）。
  *   供应商真正的 input 键（如 kie 的 `reference_video_urls ` 含尾随空格 §2 坑1）只在该供应商的
  *   mapping body 里写一次（electron/catalog/kieSeedance），不在这里 —— 档案供应商无关（M1 单源）。
@@ -185,9 +187,10 @@ export type ArchetypeArrayAppend =
   | { status: 'full' }
 
 /**
- * 往数组参考槽追加一个 URL 的**纯**单源逻辑（去重 + 上限判定）。renderer 的 handleArrayAdd、
- * 拖入(useNodeAssetDrop)、连线(completeNodeConnection)三处入口共用它——保证「加参考」只有一套
- * 去重/上限规则（规则 1：不开第 N 条写路径）。写入 / toast 由调用方按返回状态决定。
+ * 往数组参考槽追加一个 URL 的**纯**单源逻辑（去重 + 上限判定）。**仅 meta-only 上传路径**用它：
+ * renderer 的 handleArrayAdd（手动粘 URL）、拖入磁盘文件(useNodeAssetDrop)——这两处无源节点、是真上传。
+ * 画布连线（completeNodeConnection）已收口成「建有序边」，不再写 meta（audit 2026-06-16 §1d），故不在此列。
+ * 保证「加上传参考」只有一套去重/上限规则（规则 1：不开第 N 条写路径）。写入 / toast 由调用方按返回状态决定。
  */
 export function appendArchetypeArrayValue(
   meta: Record<string, unknown> | undefined,

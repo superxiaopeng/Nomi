@@ -13,6 +13,7 @@ import type { GenerationCanvasEdge, GenerationCanvasEdgeMode, GenerationCanvasNo
 import type { ArchetypeReferenceSlot, ArchetypeReferenceSlotKind } from '../../../config/modelArchetypes'
 import { currentArchetypeMode, referenceSlotStorage } from '../nodes/controls/archetypeMeta'
 import { archetypeForNode, referenceAssetKindForNode, SLOT_ACCEPTS, type ReferenceAssetKind } from '../agent/referenceEdgeCapability'
+import { sortEdgesByOrder } from '../model/graphOps'
 import { asUrl, findNodeResultUrl } from './referenceUrl'
 
 export type ReferenceFillOrigin =
@@ -101,7 +102,8 @@ export function resolveReferenceSlots(
   }
 
   // 1) 边：一对一落槽。dangling / 源无可参考资产 → 跳过（连了但不可作参考）。
-  for (const edge of edges) {
+  //    **按 order 升序**落槽 → 数组参考 character1..N 顺序稳定，与生成侧同一口径（audit §1d）。
+  for (const edge of sortEdgesByOrder(edges)) {
     if (edge.target !== target.id) continue
     const source = nodesById.get(edge.source)
     if (!source) continue
@@ -157,6 +159,52 @@ export type ArrayReferenceRemoval =
   | { kind: 'disconnect-edge'; edgeId: string; url: string | null }
   | { kind: 'remove-upload'; url: string }
   | { kind: 'noop' }
+
+/**
+ * 地基收口对账（audit 2026-06-16 §1c+§1d）：扫全图，找出「应是边、却以 meta-only 上传形态显示」的
+ * 数组参考孤儿——即某节点数组槽里以 `upload` 来源显示的参考，其 URL 其实对应**画布内某节点的产物**
+ * （本该建成有序边，却残留在 meta 里，会和未来重连的边重复显示 / 顺序不可控）。连线路径已不再写
+ * meta-only（completeNodeConnection 改建有序边）、迁移层把旧 meta 反查建边，故正常态返回空；
+ * 非空 = 有路径绕过了「建边」收口（或脏数据），对账如实报，把整类分裂钉在 CI。
+ * 同时校验：标 `edge` 来源的 fill 必有真实边（双向不变量）。返回人话偏差列表，喂 reconcileProposal
+ * 的 auditOrphanArrayReferences 注入点。
+ */
+export function findOrphanArrayReferences(
+  nodes: readonly GenerationCanvasNode[],
+  edges: readonly GenerationCanvasEdge[],
+): Array<{ where: string; field: string; expected: unknown; actual: unknown }> {
+  const out: Array<{ where: string; field: string; expected: unknown; actual: unknown }> = []
+  const nodeList = nodes as GenerationCanvasNode[]
+  const edgeList = edges as GenerationCanvasEdge[]
+  // URL → 画布内产出它的源节点 id（与迁移层同口径 providerUrl/url/thumbnailUrl）。
+  const sourceByUrl = new Map<string, string>()
+  for (const node of nodeList) {
+    for (const candidate of [node.result?.providerUrl, node.result?.url, node.result?.thumbnailUrl, ...(node.history || []).flatMap((h) => [h.providerUrl, h.url, h.thumbnailUrl])]) {
+      const u = asUrl(candidate)
+      if (u && !sourceByUrl.has(u)) sourceByUrl.set(u, node.id)
+    }
+  }
+  for (const node of nodeList) {
+    for (const slot of resolveReferenceSlots(node, nodeList, edgeList)) {
+      for (const fill of slot.fills) {
+        if (fill.origin.type === 'edge') {
+          // 标 edge 来源 → 必有真实边（构造性应恒真；脏快照则如实报）。
+          const hasEdge = edgeList.some((e) => e.source === (fill.origin as { sourceNodeId: string }).sourceNodeId && e.target === node.id)
+          if (!hasEdge) {
+            out.push({ where: `「${node.title || node.id}」`, field: `数组参考槽 ${slot.label}`, expected: '有对应已提交边', actual: '显示出边参考但无边' })
+          }
+          continue
+        }
+        // 标 upload 来源、但 URL 其实是画布内某节点的产物 → 本该建边的孤儿（meta-only 残留）。
+        const sourceId = fill.url ? sourceByUrl.get(fill.url) : undefined
+        if (sourceId && sourceId !== node.id) {
+          out.push({ where: `「${node.title || node.id}」`, field: `数组参考槽 ${slot.label}`, expected: '画布内来源应建成有序边', actual: 'meta-only 残留（无边有图）' })
+        }
+      }
+    }
+  }
+  return out
+}
 
 export function decideArrayReferenceRemoval(
   target: GenerationCanvasNode,

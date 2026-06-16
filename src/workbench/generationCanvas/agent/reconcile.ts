@@ -59,6 +59,16 @@ export function reconcileProposal(input: {
    * 真实边/节点，必然误报「执行与批准有出入」（2026-06-12 真机走查 bug A）。
    */
   resolveExternalId?: (raw: string) => string
+  /**
+   * 地基收口对账（audit 2026-06-16 §1c+§1d）：注入「按当前后态算出『显示出但无对应边』的孤儿数组参考」。
+   * 数组参考收口到有序边后，显示出的每个 edge-origin 参考都必须有真实边——若出现「无边有图」的
+   * meta-only 孤儿（不该再发生，因连线路径已不写 meta-only），如实报为偏差。注入保持本函数纯 + 不耦合
+   * archetype 配置层（resolver 在 runner 层，调用方传入）。缺省（旧调用方/property test）→ 不查、零影响。
+   */
+  auditOrphanArrayReferences?: (
+    nodes: readonly NodeLike[],
+    edges: readonly EdgeLike[],
+  ) => ReconcileDeviation[]
 }): ReconcileResult {
   const deviations: ReconcileDeviation[] = []
   const nodeById = new Map(input.nodes.map((node) => [node.id, node]))
@@ -180,6 +190,11 @@ export function reconcileProposal(input: {
       }
       continue
     }
+  }
+
+  // 地基收口断言：显示出的每个数组参考都有对应已提交边（治「无边有图」meta-only 孤儿，§1c）。
+  if (input.auditOrphanArrayReferences) {
+    deviations.push(...input.auditOrphanArrayReferences(input.nodes, input.edges))
   }
 
   return { ok: deviations.length === 0, deviations }

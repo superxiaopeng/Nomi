@@ -14,10 +14,11 @@
 // 跨「所有模式」union 校验(非当前模式):拒的是「这个模型根本不吃这类参考」的硬错(用户两例),
 // 不拒「模型支持但当前选错模式」的软错(那个由 availableModels 喂能力给 agent + 用户在计划卡
 // 改模式兜)——避免误伤可恢复的模式选择问题。目标未声明档案(未知/未设模型)一律放行(P4 通用回退)。
-import type { GenerationCanvasEdgeMode, GenerationCanvasNode } from '../model/generationCanvasTypes'
+import type { GenerationCanvasEdge, GenerationCanvasEdgeMode, GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getGenerationNodeDefinition, getGenerationNodeExecutionKind } from '../model/generationNodeKinds'
 import type { ArchetypeReferenceSlotKind, ModelArchetype } from '../../../config/modelArchetypes'
 import { getArchetypeById, resolveArchetypeForModel } from '../../../config/modelArchetypes'
+import { currentArchetypeMode } from '../nodes/controls/archetypeMeta'
 
 /** 源节点产出的可参考资产类型;text/shot/output 等无产出 → null(不能作参考源)。 */
 export type ReferenceAssetKind = 'image' | 'video'
@@ -115,6 +116,38 @@ export function validateReferenceEdge(
   const required = EDGE_MODE_SLOTS[mode ?? 'reference']
   const satisfiable = required.some((slot) => slotKinds.has(slot) && SLOT_ACCEPTS[slot].includes(asset))
   return satisfiable ? { ok: true } : { ok: false, reason: 'unsupported_reference' }
+}
+
+/**
+ * 手动连线时按**目标当前模式**挑边语义（mode）的单一真相源。地基收口（audit 2026-06-16 §1d）：
+ * 数组参考槽（image_ref，characterIndexed，如 Seedance omni 的「角色参考」最多 9 张）现在也建有序边，
+ * 故落它的边要用 `character_ref` 语义（按序对应 character1..N），而非首/尾帧——后者会污染 firstFrameUrl、
+ * 触发尾帧接力误判，且在 omni 模式被 M2 互斥丢掉。
+ *
+ * 规则（image 源 → video 目标）：
+ * - 目标当前模式有 characterIndexed 的 image_ref 数组槽 → `character_ref`（数组参考，有序）。
+ * - 否则（单帧 i2v：Hailuo/Seedance first/firstlast）→ 沿用首/尾帧填空：无首帧边→first_frame，
+ *   已有首帧→last_frame（与历史 connectToNode 行为一致）。
+ * 其余源/目标组合 → `reference`（通用，由 resolveReferenceSlots 按源资产挑槽）。
+ */
+export function selectConnectionEdgeMode(
+  source: GenerationCanvasNode,
+  target: GenerationCanvasNode,
+  existingEdgesToTarget: readonly GenerationCanvasEdge[],
+): GenerationCanvasEdgeMode {
+  const sourceKind = referenceAssetKindForNode(source)
+  if (sourceKind === 'image' && target.kind === 'video') {
+    const archetype = archetypeForNode(target)
+    if (archetype) {
+      const mode = currentArchetypeMode(archetype, (target.meta || {}) as Record<string, unknown>)
+      const hasCharacterArray = mode.slots.some((slot) => slot.kind === 'image_ref' && Boolean(slot.characterIndexed))
+      if (hasCharacterArray) return 'character_ref'
+    }
+    // 单帧 i2v：首帧空位优先，再尾帧（与历史行为一致）。
+    if (!existingEdgesToTarget.some((e) => e.mode === 'first_frame')) return 'first_frame'
+    if (!existingEdgesToTarget.some((e) => e.mode === 'last_frame')) return 'last_frame'
+  }
+  return 'reference'
 }
 
 /** 计划里的边(批准前):可能用 clientId(新节点)或真实 id(复用已有卡)。 */

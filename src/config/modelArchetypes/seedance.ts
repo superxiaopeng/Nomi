@@ -57,7 +57,8 @@ export const SEEDANCE_2_ARCHETYPE: ModelArchetype = {
     {
       // 全能参考（omni）：多模态参考数组。kie 文档：reference_image_urls[≤9]（按序 = character1..9）、
       // reference_video_urls[≤3]、reference_audio_urls[≤3]。三者与 first/last 帧互斥（§2 坑2）。
-      // 数组槽 meta-only，不走画布边（评审 M6：edge 只有 3 个值，表达不了 9 个有序槽）。
+      // 角色图数组用**有序的画布边**表达（edge.order 保住 character1..N）+ 可手动上传（audit 2026-06-16 §1d
+      // 收口；此前 meta-only 不画线的旧设计因 edge 无 order 字段而权宜，现已补 order）。
       id: "omni",
       intent: "character",
       vendorTerm: "全能参考",

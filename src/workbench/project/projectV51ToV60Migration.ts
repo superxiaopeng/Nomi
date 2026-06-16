@@ -9,12 +9,16 @@
  * 2. derivedFrom 语义分流 — 同分类源 → regeneratedFrom；不同分类源 → 保留为 derivedFrom；
  *    源不存在 → 清空（孤立副本，日志记录）（spec §5.3 + 决策 3）
  * 3. 分镜节点 shotIndex 补齐 — 按 position.y 升序排列后赋值（spec §6.4）
+ * 4. 数组参考 meta→有序边 — 旧 meta.referenceImageUrls（有序、不画线）反查源节点建成
+ *    有序 character_ref 边（audit 2026-06-16 §1d「数组参考收口到有序边」）；反查不到源的
+ *    URL 保留在 meta，绝不丢已存参考。**这一步动 edges**。
  *
- * 注意：本 migration **不动** categoryId（projectCategoryMigration 已处理），不动 groups / edges。
+ * 注意：本 migration **不动** categoryId（projectCategoryMigration 已处理），不动 groups。
  * 旧持久化数据中不存在的字段保持 undefined，让 zod schema 在解析时 fallback。
  */
 import type { WorkbenchProjectRecordV1 } from './projectRecordSchema'
 import type { GenerationCanvasNode } from '../generationCanvas/model/generationCanvasTypes'
+import { migrateReferenceImageUrlsToEdges } from '../generationCanvas/model/referenceImageUrlsToEdges'
 import {
   BUILTIN_CATEGORIES,
   type NodeRenderKind,
@@ -35,6 +39,8 @@ export type V51ToV60Diagnostic = {
   derivedFromMovedToRegeneratedFrom: number
   derivedFromClearedOrphan: number
   shotIndicesAssigned: number
+  /** 数组参考 meta.referenceImageUrls 反查源建成的有序 character_ref 边数。 */
+  referenceEdgesCreated: number
 }
 
 const EMPTY_DIAGNOSTIC: V51ToV60Diagnostic = {
@@ -44,6 +50,7 @@ const EMPTY_DIAGNOSTIC: V51ToV60Diagnostic = {
   derivedFromMovedToRegeneratedFrom: 0,
   derivedFromClearedOrphan: 0,
   shotIndicesAssigned: 0,
+  referenceEdgesCreated: 0,
 }
 
 function inferRenderKind(categoryId: string | undefined): NodeRenderKind | undefined {
@@ -128,13 +135,22 @@ export function migrateProjectV51ToV60(record: WorkbenchProjectRecordV1): {
     }
   })
 
+  // 4. 数组参考 meta.referenceImageUrls → 有序 character_ref 边（反查不到源的 URL 保留 meta）。
+  const existingEdges = Array.isArray(canvas.edges) ? canvas.edges : []
+  const refEdgeResult = migrateReferenceImageUrlsToEdges(upgradedNodes, existingEdges)
+  const referenceEdgesCreated = refEdgeResult.edgesCreated
+  // 节点 meta 被参考迁移改过（清掉已表达成边的 URL）——即便 edgesCreated=0（边已存在、纯去重）也算变化，
+  // 否则 meta 残留的旧 URL 会和边重复显示。
+  const referenceMetaChanged = refEdgeResult.nodes !== upgradedNodes
+
   const anyChange =
     renderKindBackfilled +
       derivedFromKeptCrossCategory +
       derivedFromMovedToRegeneratedFrom +
       derivedFromClearedOrphan +
-      shotIndicesAssigned >
-    0
+      shotIndicesAssigned +
+      referenceEdgesCreated >
+      0 || referenceMetaChanged
 
   if (!anyChange) {
     return { record, diagnostic: EMPTY_DIAGNOSTIC }
@@ -146,7 +162,9 @@ export function migrateProjectV51ToV60(record: WorkbenchProjectRecordV1): {
       ...record.payload,
       generationCanvas: {
         ...canvas,
-        nodes: upgradedNodes,
+        // 参考迁移可能改了节点 meta（清掉已建边的 referenceImageUrls）+ 加了边。
+        nodes: refEdgeResult.nodes,
+        edges: refEdgeResult.edges,
       },
     },
   }
@@ -160,6 +178,7 @@ export function migrateProjectV51ToV60(record: WorkbenchProjectRecordV1): {
       derivedFromMovedToRegeneratedFrom,
       derivedFromClearedOrphan,
       shotIndicesAssigned,
+      referenceEdgesCreated,
     },
   }
 }

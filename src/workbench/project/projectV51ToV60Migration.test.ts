@@ -157,4 +157,61 @@ describe('migrateProjectV51ToV60', () => {
       expect(diagnostic.alreadyMigrated).toBe(true)
     })
   })
+
+  describe('数组参考 meta.referenceImageUrls → 有序 character_ref 边（audit §1d）', () => {
+    function recordWithEdges(nodes: GenerationCanvasNode[], edges: unknown[] = []): WorkbenchProjectRecordV1 {
+      const base = makeRecord(nodes)
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          generationCanvas: { ...base.payload.generationCanvas, edges: edges as never },
+        },
+      }
+    }
+    const imgWithResult = (id: string, url: string): GenerationCanvasNode => ({
+      ...makeNode({ id, kind: 'image', categoryId: 'cast' }),
+      result: { id: `${id}-r`, type: 'image', url, createdAt: 0 },
+    }) as GenerationCanvasNode
+    const omniShot = (id: string, refUrls: string[]): GenerationCanvasNode => ({
+      ...makeNode({ id, kind: 'video', categoryId: 'shots' }),
+      meta: { modelKey: 'seedance-2', archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: refUrls },
+    }) as GenerationCanvasNode
+
+    it('画布内有源的参考 → 建有序边、清 meta、诊断计数', () => {
+      const record = recordWithEdges([
+        imgWithResult('a', 'https://cdn/a.png'),
+        imgWithResult('b', 'https://cdn/b.png'),
+        omniShot('v1', ['https://cdn/a.png', 'https://cdn/b.png']),
+      ])
+      const { record: out, diagnostic } = migrateProjectV51ToV60(record)
+      expect(diagnostic.referenceEdgesCreated).toBe(2)
+      const edges = out.payload.generationCanvas.edges
+      expect(edges.map((e) => [e.source, e.order])).toEqual([['a', 0], ['b', 1]])
+      const v1 = out.payload.generationCanvas.nodes.find((n) => n.id === 'v1')
+      expect((v1?.meta as Record<string, unknown>)?.referenceImageUrls).toBeUndefined()
+    })
+
+    it('反查不到源的 URL 保留 meta（绝不丢已存参考）', () => {
+      const record = recordWithEdges([
+        imgWithResult('a', 'https://cdn/a.png'),
+        omniShot('v1', ['https://cdn/a.png', 'https://cdn/manual-upload.png']),
+      ])
+      const { record: out, diagnostic } = migrateProjectV51ToV60(record)
+      expect(diagnostic.referenceEdgesCreated).toBe(1)
+      const v1 = out.payload.generationCanvas.nodes.find((n) => n.id === 'v1')
+      expect((v1?.meta as Record<string, unknown>)?.referenceImageUrls).toEqual(['https://cdn/manual-upload.png'])
+    })
+
+    it('幂等：二次迁移不再建边', () => {
+      const record = recordWithEdges([
+        imgWithResult('a', 'https://cdn/a.png'),
+        omniShot('v1', ['https://cdn/a.png']),
+      ])
+      const first = migrateProjectV51ToV60(record)
+      const second = migrateProjectV51ToV60(first.record)
+      expect(second.diagnostic.referenceEdgesCreated).toBe(0)
+      expect(second.record).toBe(first.record)
+    })
+  })
 })
