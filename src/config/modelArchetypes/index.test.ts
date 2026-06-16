@@ -39,6 +39,13 @@ describe("resolveArchetypeForModel — 供应商无关的识别桥", () => {
     expect(firstRes?.options.map((o) => o.value)).toEqual(["480p", "720p"]);
   });
 
+  it("apimart Seedance 4 变体 → 标准/fast/face/fast-face 各命中正确档案（face 复用标准、fast-face 复用 fast）", () => {
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2.0" })?.id).toBe("seedance-2-apimart");
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2.0-fast" })?.id).toBe("seedance-2-apimart-fast");
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2.0-face" })?.id).toBe("seedance-2-apimart");
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2.0-fast-face" })?.id).toBe("seedance-2-apimart-fast");
+  });
+
   it("认不出的模型 → null（渲染层走通用回退）", () => {
     expect(resolveArchetypeForModel({ modelKey: "acme/some-unknown-video-model" })).toBeNull();
     expect(resolveArchetypeForModel(null)).toBeNull();

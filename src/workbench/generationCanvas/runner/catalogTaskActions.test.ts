@@ -254,8 +254,14 @@ describe('接入即验证（零额度）：每个档案/模式声明的参考槽
     audio_ref: { key: 'referenceAudioUrls', value: ['https://x/ar.mp3'], flat: ['https://x/ar.mp3'] },
     source_video: { key: 'sourceVideoUrl', value: 'https://x/sv.mp4', flat: ['https://x/sv.mp4'] },
   }
+  // 扁平出所有 url 字符串：含 combineSlotsInto 产出的角色对象数组 [{url,role}]（首尾帧的值嵌在 url 字段里，
+  // 仍算"进了请求"——不静默丢）。
   const flattenValues = (obj: Record<string, unknown>): string[] =>
-    Object.values(obj).flatMap((v) => (Array.isArray(v) ? v : [v])).filter((v): v is string => typeof v === 'string')
+    Object.values(obj).flatMap((v) => (Array.isArray(v) ? v : [v])).flatMap((v) => {
+      if (typeof v === 'string') return [v]
+      if (v && typeof v === 'object' && typeof (v as { url?: unknown }).url === 'string') return [(v as { url: string }).url]
+      return []
+    })
 
   for (const archetype of MODEL_ARCHETYPES) {
     for (const mode of archetype.modes) {

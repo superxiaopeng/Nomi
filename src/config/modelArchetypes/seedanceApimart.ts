@@ -11,6 +11,7 @@ const PARAMS: ModelParameterControl[] = [
   { key: "size", label: "比例", type: "select", options: opt(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"]), defaultValue: "16:9" },
   { key: "resolution", label: "清晰度", type: "select", options: opt(["480p", "720p", "1080p"]), defaultValue: "720p" },
   { key: "duration", label: "时长(秒)", type: "number", options: [], min: 4, max: 15, defaultValue: 5 },
+  { key: "seed", label: "种子", type: "number", options: [], placeholder: "随机" },
   { key: "generate_audio", label: "生成音频", type: "boolean", options: [], defaultValue: true },
 ];
 
@@ -35,6 +36,19 @@ const SEEDANCE_2_APIMART_MODES: ModelArchetype["modes"] = [
     ],
     params: PARAMS,
   },
+  {
+    // 首尾帧（官方 image_with_roles）：首帧 + 尾帧自动补间。结构化角色数组靠通用 combineSlotsInto 原语
+    // 在构造层组装（first_frame_url/last_frame_url 两个扁平槽 → [{url,role}]），删扁平键避免与 image_urls
+    // 并存触发互斥（官方：image_urls ⊥ image_with_roles）。走 image_to_video 桶（同 i2v body 一条覆盖）。
+    id: "firstlast", intent: "firstlast", vendorTerm: "首尾帧", hint: "首帧 + 尾帧，自动补间过渡", promptRequired: true,
+    transportTaskKind: "image_to_video",
+    slots: [
+      { kind: "first_frame", label: "首帧", min: 1, max: 1 },
+      { kind: "last_frame", label: "尾帧", min: 0, max: 1 },
+    ],
+    combineSlotsInto: { key: "image_with_roles" },
+    params: PARAMS,
+  },
 ];
 
 export const SEEDANCE_2_APIMART_ARCHETYPE: ModelArchetype = {
@@ -44,7 +58,8 @@ export const SEEDANCE_2_APIMART_ARCHETYPE: ModelArchetype = {
   kind: "video",
   defaultModeId: "t2v",
   transportTaskKind: "text_to_video",
-  identifierPatterns: ["doubao-seedance-2.0", "doubao-seedance-2-0"],
+  // face 变体能力与标准版一致（官方）→ 复用同档案，只多列其 model 字符串。
+  identifierPatterns: ["doubao-seedance-2.0", "doubao-seedance-2-0", "doubao-seedance-2.0-face", "doubao-seedance-2-0-face"],
   modes: SEEDANCE_2_APIMART_MODES,
 };
 
@@ -60,6 +75,7 @@ export const SEEDANCE_2_APIMART_FAST_ARCHETYPE: ModelArchetype = {
   ...SEEDANCE_2_APIMART_ARCHETYPE,
   id: "seedance-2-apimart-fast",
   label: "Seedance 2.0 Fast",
-  identifierPatterns: ["doubao-seedance-2.0-fast", "doubao-seedance-2-0-fast"],
+  // fast-face 变体复用 fast 档案（同清晰度限制 480/720）。
+  identifierPatterns: ["doubao-seedance-2.0-fast", "doubao-seedance-2-0-fast", "doubao-seedance-2.0-fast-face", "doubao-seedance-2-0-fast-face"],
   modes: SEEDANCE_2_APIMART_MODES.map((mode) => ({ ...mode, params: withFastRes(mode.params) })),
 };

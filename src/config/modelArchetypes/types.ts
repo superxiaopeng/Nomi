@@ -37,6 +37,13 @@ export type ArchetypeReferenceSlot = {
   /** 这些图是否**按序对应 prompt 的 character1..N**（角色参考）。true → 缩略图标 ①②③ + 给 character 提示。
    *  仅角色槽为 true（Seedance 全能参考、HappyHorse 角色参考）；普通参考图（如 video-edit 的参考图）为 false。 */
   characterIndexed?: boolean;
+  /**
+   * **角色数组合并用**（配合 mode.combineSlotsInto）：该槽在合并出的对象数组里的 `role` 字段值。
+   * **缺省由 kind 派生**（first_frame→first_frame、last_frame→last_frame、image_ref→reference_image，
+   * 见 archetypeMeta DEFAULT_ROLE_FOR_KIND）——故绝大多数情况不写，避免 role 与 kind 两条平行真相源（P1）。
+   * 仅当某 vendor 的 role 措辞与派生值不同时才显式覆盖。
+   */
+  roleName?: string;
 };
 
 /** 跨模型统一的「意图」——UI 主标签按它走（角色参考/单图首帧/首尾帧/文生/视频编辑）。 */
@@ -79,6 +86,14 @@ export type ArchetypeMode = {
    * 两者打不同 mapping 桶。视频档案各模式同 taskKind → 缺省即可，用档案级值。
    */
   transportTaskKind?: ArchetypeTransportTaskKind;
+  /**
+   * **角色数组合并（通用原语）**：把本模式有值的若干槽合并成一个带 `role` 的对象数组，落在 `key` 上，
+   * 并删掉被合并的扁平键（M2 互斥：避免 image_urls/first_frame_url 与合并键并存触发 vendor 报错）。
+   * 用途：apimart Seedance 首尾帧 = `image_with_roles:[{url,role:'first_frame'},{url,role:'last_frame'}]`。
+   * **通用**：任何用 role-数组的模型只声明这一项即可，构造层零改动（不 if-vendor、不写死键名，键来自这里）。
+   * role 取自各槽的 roleName ?? 由 kind 派生。合并必须在构造层做（模板引擎丢不掉 {url:undefined} 对象）。
+   */
+  combineSlotsInto?: { key: string };
 };
 
 export type ModelArchetype = {

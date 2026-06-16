@@ -231,6 +231,16 @@ const DEFAULT_AS_ARRAY: Record<ArchetypeReferenceSlotKind, boolean> = {
   first_frame: false, last_frame: false, source_video: false,
   image_ref: true, video_ref: true, audio_ref: true,
 }
+/** 角色数组合并（combineSlotsInto）时 slot.kind → 缺省 role；slot.roleName 可覆盖。
+ *  单一真相源：role 默认派生自 kind，避免 role 与 kind 两条平行真相源（P1）。 */
+const DEFAULT_ROLE_FOR_KIND: Partial<Record<ArchetypeReferenceSlotKind, string>> = {
+  first_frame: 'first_frame',
+  last_frame: 'last_frame',
+  image_ref: 'reference_image',
+}
+
+/** 构造层产出的通用 input 值：标量 / 数组 / 角色对象数组（combineSlotsInto）。模板引擎原样透传。 */
+type ArchetypeInputValue = string | string[] | Array<{ url: string; role: string }>
 
 /** 一个声明槽在 meta 里的存储形态（单一真相源：槽→存储键 的知识只在这里）。无存储映射 → null。 */
 export type ReferenceSlotStorage = { metaKey: string; isArray: boolean }
@@ -260,9 +270,9 @@ export function buildArchetypeInputParams(
   meta: Record<string, unknown>,
   archetype: ModelArchetype,
   references?: { firstFrameUrl?: string | null; lastFrameUrl?: string | null; referenceImages?: readonly string[] },
-): Record<string, string | string[]> {
+): Record<string, ArchetypeInputValue> {
   const mode = currentArchetypeMode(archetype, meta)
-  const out: Record<string, string | string[]> = {}
+  const out: Record<string, ArchetypeInputValue> = {}
   for (const slot of mode.slots) {
     const inputKey = slotInputKey(slot)
     const asArray = slotAsArray(slot)
@@ -291,6 +301,22 @@ export function buildArchetypeInputParams(
     const raw = (typeof fromRef === 'string' && fromRef.trim()) ? fromRef.trim()
       : (typeof meta[metaKey] === 'string' ? (meta[metaKey] as string).trim() : '')
     if (raw) out[inputKey] = asArray ? [raw] : raw
+  }
+  // 角色数组合并（通用原语）：把本模式有值的槽 → [{url, role}] 落在 combineSlotsInto.key，删被合并的
+  // 扁平键（M2 互斥）。role = slot.roleName ?? 由 kind 派生（单源）。键名来自档案声明，不写死/不 if-vendor。
+  // 必须在此构造层拼好整个数组——模板引擎丢得掉 undefined 键/元素，但丢不掉 {url:undefined} 对象（坑）。
+  if (mode.combineSlotsInto) {
+    const combined: Array<{ url: string; role: string }> = []
+    for (const slot of mode.slots) {
+      const role = slot.roleName ?? DEFAULT_ROLE_FOR_KIND[slot.kind]
+      if (!role) continue
+      const inputKey = slotInputKey(slot)
+      const value = out[inputKey]
+      if (typeof value === 'string') combined.push({ url: value, role })
+      else if (Array.isArray(value)) value.forEach((item) => { if (typeof item === 'string') combined.push({ url: item, role }) })
+      delete out[inputKey]
+    }
+    if (combined.length) out[mode.combineSlotsInto.key] = combined
   }
   // M3：per-mode enum 覆盖（HappyHorse）。Seedance 各模式同 model → 不带，body 用 {{model.modelKey}}。
   if (mode.modelEnum) out.model = mode.modelEnum

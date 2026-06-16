@@ -40,6 +40,14 @@ const IMAGE_URLS = "{{request.params.image_urls}}"; // image_ref 槽 inputKey=im
 const VIDEO_URLS = "{{request.params.video_urls}}"; // seedance 全能参考 video_ref 槽 inputKey=video_urls
 const AUDIO_URLS = "{{request.params.audio_urls}}"; // seedance 全能参考 audio_ref 槽 inputKey=audio_urls
 const FIRST_FRAME_IMAGE = "{{request.params.first_frame_image}}"; // hailuo first_frame 槽 inputKey=first_frame_image
+const SEED = "{{request.params.seed}}"; // 可选种子（无默认 → 未填则模板丢弃）
+// 首尾帧角色数组：整串一个 {{}} → 模板引擎原样透传 [{url,role}] 不 stringify（同 kie 整串透传）。
+// 由 archetypeMeta combineSlotsInto 在构造层组装，与 image_urls 互斥（同 body，非当前模式键自动丢）。
+const IMAGE_WITH_ROLES = "{{request.params.image_with_roles}}";
+
+// Seedance 四变体共享的 body 形状（单源 P1，见下方 APIMART_VIDEO_MODELS 注释）。
+const SEEDANCE_T2V_BODY = { size: SIZE, resolution: RESOLUTION, duration: DURATION, seed: SEED, generate_audio: GEN_AUDIO };
+const SEEDANCE_I2V_BODY = { size: SIZE, resolution: RESOLUTION, duration: DURATION, image_urls: IMAGE_URLS, video_urls: VIDEO_URLS, audio_urls: AUDIO_URLS, image_with_roles: IMAGE_WITH_ROLES, seed: SEED, generate_audio: GEN_AUDIO };
 
 export type ApimartVideoModel = {
   modelKey: string;
@@ -52,14 +60,19 @@ function videoModel(p: {
   modelKey: string;
   labelZh: string;
   archetypeId: string;
+  /** mapping id 的稳定后缀。缺省 = archetypeId（每模型唯一时够用）。**多模型共享一个档案时必须显式传**
+   *  （如 Seedance face/fast-face 复用标准/fast 档案 → 若用 archetypeId 会与标准版 id 撞、互相覆盖、
+   *  破坏 seeding 幂等）。现存模型不传 → id 不变，零迁移、漂移自愈按 id 仍命中老装机更新 body。 */
+  idKey?: string;
   t2vBody: Record<string, unknown>;
   i2vBody?: Record<string, unknown>;
 }): ApimartVideoModel {
+  const idKey = p.idKey ?? p.archetypeId;
   const mappings: ApimartVideoModel["mappings"] = [
-    { id: `seed-apimart-${p.archetypeId}-text_to_video`, taskKind: "text_to_video", name: `${p.labelZh} · 文生视频`, create: videoCreateOp(p.t2vBody) },
+    { id: `seed-apimart-${idKey}-text_to_video`, taskKind: "text_to_video", name: `${p.labelZh} · 文生视频`, create: videoCreateOp(p.t2vBody) },
   ];
   if (p.i2vBody) {
-    mappings.push({ id: `seed-apimart-${p.archetypeId}-image_to_video`, taskKind: "image_to_video", name: `${p.labelZh} · 图生视频`, create: videoCreateOp(p.i2vBody) });
+    mappings.push({ id: `seed-apimart-${idKey}-image_to_video`, taskKind: "image_to_video", name: `${p.labelZh} · 图生视频`, create: videoCreateOp(p.i2vBody) });
   }
   return { modelKey: p.modelKey, labelZh: p.labelZh, archetypeId: p.archetypeId, mappings };
 }
@@ -82,19 +95,14 @@ export const APIMART_VIDEO_MODELS: ApimartVideoModel[] = [
     t2vBody: { mode: MODE, duration: DURATION, aspect_ratio: ASPECT, audio: AUDIO },
     i2vBody: { mode: MODE, duration: DURATION, image_urls: IMAGE_URLS, audio: AUDIO },
   }),
-  // Seedance 2.0：独立 apimart 档案。i2v/全能参考同走 image_to_video 桶——i2vBody 一条覆盖两模式：
-  // image_urls(图生/多图参考) + video_urls/audio_urls(全能参考多模态)；非当前模式的空数组键自动丢弃。
-  videoModel({
-    modelKey: "doubao-seedance-2.0", labelZh: "Seedance 2.0", archetypeId: "seedance-2-apimart",
-    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, generate_audio: GEN_AUDIO },
-    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, image_urls: IMAGE_URLS, video_urls: VIDEO_URLS, audio_urls: AUDIO_URLS, generate_audio: GEN_AUDIO },
-  }),
-  // Seedance 2.0 Fast：同结构，独立 fast 档案（清晰度仅 480/720）。官方文档"功能与标准版一致"。
-  videoModel({
-    modelKey: "doubao-seedance-2.0-fast", labelZh: "Seedance 2.0 Fast", archetypeId: "seedance-2-apimart-fast",
-    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, generate_audio: GEN_AUDIO },
-    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, image_urls: IMAGE_URLS, video_urls: VIDEO_URLS, audio_urls: AUDIO_URLS, generate_audio: GEN_AUDIO },
-  }),
+  // Seedance 2.0 四变体（标准/fast/face/fast-face）。body 形状一致（SEEDANCE_*_BODY 单源 P1）：
+  // i2vBody 一条覆盖 图生/全能参考/首尾帧 三模式——image_urls(图生/多图) + video_urls/audio_urls(全能参考)
+  // + image_with_roles(首尾帧，与 image_urls 互斥) + seed；非当前模式的空键由模板自动丢（M2 互斥）。
+  // face/fast-face 能力与标准/fast 一致（官方）→ 复用同 archetypeId、同 body，只多两条 model 行。
+  videoModel({ modelKey: "doubao-seedance-2.0", labelZh: "Seedance 2.0", archetypeId: "seedance-2-apimart", t2vBody: SEEDANCE_T2V_BODY, i2vBody: SEEDANCE_I2V_BODY }),
+  videoModel({ modelKey: "doubao-seedance-2.0-fast", labelZh: "Seedance 2.0 Fast", archetypeId: "seedance-2-apimart-fast", t2vBody: SEEDANCE_T2V_BODY, i2vBody: SEEDANCE_I2V_BODY }),
+  videoModel({ modelKey: "doubao-seedance-2.0-face", labelZh: "Seedance 2.0 真人", archetypeId: "seedance-2-apimart", idKey: "seedance-2-apimart-face", t2vBody: SEEDANCE_T2V_BODY, i2vBody: SEEDANCE_I2V_BODY }),
+  videoModel({ modelKey: "doubao-seedance-2.0-fast-face", labelZh: "Seedance 2.0 真人快速", archetypeId: "seedance-2-apimart-fast", idKey: "seedance-2-apimart-fast-face", t2vBody: SEEDANCE_T2V_BODY, i2vBody: SEEDANCE_I2V_BODY }),
   videoModel({
     modelKey: "wan2.7", labelZh: "Wan 2.7", archetypeId: "wan-2.7",
     t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION },

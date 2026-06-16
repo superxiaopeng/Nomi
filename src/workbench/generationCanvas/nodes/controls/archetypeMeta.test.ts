@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getArchetypeById } from '../../../../config/modelArchetypes'
+import { getArchetypeById, type ModelArchetype } from '../../../../config/modelArchetypes'
 import { archetypeModeModelEnum } from './archetypeMeta'
 import {
   type ArchetypeArraySlot,
@@ -281,5 +281,85 @@ describe('C4 HappyHorse — 档案 + per-mode enum + 模型契约 input 键', ()
     expect(i2v.params.map((p) => p.key)).not.toContain('aspect_ratio')
     const t2v = HAPPY.modes.find((m) => m.id === 't2v')!
     expect(t2v.params.map((p) => p.key)).toContain('aspect_ratio')
+  })
+})
+
+describe('combineSlotsInto — 角色对象数组合并（通用原语）', () => {
+  // 假想第二个「role-数组」模型：键名与 Seedance 不同（frames_with_roles ≠ image_with_roles）。
+  // 它只靠档案声明就能用，buildArchetypeInputParams 零改动 → 证明通用、非 Seedance 专用（P4）。
+  const FAKE_ROLE_MODEL: ModelArchetype = {
+    id: 'fake-roles', family: 'fake', label: 'Fake', kind: 'video',
+    defaultModeId: 'fl', transportTaskKind: 'image_to_video', identifierPatterns: ['fake-roles'],
+    modes: [{
+      id: 'fl', intent: 'firstlast', vendorTerm: 'FL', hint: '', promptRequired: true,
+      transportTaskKind: 'image_to_video',
+      slots: [
+        { kind: 'first_frame', label: 'F', min: 1, max: 1 },
+        { kind: 'last_frame', label: 'L', min: 0, max: 1 },
+      ],
+      combineSlotsInto: { key: 'frames_with_roles' },
+      params: [],
+    }],
+  }
+
+  it('合并键名来自档案声明（不写死 image_with_roles）+ role 由 kind 派生 + 删扁平键', () => {
+    const meta = { archetype: { id: 'fake-roles', modeId: 'fl' } }
+    const out = buildArchetypeInputParams(meta, FAKE_ROLE_MODEL, { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' })
+    expect(out).toEqual({
+      frames_with_roles: [
+        { url: 'F.png', role: 'first_frame' },
+        { url: 'L.png', role: 'last_frame' },
+      ],
+    })
+    expect(out.first_frame_url).toBeUndefined()
+    expect(out.last_frame_url).toBeUndefined()
+  })
+
+  it('只有有 url 的槽进数组（尾帧空 → 数组只含首帧，绝不放 {url:undefined}）', () => {
+    const meta = { archetype: { id: 'fake-roles', modeId: 'fl' } }
+    const out = buildArchetypeInputParams(meta, FAKE_ROLE_MODEL, { firstFrameUrl: 'F.png' })
+    expect(out).toEqual({ frames_with_roles: [{ url: 'F.png', role: 'first_frame' }] })
+  })
+
+  it('slot.roleName 覆盖 kind 派生的 role（vendor 措辞不同时）', () => {
+    const custom: ModelArchetype = {
+      ...FAKE_ROLE_MODEL,
+      modes: [{
+        ...FAKE_ROLE_MODEL.modes[0],
+        slots: [{ kind: 'first_frame', label: 'F', min: 1, max: 1, roleName: 'opening' }],
+      }],
+    }
+    const out = buildArchetypeInputParams({ archetype: { id: 'fake-roles', modeId: 'fl' } }, custom, { firstFrameUrl: 'F.png' })
+    expect(out).toEqual({ frames_with_roles: [{ url: 'F.png', role: 'opening' }] })
+  })
+})
+
+describe('apimart Seedance 首尾帧 — image_with_roles（combineSlotsInto 落地）', () => {
+  const SEEDANCE_APIMART = getArchetypeById('seedance-2-apimart')!
+
+  it('首尾帧模式 → image_with_roles:[首帧,尾帧]，无扁平键、无 image_urls（与 image_urls 互斥）', () => {
+    const meta = { archetype: { id: 'seedance-2-apimart', modeId: 'firstlast' } }
+    const out = buildArchetypeInputParams(meta, SEEDANCE_APIMART, { firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' })
+    expect(out).toEqual({
+      image_with_roles: [
+        { url: 'F.png', role: 'first_frame' },
+        { url: 'L.png', role: 'last_frame' },
+      ],
+    })
+    expect(out.image_urls).toBeUndefined()
+    expect(out.first_frame_url).toBeUndefined()
+  })
+
+  it('只首帧 → image_with_roles 只含首帧', () => {
+    const meta = { archetype: { id: 'seedance-2-apimart', modeId: 'firstlast' } }
+    const out = buildArchetypeInputParams(meta, SEEDANCE_APIMART, { firstFrameUrl: 'F.png' })
+    expect(out).toEqual({ image_with_roles: [{ url: 'F.png', role: 'first_frame' }] })
+  })
+
+  it('档案有 文生/图生/全能参考/首尾帧 四模式 + seed 参数全模式可见', () => {
+    expect(SEEDANCE_APIMART.modes.map((m) => m.id)).toEqual(['t2v', 'i2v', 'omni', 'firstlast'])
+    for (const mode of SEEDANCE_APIMART.modes) {
+      expect(mode.params.map((p) => p.key)).toContain('seed')
+    }
   })
 })
