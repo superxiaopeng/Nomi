@@ -43,24 +43,31 @@ export function describeBlockedNotice(plan: DependencyWavePlan): string | null {
 
 /** 按计划真实生成 + 进度人话 toast。「全部生成」与 S6b agent 受理路径共用(单一执行口)。 */
 export async function runPlanWithToasts(plan: DependencyWavePlan): Promise<void> {
-  const runnable = plan.waves.flat().length
+  const waves = plan.waves
+  const runnable = waves.flat().length
   const notice = describeBlockedNotice(plan)
   if (runnable === 0) {
     // 全被拦：别静默，说清原因
     toast(notice ? `还不能生成：${notice}` : '没有可生成的节点', 'error')
     return
   }
-  toast(`开始生成 ${runnable} 个节点(${plan.waves.length} 波)…`, 'info')
+  // 启动反馈（用户强调）：有依赖（多波）= 不是全并发，要先生成上游参考、再生成下游镜头。说清楚，
+  // 否则用户以为"只跑一个/卡住了"。单波则直接并发（并发上限 6）。
+  const firstWave = waves[0].length
+  const startMsg = waves.length > 1
+    ? `分 ${waves.length} 波生成 ${runnable} 个：先生成 ${firstWave} 个上游参考，其余 ${runnable - firstWave} 个等参考完成后自动接力`
+    : `开始生成 ${runnable} 个…`
+  toast(startMsg, 'info')
   try {
     const result = await runGenerationNodesByPlan(plan)
     const okCount = result.successes.length
     const failCount = result.failures.length
-    if (failCount === 0) toast(`已完成 ${okCount}/${runnable} 个节点的生成`, 'success')
-    else if (okCount === 0) toast(`批量生成失败：${failCount}/${runnable} 个节点未完成`, 'error')
-    else toast(`已完成 ${okCount}/${runnable}，${failCount} 个失败 — 在画布上单独重试`, 'info')
+    // 完成汇总：把「还有谁没跑、为什么」(notice) 并进同一条，不再跑完补弹第二条（消除连环弹，弹窗审计）。
+    const tail = notice ? `；${notice}` : ''
+    if (failCount === 0) toast(`已完成 ${okCount} 个${tail}`, notice ? 'warning' : 'success')
+    else if (okCount === 0) toast(`批量生成失败：${failCount} 个未完成${tail}`, 'error')
+    else toast(`已完成 ${okCount} 个，${failCount} 个失败 — 在画布上单独重试${tail}`, 'warning')
   } catch (error: unknown) {
     toast(error instanceof Error && error.message ? error.message : '批量生成异常', 'error')
   }
-  // 跑完再把「没跑的为什么」补一条(缺啥提示啥)
-  if (notice) toast(notice, 'info')
 }

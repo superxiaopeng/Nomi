@@ -70,5 +70,6 @@ export function applyFixationMakeup(node: GenerationCanvasNode): void {
   const created = store.addNode({ kind: 'image', title: spec.title, position: spec.position, categoryId: node.categoryId })
   store.updateNode(created.id, { prompt: spec.prompt, references: spec.references, meta: spec.meta })
   store.selectNode(created.id)
-  toast('已生成定妆节点：检查提示词后点生成', 'success')
+  // 节点出现在画布即反馈，toast 只留有用的下一步引导（弹窗审计 R2）。
+  toast('检查提示词后点生成', 'info')
 }

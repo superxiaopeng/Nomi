@@ -3341,7 +3341,6 @@ export default function Scene3DFullscreen({
         item: cloneObjectForClipboard(object),
         pasteCount: 0,
       }
-      toast('已复制 3D 节点', 'success')
       return true
     }
 
@@ -3352,7 +3351,6 @@ export default function Scene3DFullscreen({
       item: cloneCameraForClipboard(camera),
       pasteCount: 0,
     }
-    toast('已复制相机节点', 'success')
     return true
   }, [])
 
@@ -3378,7 +3376,6 @@ export default function Scene3DFullscreen({
       setState(nextState)
       setSelection({ type: 'object', id: object.id })
       setViewLocked(false)
-      toast('已粘贴 3D 节点', 'success')
       return true
     }
 
@@ -3393,7 +3390,6 @@ export default function Scene3DFullscreen({
     setState(nextState)
     setSelection({ type: 'camera', id: camera.id })
     setViewLocked(false)
-    toast('已粘贴相机节点', 'success')
     return true
   }, [readOnly])
 

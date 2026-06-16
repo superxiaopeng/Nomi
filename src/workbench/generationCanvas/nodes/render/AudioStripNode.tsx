@@ -138,7 +138,7 @@ function AudioStripNodeImpl({ node }: Props): JSX.Element {
 
   const handleCopyText = React.useCallback((event: React.MouseEvent) => {
     event.stopPropagation()
-    void navigator.clipboard?.writeText(result?.text || '').then(() => toast('转写文本已复制', 'success')).catch(() => {})
+    void navigator.clipboard?.writeText(result?.text || '').catch(() => {})
   }, [result?.text])
 
   const handleGenerateSubtitle = React.useCallback((event: React.MouseEvent) => {

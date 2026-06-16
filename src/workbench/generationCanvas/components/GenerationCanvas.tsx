@@ -335,7 +335,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const handleGroupSelectedNodes = React.useCallback(() => {
     const group = groupSelectedNodes(activeCategoryId)
     if (!group) return
-    toast(`已创建「${group.name}」`, 'success')
+    // 编组结果即时显示为画布上的组框 → 成功 toast 是噪音（弹窗审计 R2）。
   }, [activeCategoryId, groupSelectedNodes])
 
   // 批量生成（「生成选中」唯一入口）。不傻批量：先算依赖波次（参考先生成→镜头后生成）。
@@ -352,7 +352,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const handleUngroupSelectedNodes = React.useCallback(() => {
     if (!selectedGroupIds.length) return
     ungroupGroups(selectedGroupIds)
-    toast('已解组并保留节点', 'success')
+    // 解组结果画布即时可见 → 成功 toast 是噪音（弹窗审计 R2）。
   }, [selectedGroupIds, ungroupGroups])
 
   const handleGroupFramePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>, groupId: string) => {

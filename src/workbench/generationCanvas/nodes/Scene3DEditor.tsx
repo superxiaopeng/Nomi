@@ -140,7 +140,7 @@ export default function Scene3DEditor({ node, width, height, readOnly = false }:
           scene3dState: nextSceneState,
         },
       })
-      toast('3D 截图已创建图片节点', 'success')
+      toast('已创建图片节点', 'success')
     } catch (error) {
       toast(error instanceof Error ? error.message : '截图失败，请重试', 'error')
     }

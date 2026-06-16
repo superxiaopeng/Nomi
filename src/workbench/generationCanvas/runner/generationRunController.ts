@@ -250,7 +250,8 @@ export function classifyGenerationError(message: string): GenerationErrorReport 
 }
 
 export type RunGenerationNodesBatchOptions = RunGenerationNodeOptions & {
-  /** Maximum concurrent runs. Defaults to 2 so two nodes can execute in parallel without overwhelming the provider. */
+  /** Maximum concurrent runs. Defaults to 6（用户拍板：同一波内尽量并行，框选 6 个镜头能一起跑，
+   *  不再一个一个来）。有依赖的镜头仍按波次串行（锚先于镜头），这只调「同波内同时几个」。上限 8。 */
   concurrency?: number
   /** Called whenever a node finishes (success or failure) so the UI can update progress. */
   onNodeResult?: (event:
@@ -266,8 +267,8 @@ export type RunGenerationNodesBatchResult = {
 }
 
 function normalizeConcurrency(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 2
-  return Math.max(1, Math.min(4, Math.floor(value)))
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 6
+  return Math.max(1, Math.min(8, Math.floor(value)))
 }
 
 /**
