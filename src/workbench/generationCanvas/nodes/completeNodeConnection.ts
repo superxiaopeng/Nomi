@@ -1,35 +1,19 @@
 // 完成一次「画布连线」到 targetNode（拖把柄 / 点输入口共用，捷径 B）。
-// 设计要点（不碰 store.connectToNode 的边逻辑 → 边语义可证不变）：
-// - target 当前模式有「匹配 source kind 的数组参考槽」→ **meta-only 写入数组、不画持久边**
-//   （评审 M6：数组绝不变持久边，否则崩 (target,mode) 唯一性 / 回归全能参考）。
-// - 否则原样调 store.connectToNode（首/尾帧等单帧连线的边语义完全不动）。
-// - source 还没生成（无结果 URL）→ 提示先生成，不写空串、不建死边。
+//
+// 地基收口（audit 2026-06-16 §1d）：**所有参考连线一律建持久边**——含数组参考槽（image_ref，
+// characterIndexed，按序 character1..N）。此前数组槽走 meta-only（写 referenceImageUrls + cancelConnection
+// 早退、不画线），是因为 GenerationCanvasEdge 无 order 字段、N 条边无序、丢「谁是 character1」；
+// 现在边带 order（connectNodes 按放入顺序赋值），数组参考用**有序的边**表达 → 线画得出、显示=生成
+// 同一真相源（resolveReferenceSlots / resolveGenerationReferences 都按 order 落槽），不再分裂。
+// 旧的权宜 toast「已作为参考图添加（不画连线）」随 meta-only 路径一并删除（P1：不留并行版）。
+//
+// 连边能力校验（validateReferenceEdge）仍在 connectToNode 里做总闸——文本→图、错配参考槽等盲连
+// 在创建期就拦，不落库到生成期才被丢。本函数只负责把校验失败的人话反馈给手动连线的用户。
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
-import { resultPreviewUrl } from './controls/parameterControlModel'
 import { showInfoToast } from '../../../utils/showInfoToast'
-import { dropKindFromNodeKind } from '../model/nodeAssetDrop'
-import { addAssetUrlToNode } from './nodeAssetWrite'
 
 export function completeNodeConnection(targetNodeId: string): void {
-  const state = useGenerationCanvasStore.getState()
-  const sourceId = state.pendingConnectionSourceId
-  const source = sourceId ? state.nodes.find((n) => n.id === sourceId) : undefined
-  if (source && sourceId !== targetNodeId) {
-    const kind = dropKindFromNodeKind(source.kind)
-    if (kind) {
-      const outcome = addAssetUrlToNode(targetNodeId, kind, resultPreviewUrl(source))
-      if (outcome.status !== 'no-slot') {
-        // 是数组参考目标：meta-only，绝不落边。**成功也要给反馈**——否则用户看到「没连线但图上去了」
-        // 会以为连线失败（真机反馈）：明确告诉它「这是加参考、不画线、已生效」。
-        if (outcome.status === 'empty') showInfoToast('请先生成该节点，再连线为参考')
-        else if (outcome.status === 'full') showInfoToast(`最多 ${outcome.max} 个${outcome.label}`)
-        else showInfoToast('已作为参考图添加（不画连线，参考已生效）')
-        state.cancelConnection()
-        return
-      }
-    }
-  }
-  const verdict = state.connectToNode(targetNodeId)
+  const verdict = useGenerationCanvasStore.getState().connectToNode(targetNodeId)
   // 连边能力校验失败:给手动连线的用户即时反馈,而非静默不连(或落库后到生成期才被丢)。
   if (!verdict.ok && verdict.reason === 'source_not_referenceable') {
     showInfoToast('这个节点没有可作为参考的图/视频，先生成它或换个来源')

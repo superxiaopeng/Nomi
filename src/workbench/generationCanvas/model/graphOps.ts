@@ -88,7 +88,32 @@ export function connectNodes(
   // 角色参考又当风格参考)是合法的、应能连上。旧版只看 (source,target) → 静默吞掉第二条边
   // (「同两点连不了第二种参考」)，且 connectToNode 仍报 ok、用户无感(治「线连不上」R2)。
   if (edges.some((edge) => edge.source === source && edge.target === target && edge.mode === mode)) return edges
-  return [...edges, { id: createEdgeId(source, target), source, target, mode }]
+  // order = 该 target 现有入边数：保住「放入顺序」= 数组参考 character1..N 的真相源（audit 2026-06-16 §1d）。
+  // 全模式单调（不按 mode 分桶）→ 数组槽落槽用单调序、首尾帧用 mode 位置偏好，互不打架。
+  const order = nextEdgeOrderForTarget(edges, target)
+  return [...edges, { id: createEdgeId(source, target), source, target, mode, order }]
+}
+
+/** 落入某 target 的下一个 order 序号 = 已有入边数（含无 order 的旧边，按存在即计数，保单调）。 */
+export function nextEdgeOrderForTarget(edges: GenerationCanvasEdge[], target: string): number {
+  return edges.reduce((count, edge) => (edge.target === target ? count + 1 : count), 0)
+}
+
+/**
+ * 把指向某 target 的边按 order 升序排（无 order 的旧边视作 +∞，排在显式 order 之后但**保持彼此原数组序**，
+ * = 旧快照行为不变）。显示(resolveReferenceSlots)与生成(resolveGenerationReferences)共用这一份，
+ * 保证两侧落槽顺序一致、稳定（治「显示读 meta、生成读边」分裂 + #4 整类）。
+ */
+export function sortEdgesByOrder(edges: GenerationCanvasEdge[]): GenerationCanvasEdge[] {
+  return edges
+    .map((edge, index) => ({ edge, index }))
+    .sort((a, b) => {
+      const ao = a.edge.order ?? Number.POSITIVE_INFINITY
+      const bo = b.edge.order ?? Number.POSITIVE_INFINITY
+      if (ao !== bo) return ao - bo
+      return a.index - b.index // 稳定：同 order / 都无 order → 保持原数组序
+    })
+    .map((item) => item.edge)
 }
 
 export function disconnectEdge(edges: GenerationCanvasEdge[], edgeId: string): GenerationCanvasEdge[] {

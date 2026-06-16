@@ -8,6 +8,7 @@ import { applyCanvasToolCall, resolveCanvasToolNodeId } from './applyCanvasToolC
 import { applyCompensationOps } from './proposalUndo'
 import { generationCanvasTools } from './generationCanvasTools'
 import { reconcileProposal, type ReconcileResult } from './reconcile'
+import { findOrphanArrayReferences } from '../runner/referenceSlots'
 import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import { withCanvasGestureContext, type CanvasGestureContext } from '../events/canvasGestureContext'
 import {
@@ -175,6 +176,10 @@ export async function applyProposalBatch(steps: ProposalStep[]): Promise<Proposa
     edges: snapshot.edges,
     // 跨提议 clientId 回退：与执行侧同一个全局 registry（修对账误报「未连接」，bug A）。
     resolveExternalId: resolveCanvasToolNodeId,
+    // 地基收口（§1c+§1d）：显示出的数组参考必须有对应已提交边，无边有图的 meta-only 孤儿如实报。
+    // snapshot.nodes/edges 是完整 GenerationCanvasNode/Edge（read_canvas 后态），findOrphanArrayReferences
+    // 需要完整图类型——在此适配 reconcile 的结构化 NodeLike/EdgeLike 注入签名。
+    auditOrphanArrayReferences: () => findOrphanArrayReferences(snapshot.nodes, snapshot.edges),
   })
   withCanvasGestureContext(ctx, () =>
     emitCanvasGesture([

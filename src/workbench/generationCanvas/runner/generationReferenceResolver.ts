@@ -1,4 +1,5 @@
 import type { GenerationCanvasEdge, GenerationCanvasNode } from '../model/generationCanvasTypes'
+import { sortEdgesByOrder } from '../model/graphOps'
 import { collectNodeContext } from '../model/nodeContext'
 import { asUrl, findNodeResultUrl, resolveReferenceUrl } from './referenceUrl'
 
@@ -39,7 +40,9 @@ export function resolveGenerationReferences(
   let lastFrameFromEdge = ''
   let relayFromVideoUrl = ''
 
-  for (const edge of edges) {
+  // **按 order 升序**遍历 → referenceImages（喂 buildArchetypeInputParams 的数组槽）顺序稳定，
+  // 与显示侧 resolveReferenceSlots 同一口径，保住 character1..N（audit 2026-06-16 §1d「数组参考收口到有序边」）。
+  for (const edge of sortEdgesByOrder(edges)) {
     if (edge.target !== node.id) continue
     const sourceUrl = findNodeResultUrl(nodesById, edge.source)
     if (!sourceUrl) continue

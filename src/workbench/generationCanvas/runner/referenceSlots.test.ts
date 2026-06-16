@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveReferenceSlots, decideArrayReferenceRemoval } from './referenceSlots'
+import { resolveReferenceSlots, decideArrayReferenceRemoval, findOrphanArrayReferences } from './referenceSlots'
 import type { GenerationCanvasEdge, GenerationCanvasNode } from '../model/generationCanvasTypes'
 
 function node(
@@ -152,5 +152,35 @@ describe('decideArrayReferenceRemoval — 参考图「×」按来源分流（治
     const tgt = target('video', 'sora-2', 'i2v', { referenceImageUrls: ['https://cdn/up.png'] })
     expect(decideArrayReferenceRemoval(tgt, [tgt], [], 'referenceImageUrls', 9)).toEqual({ kind: 'noop' })
     expect(decideArrayReferenceRemoval(tgt, [tgt], [], 'notASlot', 0)).toEqual({ kind: 'noop' })
+  })
+})
+
+describe('findOrphanArrayReferences — 显示出的数组参考必有对应边（治「无边有图」§1c）', () => {
+  it('纯手动上传（URL 不对应画布任何节点产物）→ 不是孤儿', () => {
+    const tgt = target('video', 'sora-2', 'i2v', { referenceImageUrls: ['https://cdn/uploaded-only.png'] })
+    expect(findOrphanArrayReferences([tgt], [])).toEqual([])
+  })
+
+  it('正常：边来源的参考有对应边 → 无孤儿', () => {
+    const a = node('a', 'image', { url: 'https://cdn/a.png' })
+    const tgt = target('video', 'sora-2', 'i2v')
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'a', target: 'tgt', mode: 'first_frame', order: 0 }]
+    expect(findOrphanArrayReferences([a, tgt], edges)).toEqual([])
+  })
+
+  it('孤儿：meta 里的 URL 其实是画布内某节点产物（本该建边却残留 meta）→ 如实报', () => {
+    const a = node('a', 'image', { url: 'https://cdn/a.png' })
+    // a.png 是节点 a 的产物，却以 meta-only 上传形态留在 tgt（应是 character_ref 边）。
+    const tgt = target('video', 'sora-2', 'i2v', { referenceImageUrls: ['https://cdn/a.png'] })
+    const orphans = findOrphanArrayReferences([a, tgt], [])
+    expect(orphans).toHaveLength(1)
+    expect(orphans[0]).toMatchObject({ actual: 'meta-only 残留（无边有图）' })
+  })
+
+  it('迁移后：同 URL 已建成边 → 不再报孤儿', () => {
+    const a = node('a', 'image', { url: 'https://cdn/a.png' })
+    const tgt = target('video', 'sora-2', 'i2v') // meta 已清
+    const edges: GenerationCanvasEdge[] = [{ id: 'e1', source: 'a', target: 'tgt', mode: 'character_ref', order: 0 }]
+    expect(findOrphanArrayReferences([a, tgt], edges)).toEqual([])
   })
 })

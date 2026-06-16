@@ -130,6 +130,8 @@ export const generationCanvasEdgeSchema = z.object({
     'character_ref',
     'composition_ref',
   ]).optional(),
+  // 落入同一 target 的放入顺序（数组参考 character1..N 的真相源；旧快照无 → undefined，排序退化为原序）。
+  order: z.number().optional(),
 })
 
 export const generationCanvasSnapshotSchema = z.object({

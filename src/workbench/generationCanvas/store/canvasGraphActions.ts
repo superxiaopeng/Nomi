@@ -1,6 +1,5 @@
 import { connectNodes, disconnectEdge, removeNodes } from '../model/graphOps'
-import { isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
-import { validateReferenceEdge } from '../agent/referenceEdgeCapability'
+import { selectConnectionEdgeMode, validateReferenceEdge } from '../agent/referenceEdgeCapability'
 import type { GenerationCanvasEdge, NodeGroup } from '../model/generationCanvasTypes'
 import { createGroupId } from './canvasIds'
 import { bumpPersistRevision, isCategoryId, shouldPersistCanvasMutation } from './canvasGuards'
@@ -22,12 +21,11 @@ export const createCanvasGraphActions: CanvasSliceCreator<CanvasGraphActions> = 
     const pre = get()
     const sourceNode = pre.nodes.find((n) => n.id === sourceNodeId)
     const targetNode = pre.nodes.find((n) => n.id === targetNodeId)
-    let mode: GenerationCanvasEdge['mode'] = 'reference'
-    if (sourceNode && targetNode && isImageLikeGenerationNodeKind(sourceNode.kind) && targetNode.kind === 'video') {
-      const incoming = pre.edges.filter((e) => e.target === targetNodeId)
-      if (!incoming.some((e) => e.mode === 'first_frame')) mode = 'first_frame'
-      else if (!incoming.some((e) => e.mode === 'last_frame')) mode = 'last_frame'
-    }
+    // 边语义按**目标当前模式**挑（单一真相源 selectConnectionEdgeMode）：数组参考槽（omni 角色参考）→
+    // character_ref（有序，对应 character1..N）；单帧 i2v → 首/尾帧填空。无源/目标 → 默认通用 reference。
+    const mode: GenerationCanvasEdge['mode'] = sourceNode && targetNode
+      ? selectConnectionEdgeMode(sourceNode, targetNode, pre.edges.filter((e) => e.target === targetNodeId))
+      : 'reference'
     // 连边能力校验收口到此(手动连线总闸):文本→图片、错配参考槽等盲连在创建期就拦——
     // T8 此前只补了 agent 入口,手动拖把柄/点输入口的边落库后才在生成期被静默丢弃。
     // agent 路径已在 generationCanvasTools 预校验;这里防的是手动入口。
