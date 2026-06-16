@@ -111,6 +111,15 @@ export type DesktopBridge = {
       suggestedName?: string
     }) => Promise<{ ok: boolean; canceled?: boolean; path?: string }>
   }
+  video: {
+    /** 视频抽帧（首/尾帧/指定秒）→ 项目素材 nomi-local:// URL。通用基建，见 electron/video/extractVideoFrame.ts。 */
+    extractFrame: (payload: {
+      videoUrl: string
+      which: 'first' | 'last' | number
+      projectId: string
+      forceRerun?: boolean
+    }) => Promise<{ url: string }>
+  }
   exports: {
     startJob: (payload: DesktopExportJobStartPayload) => Promise<DesktopExportJobStartResult>
     writeTempInput: (payload: DesktopExportTempInputWritePayload) => Promise<DesktopExportTempInputWriteResult>

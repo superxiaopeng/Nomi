@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
         path?: string;
       }>,
   },
+  video: {
+    extractFrame: (payload: unknown) =>
+      ipcRenderer.invoke("nomi:video:extract-frame", payload) as Promise<{ url: string }>,
+  },
   exports: {
     startJob: (payload: unknown) => ipcRenderer.invoke("nomi:exports:start-job", payload),
     writeTempInput: (payload: unknown) => ipcRenderer.invoke("nomi:exports:write-temp-input", payload),

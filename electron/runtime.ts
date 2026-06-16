@@ -209,7 +209,7 @@ function uniqueAssetPath(projectId: string, fileName: string, bucket: "generated
   };
 }
 
-function writeAsset(projectId: string, bytes: Buffer, fileName: string, contentType: string, meta: JsonRecord): unknown {
+export function writeAsset(projectId: string, bytes: Buffer, fileName: string, contentType: string, meta: JsonRecord): unknown {
   const { absolutePath, relativePath } = uniqueAssetPath(projectId, fileName, assetBucketFromMeta(meta));
   fs.writeFileSync(absolutePath, bytes);
   // sidecar: originalUrl 落盘，供后续生成直接取公网 URL（不需 vendor 上传 API）。

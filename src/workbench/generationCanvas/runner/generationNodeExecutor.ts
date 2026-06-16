@@ -4,6 +4,7 @@ import { getGenerationNodeExecutionKind } from '../model/generationNodeKinds'
 import { generateAudio } from './audioActions'
 import { generateImage } from './imageActions'
 import { resolveGenerationReferences } from './generationReferenceResolver'
+import { applyRelayFirstFrame } from './relayFrameResolver'
 import { generateText } from './textActions'
 import { generateVideo } from './videoActions'
 
@@ -28,6 +29,9 @@ export const generationNodeExecutor: GenerationNodeExecutor = async (node, conte
   }
   if (executionKind === 'video') {
     const references = resolveGenerationReferences(node, context)
+    // 接力帧：源是视频时，抽其尾帧填本镜首帧（唯一消费 relayFromVideoUrl 的地方）。
+    // 抽帧失败会抛错 → 节点标人话错误、不裸跑（不冒充不变量）。
+    await applyRelayFirstFrame(references)
     return generateVideo(node, { references, ...(onProgress ? { onProgress } : {}) })
   }
   if (executionKind === 'text') {

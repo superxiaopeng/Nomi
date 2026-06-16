@@ -97,6 +97,11 @@ export function clearActiveWorkbenchProjectSaveTarget(projectId?: string): void 
   activeWorkbenchProjectSaveTarget = null
 }
 
+/** 当前活动 workbench 项目 id（单一真相源）—— 抽帧落素材需要它，runner 作用域本身拿不到。 */
+export function getActiveWorkbenchProjectId(): string | null {
+  return activeWorkbenchProjectSaveTarget?.projectId ?? null
+}
+
 export async function persistActiveWorkbenchProjectNow(): Promise<WorkbenchProjectRecordV1 | null> {
   const target = activeWorkbenchProjectSaveTarget
   if (!target || !target.canPersist()) return null

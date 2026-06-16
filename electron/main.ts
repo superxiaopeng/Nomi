@@ -32,6 +32,7 @@ import {
   clearModelCatalogVendorApiKey,
   ensureBuiltinModelSeeds,
 } from "./runtime";
+import { extractVideoFrameToAsset } from "./video/extractVideoFrame";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
 import { installCrashHandlers, logCrash } from "./crashLog";
@@ -289,6 +290,7 @@ function registerIpc(): void {
   ipcMain.handle("nomi:assets:import-file", (_event, payload) => importLocalFile(payload));
   ipcMain.handle("nomi:assets:list", (_event, payload) => listProjectAssets(payload));
   ipcMain.handle("nomi:assets:download", (_event, payload) => downloadAssetToDisk(payload));
+  ipcMain.handle("nomi:video:extract-frame", (_event, payload) => extractVideoFrameToAsset(payload));
   registerExportJobIpc();
   ipcMain.handle("nomi:tasks:run", (_event, payload) => runTaskIpcGuard(payload, () => runTask(payload)));
   ipcMain.handle("nomi:tasks:result", (_event, payload) => runTaskIpcGuard(payload, () => fetchTaskResult(payload)));
