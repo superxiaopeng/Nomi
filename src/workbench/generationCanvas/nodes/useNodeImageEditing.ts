@@ -2,7 +2,8 @@ import React from 'react'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { dataUrlToFile, persistNodeImageFile } from '../adapters/persistNodeImage'
-import type { CropRect } from './render/ImageCropOverlay'
+import type { CropGridResult, CropGridSize } from './render/ImageCropGridOverlay'
+import { computeGridCells } from './render/cropGridGeometry'
 
 // 裁切 / 旋转 / 网格切分都用 canvas.toDataURL 产出 PNG base64。先用 base64 给即时预览，
 // 紧接着把它落盘换成 nomi-local:// 替换掉 —— 避免 PNG base64 永久挂在 store（图多即卡）。
@@ -28,6 +29,7 @@ function persistEditedNodeImageToLocal(nodeId: string, dataUrl: string, createdA
 // 图片类与素材类节点都复用这一处；以后新增图片编辑功能只动这里 + NodeImageEditToolbar，
 // 不碰壳、不碰生成逻辑。所有操作都遵循「跳出新节点」原则——原图零改动，衍生物是新节点。
 
+// 切图入口仍是「四视图(2) / 九宫格(3)」两档；裁剪是 1 档。统一由可调框处理（见 CropGridSize）。
 export type ImageGridSize = 2 | 3
 export type ImageTransformOp = 'rotate-left' | 'rotate-right' | 'flip-h' | 'flip-v'
 
@@ -41,14 +43,6 @@ export const IMAGE_TRANSFORM_LABEL: Record<ImageTransformOp, string> = {
 // 这几个布局上下界与壳里 resize 用的同名常量保持一致（壳负责 resize，这里负责衍生新节点尺寸）。
 const MIN_NODE_WIDTH = 240
 const MAX_NODE_WIDTH = 680
-
-type ImageGridTile = {
-  dataUrl: string
-  width: number
-  height: number
-  row: number
-  column: number
-}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -72,40 +66,6 @@ function loadImageForCanvas(url: string): Promise<HTMLImageElement> {
     }
     image.src = url
   })
-}
-
-async function splitImageIntoGrid(url: string, gridSize: ImageGridSize): Promise<ImageGridTile[]> {
-  if (typeof document === 'undefined') return []
-  const image = await loadImageForCanvas(url)
-  const imageWidth = image.naturalWidth || image.width
-  const imageHeight = image.naturalHeight || image.height
-  if (!imageWidth || !imageHeight) return []
-
-  const sourceTileWidth = imageWidth / gridSize
-  const sourceTileHeight = imageHeight / gridSize
-  const outputTileWidth = Math.max(1, Math.round(sourceTileWidth))
-  const outputTileHeight = Math.max(1, Math.round(sourceTileHeight))
-  const tiles: ImageGridTile[] = []
-  for (let row = 0; row < gridSize; row += 1) {
-    const sourceY = row * sourceTileHeight
-    for (let column = 0; column < gridSize; column += 1) {
-      const sourceX = column * sourceTileWidth
-      const canvas = document.createElement('canvas')
-      canvas.width = outputTileWidth
-      canvas.height = outputTileHeight
-      const context = canvas.getContext('2d')
-      if (!context) continue
-      context.drawImage(image, sourceX, sourceY, sourceTileWidth, sourceTileHeight, 0, 0, outputTileWidth, outputTileHeight)
-      tiles.push({
-        dataUrl: canvas.toDataURL('image/png'),
-        width: outputTileWidth,
-        height: outputTileHeight,
-        row,
-        column,
-      })
-    }
-  }
-  return tiles
 }
 
 async function cropImageRegion(
@@ -162,12 +122,12 @@ async function transformImage(
 }
 
 export type NodeImageEditing = {
-  splittingGridSize: ImageGridSize | null
-  cropMode: boolean
-  setCropMode: (value: boolean) => void
+  /** 当前打开的可调框：null=未开，1=裁剪，2/3=切图（四视图/九宫格）。 */
+  editGrid: CropGridSize | null
+  openEdit: (gridSize: CropGridSize) => void
+  cancelEdit: () => void
   imageOpBusy: boolean
-  handleImageGridSplit: (gridSize: ImageGridSize) => Promise<void>
-  handleCropConfirm: (rect: CropRect) => Promise<void>
+  handleEditConfirm: (result: CropGridResult) => Promise<void>
   handleImageTransform: (op: ImageTransformOp) => Promise<void>
 }
 
@@ -178,9 +138,10 @@ export function useNodeImageEditing(
   const addNode = useGenerationCanvasStore((state) => state.addNode)
   const updateNode = useGenerationCanvasStore((state) => state.updateNode)
   const storeConnectNodes = useGenerationCanvasStore((state) => state.connectNodes)
-  const [splittingGridSize, setSplittingGridSize] = React.useState<ImageGridSize | null>(null)
-  const [cropMode, setCropMode] = React.useState(false)
+  const [editGrid, setEditGrid] = React.useState<CropGridSize | null>(null)
   const [imageOpBusy, setImageOpBusy] = React.useState(false)
+  const openEdit = React.useCallback((gridSize: CropGridSize) => setEditGrid(gridSize), [])
+  const cancelEdit = React.useCallback(() => setEditGrid(null), [])
 
   const visualWidth = visualSize.width
   const nodeId = node.id
@@ -189,120 +150,83 @@ export function useNodeImageEditing(
   const nodePositionY = node.position.y
   const nodeResult = node.result
 
-  const handleImageGridSplit = React.useCallback(async (gridSize: ImageGridSize) => {
+  // 裁剪 / 切图统一走可调框确认：computeGridCells 把「外框 + 框内线」换算成 N 个 image 归一化
+  // cell，逐 cell cropImageRegion 裁出新节点。1 cell = 裁剪（单节点）；N cell = 切图（展开网格）。
+  // 「跳出新节点、原图零改动」原则不变。
+  const handleEditConfirm = React.useCallback(async (confirmed: CropGridResult) => {
     const imageUrl = nodeResult?.type === 'image' ? nodeResult.url : undefined
-    if (!imageUrl || splittingGridSize !== null) return
-
-    setSplittingGridSize(gridSize)
+    const grid = editGrid
+    cancelEdit()
+    if (!imageUrl || grid == null || imageOpBusy) return
+    setImageOpBusy(true)
     try {
-      const tiles = await splitImageIntoGrid(imageUrl, gridSize)
-      if (tiles.length !== gridSize * gridSize) return
+      const cells = computeGridCells(confirmed.rect, confirmed.cols, confirmed.rows)
+      const isSplit = cells.length > 1
       const createdAt = Date.now()
-      const gap = 42
-      const preferredTileWidth = Math.max(MIN_NODE_WIDTH, Math.round(visualWidth / gridSize))
-      const firstTileSize = imageGridTileNodeSize(tiles[0]?.width || 1, tiles[0]?.height || 1, preferredTileWidth)
-      const layoutWidth = firstTileSize?.width || 240
-      const layoutHeight = firstTileSize?.previewHeight || 180
       const baseX = Math.round(nodePositionX + visualWidth + 80)
       const baseY = Math.round(nodePositionY)
 
-      tiles.forEach((tile, index) => {
-        const tileSize = imageGridTileNodeSize(tile.width, tile.height, layoutWidth)
-        const tileNode = addNode({
+      const crops = await Promise.all(cells.map((cell) => cropImageRegion(imageUrl, cell)))
+      // 切图每格目标宽 ≈ 源宽/grid；裁剪沿用源节点宽。各自夹在节点上下界内。
+      const preferredWidth = isSplit
+        ? Math.max(MIN_NODE_WIDTH, Math.round(visualWidth / grid))
+        : clampNumber(visualWidth, MIN_NODE_WIDTH, MAX_NODE_WIDTH)
+      const sizes = crops.map((crop) => (crop ? imageGridTileNodeSize(crop.width, crop.height, preferredWidth) : null))
+
+      // 不等分 cell 尺寸不一：列宽=该列各行最大、行高=该行各列最大，累加成展开网格的落点。
+      const gap = 42
+      const colCount = isSplit ? Math.max(...cells.map((c) => c.column)) + 1 : 1
+      const rowCount = isSplit ? Math.max(...cells.map((c) => c.row)) + 1 : 1
+      const colWidths = Array.from({ length: colCount }, (_, c) =>
+        Math.max(MIN_NODE_WIDTH, ...cells.map((cell, i) => (cell.column === c ? sizes[i]?.width ?? MIN_NODE_WIDTH : 0))))
+      const rowHeights = Array.from({ length: rowCount }, (_, r) =>
+        Math.max(1, ...cells.map((cell, i) => (cell.row === r ? sizes[i]?.previewHeight ?? 1 : 0))))
+      const colX = colWidths.map((_, c) => baseX + colWidths.slice(0, c).reduce((sum, w) => sum + w + gap, 0))
+      const rowY = rowHeights.map((_, r) => baseY + rowHeights.slice(0, r).reduce((sum, h) => sum + h + gap, 0))
+
+      cells.forEach((cell, index) => {
+        const crop = crops[index]
+        if (!crop) return
+        const size = sizes[index]
+        const newNode = addNode({
           kind: 'asset',
-          title: `${nodeTitle || '图片'} ${gridSize}x${gridSize} 切片 ${index + 1}`,
-          prompt: `${gridSize}x${gridSize} 图片切片 ${tile.row + 1}-${tile.column + 1}`,
-          position: {
-            x: baseX + tile.column * (layoutWidth + gap),
-            y: baseY + tile.row * (layoutHeight + gap),
-          },
-          select: false,
+          title: isSplit ? `${nodeTitle || '图片'} ${grid}x${grid} 切片 ${index + 1}` : `${nodeTitle || '图片'} 裁剪`,
+          prompt: isSplit ? `${grid}x${grid} 图片切片 ${cell.row + 1}-${cell.column + 1}` : '图片裁剪',
+          position: isSplit ? { x: colX[cell.column], y: rowY[cell.row] } : { x: baseX, y: baseY },
+          select: !isSplit,
         })
-        const result = {
-          id: `image-split-${tileNode.id}-${createdAt}-${index}`,
+        const resultAsset = {
+          id: `image-${isSplit ? 'split' : 'crop'}-${newNode.id}-${createdAt}-${index}`,
           type: 'image' as const,
-          url: tile.dataUrl,
+          url: crop.dataUrl,
           createdAt,
         }
-        updateNode(tileNode.id, {
-          result,
-          history: [result],
+        updateNode(newNode.id, {
+          result: resultAsset,
+          history: [resultAsset],
           status: 'success',
-          ...(tileSize ? { size: { width: tileSize.width, height: tileSize.height } } : {}),
+          ...(size ? { size: { width: size.width, height: size.height } } : {}),
           meta: {
-            ...(tileNode.meta || {}),
-            source: `image-grid-split-${gridSize}x${gridSize}`,
+            ...(newNode.meta || {}),
+            source: isSplit ? `image-grid-split-${grid}x${grid}` : 'image-crop',
             sourceNodeId: nodeId,
             localOnly: true,
-            gridSize,
-            gridRow: tile.row,
-            gridColumn: tile.column,
-            imageWidth: tile.width,
-            imageHeight: tile.height,
-            imageAspectRatio: tile.width / Math.max(1, tile.height),
-            previewHeight: tileSize?.previewHeight,
+            ...(isSplit ? { gridSize: grid, gridRow: cell.row, gridColumn: cell.column } : {}),
+            imageWidth: crop.width,
+            imageHeight: crop.height,
+            imageAspectRatio: crop.width / Math.max(1, crop.height),
+            previewHeight: size?.previewHeight,
           },
         })
-        storeConnectNodes(nodeId, tileNode.id, 'reference')
-        persistEditedNodeImageToLocal(tileNode.id, tile.dataUrl, createdAt)
+        storeConnectNodes(nodeId, newNode.id, 'reference')
+        persistEditedNodeImageToLocal(newNode.id, crop.dataUrl, createdAt)
       })
     } catch {
-      // Image splitting can fail if the source image cannot be loaded into a canvas due to CORS.
+      // 裁剪/切图可能因 CORS 无法把源图读进 canvas 而失败。
     } finally {
-      setSplittingGridSize(null)
+      setImageOpBusy(false)
     }
-  }, [addNode, nodeId, nodePositionX, nodePositionY, nodeResult, nodeTitle, splittingGridSize, storeConnectNodes, updateNode, visualWidth])
-
-  // 裁剪：不在原图上做破坏式操作，而是从原图「跳出」一个新素材节点。
-  // 原节点零改动；新裁剪节点可再缩放/再裁剪/拖时间线/当参考。
-  const handleCropConfirm = React.useCallback(async (rect: CropRect) => {
-    const imageUrl = nodeResult?.type === 'image' ? nodeResult.url : undefined
-    setCropMode(false)
-    if (!imageUrl) return
-    try {
-      const cropped = await cropImageRegion(imageUrl, rect)
-      if (!cropped) return
-      const createdAt = Date.now()
-      const preferredWidth = clampNumber(visualWidth, MIN_NODE_WIDTH, MAX_NODE_WIDTH)
-      const newSize = imageGridTileNodeSize(cropped.width, cropped.height, preferredWidth)
-      const cropNode = addNode({
-        kind: 'asset',
-        title: `${nodeTitle || '图片'} 裁剪`,
-        prompt: '图片裁剪',
-        position: {
-          x: Math.round(nodePositionX + visualWidth + 80),
-          y: Math.round(nodePositionY),
-        },
-        select: true,
-      })
-      const result = {
-        id: `image-crop-${cropNode.id}-${createdAt}`,
-        type: 'image' as const,
-        url: cropped.dataUrl,
-        createdAt,
-      }
-      updateNode(cropNode.id, {
-        result,
-        history: [result],
-        status: 'success',
-        ...(newSize ? { size: { width: newSize.width, height: newSize.height } } : {}),
-        meta: {
-          ...(cropNode.meta || {}),
-          source: 'image-crop',
-          sourceNodeId: nodeId,
-          localOnly: true,
-          imageWidth: cropped.width,
-          imageHeight: cropped.height,
-          imageAspectRatio: cropped.width / Math.max(1, cropped.height),
-          previewHeight: newSize?.previewHeight,
-        },
-      })
-      storeConnectNodes(nodeId, cropNode.id, 'reference')
-      persistEditedNodeImageToLocal(cropNode.id, cropped.dataUrl, createdAt)
-    } catch {
-      // Crop can fail if the source image cannot be loaded into a canvas due to CORS.
-    }
-  }, [addNode, nodeId, nodePositionX, nodePositionY, nodeResult, nodeTitle, storeConnectNodes, updateNode, visualWidth])
+  }, [addNode, cancelEdit, editGrid, imageOpBusy, nodeId, nodePositionX, nodePositionY, nodeResult, nodeTitle, storeConnectNodes, updateNode, visualWidth])
 
   // 旋转 / 翻转：同款「跳出新素材节点」原则 —— canvas 处理后派生新节点，原图保留。
   const handleImageTransform = React.useCallback(async (op: ImageTransformOp) => {
@@ -357,12 +281,11 @@ export function useNodeImageEditing(
   }, [addNode, imageOpBusy, nodeId, nodePositionX, nodePositionY, nodeResult, nodeTitle, storeConnectNodes, updateNode, visualWidth])
 
   return {
-    splittingGridSize,
-    cropMode,
-    setCropMode,
+    editGrid,
+    openEdit,
+    cancelEdit,
     imageOpBusy,
-    handleImageGridSplit,
-    handleCropConfirm,
+    handleEditConfirm,
     handleImageTransform,
   }
 }

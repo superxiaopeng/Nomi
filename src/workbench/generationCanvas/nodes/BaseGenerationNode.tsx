@@ -14,7 +14,7 @@ import TextDocumentNode from "./render/TextDocumentNode";
 import SceneCardNode from "./render/SceneCardNode";
 import PropCardNode from "./render/PropCardNode";
 import AudioStripNode from "./render/AudioStripNode";
-import ImageCropOverlay from "./render/ImageCropOverlay";
+import ImageCropGridOverlay from "./render/ImageCropGridOverlay";
 import NodeImageEditToolbar from "./NodeImageEditToolbar";
 import NodeResultDownloadButton from "./NodeResultDownloadButton";
 import { FloatingToolbarShell, TOOLBAR_ICON as TBI, ToolbarButton, ToolbarDivider } from "./NodeFloatingToolbar";
@@ -549,12 +549,11 @@ function BaseGenerationNodeImpl({
             node.result.url ? (
                 <NodeImageEditToolbar
                     node={node}
-                    splittingGridSize={imageEditing.splittingGridSize}
-                    cropMode={imageEditing.cropMode}
+                    editGrid={imageEditing.editGrid}
                     imageOpBusy={imageEditing.imageOpBusy}
                     onMakeup={() => applyFixationMakeup(node)}
-                    onGridSplit={(g) => void imageEditing.handleImageGridSplit(g)}
-                    onCrop={() => imageEditing.setCropMode(true)}
+                    onGridSplit={(g) => imageEditing.openEdit(g)}
+                    onCrop={() => imageEditing.openEdit(1)}
                     onTransform={(op) => void imageEditing.handleImageTransform(op)}
                 />
             ) : null}
@@ -782,16 +781,17 @@ function BaseGenerationNodeImpl({
                         prompt={node.prompt}
                     />
                 )}
-                {imageEditing.cropMode &&
+                {imageEditing.editGrid !== null &&
                 (node.kind === "image" || isAssetKind) &&
                 node.result?.type === "image" &&
                 node.result.url ? (
-                    <ImageCropOverlay
+                    <ImageCropGridOverlay
                         imageUrl={node.result.url}
-                        onConfirm={(rect) => {
-                            void imageEditing.handleCropConfirm(rect);
+                        gridSize={imageEditing.editGrid}
+                        onConfirm={(result) => {
+                            void imageEditing.handleEditConfirm(result);
                         }}
-                        onCancel={() => imageEditing.setCropMode(false)}
+                        onCancel={() => imageEditing.cancelEdit()}
                     />
                 ) : null}
             </div>

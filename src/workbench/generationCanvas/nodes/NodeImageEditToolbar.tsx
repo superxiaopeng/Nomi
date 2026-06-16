@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconCrop, IconDownload, IconFlipHorizontal, IconFlipVertical, IconGrid3x3, IconGridDots, IconLayoutGrid, IconRotate2, IconRotateClockwise2, IconSparkles, IconTransform } from '@tabler/icons-react'
 import { IMAGE_TRANSFORM_LABEL, type ImageGridSize, type ImageTransformOp } from './useNodeImageEditing'
+import type { CropGridSize } from './render/ImageCropGridOverlay'
 import { useResultDownload } from './useResultDownload'
 import { FloatingToolbarShell, TOOLBAR_ICON as I, ToolbarButton, ToolbarDivider, ToolbarMenu } from './NodeFloatingToolbar'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
@@ -11,8 +12,8 @@ import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 
 type Props = {
   node: GenerationCanvasNode
-  splittingGridSize: ImageGridSize | null
-  cropMode: boolean
+  /** 当前打开的可调框：null=未开，1=裁剪，2/3=切图。开着或忙时禁用编辑入口。 */
+  editGrid: CropGridSize | null
   imageOpBusy: boolean
   onGridSplit: (gridSize: ImageGridSize) => void
   onCrop: () => void
@@ -21,10 +22,9 @@ type Props = {
   onMakeup?: () => void
 }
 
-export default function NodeImageEditToolbar({ node, splittingGridSize, cropMode, imageOpBusy, onGridSplit, onCrop, onTransform, onMakeup }: Props): JSX.Element {
+export default function NodeImageEditToolbar({ node, editGrid, imageOpBusy, onGridSplit, onCrop, onTransform, onMakeup }: Props): JSX.Element {
   const { downloading, download } = useResultDownload(node)
-  const splitting = splittingGridSize !== null
-  const transformBusy = imageOpBusy || cropMode || splitting
+  const busy = editGrid !== null || imageOpBusy
   return (
     <FloatingToolbarShell ariaLabel="图片操作">
       {onMakeup ? (
@@ -42,14 +42,14 @@ export default function NodeImageEditToolbar({ node, splittingGridSize, cropMode
       <ToolbarButton
         icon={<IconCrop size={I.size} stroke={I.stroke} />}
         label="裁剪"
-        title="裁剪（裁出一个新节点，原图保留）"
-        disabled={cropMode || splitting}
+        title="裁剪（可拖取景框，裁出一个新节点，原图保留）"
+        disabled={busy}
         onClick={onCrop}
       />
       <ToolbarMenu
         icon={<IconGridDots size={I.size} stroke={I.stroke} />}
         label="切图"
-        disabled={splitting}
+        disabled={busy}
         items={[
           { icon: <IconLayoutGrid size={I.size} stroke={I.stroke} />, label: '四视图（2×2）', onClick: () => onGridSplit(2) },
           { icon: <IconGrid3x3 size={I.size} stroke={I.stroke} />, label: '九宫格（3×3）', onClick: () => onGridSplit(3) },
@@ -58,7 +58,7 @@ export default function NodeImageEditToolbar({ node, splittingGridSize, cropMode
       <ToolbarMenu
         icon={<IconTransform size={I.size} stroke={I.stroke} />}
         label="变换"
-        disabled={transformBusy}
+        disabled={busy}
         items={([
           { op: 'rotate-left' as const, icon: <IconRotate2 size={I.size} stroke={I.stroke} /> },
           { op: 'rotate-right' as const, icon: <IconRotateClockwise2 size={I.size} stroke={I.stroke} /> },
