@@ -17,7 +17,7 @@ describe("ModelScope 接入（真实 API 形状锁）", () => {
   });
 
   it("全部 curated 模型：异步提交头 + 顶层 task_id；文生图挂 image 档案、改图挂 edit 档案", () => {
-    expect(MODELSCOPE_IMAGE_MODELS).toHaveLength(5);
+    expect(MODELSCOPE_IMAGE_MODELS).toHaveLength(7);
     for (const model of MODELSCOPE_IMAGE_MODELS) {
       const create = model.mappings[0].create;
       expect(create.path).toBe("/v1/images/generations");
@@ -28,7 +28,7 @@ describe("ModelScope 接入（真实 API 形状锁）", () => {
     }
     const t2i = MODELSCOPE_IMAGE_MODELS.filter((m) => m.mappings[0].taskKind === "text_to_image");
     const edit = MODELSCOPE_IMAGE_MODELS.filter((m) => m.mappings[0].taskKind === "image_edit");
-    expect(t2i).toHaveLength(4);
+    expect(t2i).toHaveLength(6);
     expect(edit).toHaveLength(1);
     for (const m of t2i) expect(m.archetypeId).toBe("modelscope-image");
     // 改图：挂 edit 档案，body 带 image_url（参考图入参），无 size。

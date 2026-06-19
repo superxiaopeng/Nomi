@@ -63,9 +63,11 @@ function t2iModel(modelKey: string, labelZh: string, slug: string): ModelscopeIm
 
 export const MODELSCOPE_IMAGE_MODELS: ModelscopeImageModel[] = [
   t2iModel("Tongyi-MAI/Z-Image-Turbo", "Z-Image Turbo", "z-image-turbo"),
+  t2iModel("Tongyi-MAI/Z-Image", "Z-Image", "z-image"),
   t2iModel("Qwen/Qwen-Image-2512", "Qwen-Image", "qwen-image"),
   t2iModel("black-forest-labs/FLUX.2-klein-9B", "FLUX.2 Klein", "flux2-klein"),
   t2iModel("black-forest-labs/FLUX.1-Krea-dev", "FLUX.1 Krea", "flux1-krea"),
+  t2iModel("MAILAND/majicflus_v1", "majicFlus 写实", "majicflus"),
   {
     modelKey: "Qwen/Qwen-Image-Edit-2511",
     labelZh: "Qwen-Image 改图",
