@@ -52,6 +52,23 @@
   pointer-events: auto;
 }
 
+/* 新落点节点弹入（add/paste/Agent）。用**独立 scale 属性**而非 transform——
+   根节点 transform 已被 translate(定位) 占用，独立 scale 与之组合不冲突（不会把节点弹回原点）。 */
+.generation-canvas-v2-node[data-appear='true'] {
+  animation: generation-canvas-v2-node-in 340ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes generation-canvas-v2-node-in {
+  from {
+    opacity: 0;
+    scale: 0.82;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
 .generation-canvas-v2-node[data-focus-flash='true'] .generation-canvas-v2-node__preview {
   animation: generation-canvas-v2-focus-pulse 1.35s ease-out;
   outline: 3px solid color-mix(in srgb, var(--nomi-accent) 72%, white);
@@ -171,10 +188,50 @@
 
 .generation-canvas-v2__edge-path {
   fill: none;
-  stroke: var(--nomi-ink-30);
-  stroke-dasharray: 3 3;
-  stroke-width: 1.2;
+  /* A′：所有边统一 accent 实线；vector-effect 锁屏幕像素线宽——缩小不变细、不消失（根因层治「边看不见」）。 */
+  stroke: var(--nomi-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+
+/* 终点圆点：指明「谁喂谁」的方向。半径恒定（非缩放）。 */
+.generation-canvas-v2__edge-dot {
+  fill: var(--nomi-accent);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* 参考类型小标签（仅 typed mode 渲染；反缩放恒定字号见 TSX 的 scale(1/zoom)）。 */
+.generation-canvas-v2__edge-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--nomi-accent-soft);
+  color: var(--nomi-accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.generation-canvas-v2__edge-tag {
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+/* 密集区（同 target 有标签边超阈值）默认收起标签，hover 该边 / 边激活时才显——避免标签糊一片。 */
+.generation-canvas-v2__edge[data-dense='true'] .generation-canvas-v2__edge-tag {
+  opacity: 0;
+}
+
+.generation-canvas-v2__edge:hover .generation-canvas-v2__edge-tag,
+.generation-canvas-v2__edge[data-active='true'] .generation-canvas-v2__edge-tag {
+  opacity: 1;
 }
 
 .generation-canvas-v2__edge-hit {
@@ -191,7 +248,7 @@
 }
 
 .generation-canvas-v2__edge[data-active='true'] .generation-canvas-v2__edge-path {
-  stroke-width: 2;
+  stroke-width: 3;
   filter: drop-shadow(0 0 4px rgba(18, 24, 38, 0.14));
 }
 
@@ -202,29 +259,15 @@
 
 .generation-canvas-v2__edge-preview {
   fill: none;
-  stroke: oklch(0.6 0.14 250);
+  stroke: var(--nomi-accent);
   stroke-width: 2;
   stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
-.generation-canvas-v2__edge[data-mode='first_frame'] .generation-canvas-v2__edge-path,
-.generation-canvas-v2__edge[data-mode='last_frame'] .generation-canvas-v2__edge-path {
-  stroke: var(--nomi-accent);
-  stroke-dasharray: none;
-}
-
-.generation-canvas-v2__edge[data-mode='style_ref'] .generation-canvas-v2__edge-path {
-  stroke: oklch(0.58 0.12 155);
-}
-
-.generation-canvas-v2__edge[data-mode='character_ref'] .generation-canvas-v2__edge-path {
-  stroke: oklch(0.56 0.12 35);
-}
-
-.generation-canvas-v2__edge[data-mode='composition_ref'] .generation-canvas-v2__edge-path {
-  stroke: oklch(0.54 0.09 290);
-}
+/* A′：删旧四色 data-mode 着色（first/last/style/character/composition 各色）——
+   统一到 accent 实线，类型信息靠 typed 边的小标签补（P1 删并行版，不留四色彩虹）。 */
 
 .generation-canvas-v2__edge-cut-wrap {
   display: grid;

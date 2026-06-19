@@ -68,6 +68,7 @@ export type BaseGenerationNodeProps = {
     selected: boolean;
     readOnly?: boolean;
     focusFlash?: boolean;
+    appear?: boolean;
 };
 const Scene3DEditor = lazyWithChunkBoundary("3D 场景编辑器", () => import("./Scene3DEditor")); // A5：chunk 失败只降级本卡
 
@@ -76,6 +77,7 @@ function BaseGenerationNodeImpl({
     selected,
     readOnly = false,
     focusFlash = false,
+    appear = false,
 }: BaseGenerationNodeProps): JSX.Element {
     const selectNode = useGenerationCanvasStore((state) => state.selectNode);
     const captureHistory = useGenerationCanvasStore(
@@ -436,6 +438,7 @@ function BaseGenerationNodeImpl({
             data-expanded={selected ? "true" : "false"}
             data-selected={selected ? "true" : "false"}
             data-focus-flash={focusFlash ? "true" : "false"}
+            data-appear={appear ? "true" : undefined}
             data-status={status}
             style={{
                 transform: `translate(${node.position.x}px, ${node.position.y}px)`,
@@ -558,8 +561,7 @@ function BaseGenerationNodeImpl({
                 />
             ) : null}
 
-            {/* 视频等无编辑工具条的结果：单独一条「下载」浮条（图片下载已并入上面的编辑工具条）。
-                多选时藏（!isMultiSelectActive）——批量只留居中批量条，不让每节点浮条糊一片。 */}
+            {/* 视频等无编辑工具条的结果：单独一条「下载」浮条；多选时藏（只留居中批量条，不糊一片）。 */}
             <NodeResultDownloadButton node={node} selected={selected && !isMultiSelectActive} />
 
             <header
@@ -583,9 +585,8 @@ function BaseGenerationNodeImpl({
                     </span>
                 ) : null}
                 <TechnicalReviewBadge meta={node.meta} />
-                {/* 锁徽标已从卡片移到 NodeGenerationComposer 底栏（编辑面板）——卡片预览保持干净，
-                    锁定/解锁在选中节点时就近可达（用户反馈②）。 */}
-                {/* E.2C-25 副本角标（spec §6.3）：跨分类独立副本永久显示。derivedFrom 仅承载跨分类独立副本语义(经 E.2C-16 migration);同分类重生成在 regeneratedFrom,不进此角标。 */}
+                {/* 锁徽标已移到 NodeGenerationComposer 底栏（编辑面板），卡片预览保持干净（用户反馈②）。 */}
+                {/* E.2C-25 副本角标：跨分类独立副本永久显示（derivedFrom 仅承载此语义；同分类重生成在 regeneratedFrom）。 */}
                 {node.derivedFrom ? (
                     <button
                         type='button'
@@ -630,8 +631,7 @@ function BaseGenerationNodeImpl({
                 onClose={() => setProvenanceOpen(false)}
             />
 
-            {/* 失败态：错误卡铺满节点正文（自身 absolute inset-0 z-[5]），
-                盖住占位底纹但不挡 composer/resize/handles。 */}
+            {/* 失败态：错误卡铺满节点正文（absolute inset-0 z-[5]），盖占位底纹但不挡 composer/resize/handles。 */}
             {status === "error" && node.error ? (
                 <NodeErrorReport
                     message={node.error}
@@ -639,10 +639,9 @@ function BaseGenerationNodeImpl({
                 />
             ) : null}
 
-            {/* [DESIGN-CARDS-07] 卡片分发：非 shots 分类直接渲染对应 card 组件
-          preview div + composer 在卡片模式下隐藏 */}
+            {/* [DESIGN-CARDS-07] 卡片分发：非 shots 分类渲染对应 card 组件（preview div + composer 隐藏）。 */}
             {isCardKind ? (
-                <div className='w-full h-full rounded-nomi shadow-nomi-md overflow-hidden'>
+                <div className='w-full h-full rounded-nomi shadow-nomi-md overflow-hidden ring-1 ring-inset ring-nomi-line'>
                     {renderKind === "character-card" && (
                         <CharacterCardNode node={node} />
                     )}
@@ -656,8 +655,7 @@ function BaseGenerationNodeImpl({
                 </div>
             ) : null}
 
-            {/* C5: 文本节点 —— 可编辑文档 body。外层不裁剪，让浮动格式条能浮到节点上方
-                （圆角/阴影/裁剪在 TextDocumentNode 内层 body）。 */}
+            {/* C5: 文本节点。外层不裁剪让浮动格式条浮到节点上方（圆角/阴影/裁剪在 TextDocumentNode 内层 body）。 */}
             {isTextKind ? (
                 <div className='w-full h-full'>
                     <TextDocumentNode node={node} />
@@ -668,7 +666,8 @@ function BaseGenerationNodeImpl({
                 className={cn(
                     "generation-canvas-v2-node__preview",
                     "relative w-full h-full min-h-0 overflow-hidden",
-                    "rounded-nomi shadow-nomi-md cursor-grab touch-none",
+                    // ring=中性细描边（box-shadow，零布局位移）：缩小/密集时卡片有边界、不糊进浅色画布（②）。
+                    "rounded-nomi shadow-nomi-md cursor-grab touch-none ring-1 ring-inset ring-nomi-line",
                     // 棋盘格占位底纹只在「未生成」态出现；有结果后节点尺寸已贴合图片比例，
                     // 不再露出底纹，避免图片外面套一层框。
                     !hasResult &&
@@ -902,7 +901,8 @@ const BaseGenerationNode = React.memo(
         prev.node === next.node &&
         prev.selected === next.selected &&
         prev.readOnly === next.readOnly &&
-        prev.focusFlash === next.focusFlash,
+        prev.focusFlash === next.focusFlash &&
+        prev.appear === next.appear,
 );
 BaseGenerationNode.displayName = "BaseGenerationNode";
 export default BaseGenerationNode;

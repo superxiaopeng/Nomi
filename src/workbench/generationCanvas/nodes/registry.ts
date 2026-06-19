@@ -6,6 +6,8 @@ export type GenerationNodeRenderProps<TNode = unknown> = {
     selected: boolean;
     readOnly?: boolean;
     focusFlash?: boolean;
+    /** 新落点（add/paste/Agent）一次性弹入动画；开项目已有节点不传（不齐闪）。 */
+    appear?: boolean;
 };
 
 export type GenerationNodeComponent = ComponentType<

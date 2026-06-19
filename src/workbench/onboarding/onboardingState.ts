@@ -9,6 +9,24 @@
 const SPLASH_KEY = 'nomi:splash:v1'
 const CHECKLIST_KEY = 'nomi:checklist:v1'
 const CHECKLIST_COLLAPSED_KEY = 'nomi:checklist-collapsed:v1'
+const CANVAS_GESTURE_HINT_KEY = 'nomi:canvas-gesture-hint:v1'
+
+export function hasSeenCanvasGestureHint(): boolean {
+  try {
+    return window.localStorage.getItem(CANVAS_GESTURE_HINT_KEY) === 'seen'
+  } catch {
+    // localStorage 不可用：退化为「已看过」，不反复弹手势卡
+    return true
+  }
+}
+
+export function markCanvasGestureHintSeen(): void {
+  try {
+    window.localStorage.setItem(CANVAS_GESTURE_HINT_KEY, 'seen')
+  } catch {
+    /* ignore */
+  }
+}
 
 export type ChecklistStep = 'model' | 'storyboard' | 'generated' | 'exported'
 export type ChecklistState = Record<ChecklistStep, boolean>

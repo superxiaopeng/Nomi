@@ -10,9 +10,14 @@ export type ActiveEdge = {
   position?: { x: number; y: number }
 }
 
+// 同一 target 的「有类型标签」入边超过此数 → 标记 data-dense，标签默认收起、hover/激活才显（防糊）。
+const EDGE_TAG_DENSE_THRESHOLD = 3
+
 type CanvasEdgeLayerProps = {
   edges: GenerationCanvasEdge[]
   nodeById: Map<string, GenerationCanvasNode>
+  /** 当前缩放：用于标签反缩放（scale(1/zoom)）保持恒定屏幕字号。 */
+  zoom: number
   /** 视口裁剪：非空时只渲染两端任一在集内的边（虚拟化生效时由画布传入）；null = 渲染全部。 */
   visibleNodeIds: Set<string> | null
   activeEdge: ActiveEdge | null
@@ -28,6 +33,7 @@ type CanvasEdgeLayerProps = {
 export default function CanvasEdgeLayer({
   edges,
   nodeById,
+  zoom,
   visibleNodeIds,
   activeEdge,
   readOnly,
@@ -38,6 +44,17 @@ export default function CanvasEdgeLayer({
   getCanvasPointFromClientPoint,
 }: CanvasEdgeLayerProps): JSX.Element {
   const activeEdgeId = activeEdge?.id ?? null
+  // 密度判定：按 target 统计「有类型标签」（非泛 reference）入边数，超阈值的 target 其标签默认收起。
+  const labeledCountByTarget = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const edge of edges) {
+      const mode = edge.mode || 'reference'
+      if (mode === 'reference') continue
+      counts.set(edge.target, (counts.get(edge.target) || 0) + 1)
+    }
+    return counts
+  }, [edges])
+  const tagScale = 1 / (zoom || 1)
   return (
     <svg className="generation-canvas-v2__edges" aria-label="节点连接线">
       {edges.map((edge) => {
@@ -59,9 +76,27 @@ export default function CanvasEdgeLayer({
         const path = `M ${startX} ${startY} C ${startX + control} ${startY}, ${endX - control} ${endY}, ${endX} ${endY}`
         const isActiveEdge = activeEdgeId === edge.id
         const cutPosition = isActiveEdge && activeEdge?.position ? activeEdge.position : { x: midX, y: midY }
+        const isTyped = mode !== 'reference'
+        const isDense = (labeledCountByTarget.get(edge.target) || 0) > EDGE_TAG_DENSE_THRESHOLD
         return (
-          <g key={edge.id} className="generation-canvas-v2__edge" data-mode={mode} data-active={isActiveEdge ? 'true' : undefined}>
+          <g
+            key={edge.id}
+            className="generation-canvas-v2__edge"
+            data-mode={mode}
+            data-active={isActiveEdge ? 'true' : undefined}
+            data-dense={isTyped && isDense ? 'true' : undefined}
+          >
             <path className="generation-canvas-v2__edge-path" d={path} />
+            <circle className="generation-canvas-v2__edge-dot" cx={endX} cy={endY} r={3.2} />
+            {isTyped ? (
+              <g className="generation-canvas-v2__edge-tag" transform={`translate(${midX} ${midY}) scale(${tagScale})`}>
+                <foreignObject x={-46} y={-9} width={92} height={18} style={{ overflow: 'visible' }}>
+                  <div className="flex w-full h-full items-center justify-center">
+                    <span className="generation-canvas-v2__edge-tag-pill">{EDGE_MODE_LABEL[mode]}</span>
+                  </div>
+                </foreignObject>
+              </g>
+            ) : null}
             {!readOnly ? (
               <path
                 className="generation-canvas-v2__edge-hit"

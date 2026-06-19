@@ -135,7 +135,7 @@ function TextDocumentNodeImpl({ node }: Props): JSX.Element {
         </div>
       ) : null}
 
-      <div className="flex h-full w-full flex-col overflow-hidden rounded-nomi bg-nomi-paper shadow-nomi-md">
+      <div className="flex h-full w-full flex-col overflow-hidden rounded-nomi bg-nomi-paper shadow-nomi-md ring-1 ring-inset ring-nomi-line">
         {/* 拖拽手柄：非 contenteditable，pointerdown 冒泡到 BaseGenerationNode 触发拖动。 */}
         <header
           className={cn(
