@@ -34,6 +34,8 @@ import { APIMART_IMAGE_MODELS, APIMART_IMAGE_QUERY, APIMART_IMAGE_STATUS } from 
 import { APIMART_VIDEO_MODELS, APIMART_VIDEO_QUERY, APIMART_VIDEO_STATUS } from "./apimartVideos";
 import { APIMART_AUDIO_MODELS } from "./apimartAudios";
 import { APIMART_TEXT_MODELS } from "./apimartTexts";
+import { MODELSCOPE_VENDOR_SEED } from "./modelscopeVendor";
+import { MODELSCOPE_IMAGE_MODELS, MODELSCOPE_IMAGE_QUERY, MODELSCOPE_IMAGE_STATUS } from "./modelscopeImages";
 
 /** curated 模型/mapping 的内部类型（reconcile 两函数的输入）。 */
 type CuratedModel = { modelKey: string; labelZh: string; kind: Model["kind"]; archetypeId?: string };
@@ -113,6 +115,17 @@ const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
   ),
 ];
 
+/** 魔搭社区（官方原生）curated 模型 + mapping，从单源 MODELSCOPE_IMAGE_MODELS 派生（async create→poll，与 apimart 同构）。 */
+const MODELSCOPE_CURATED_MODELS: CuratedModel[] = MODELSCOPE_IMAGE_MODELS.map((m) => ({
+  modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId,
+}));
+const MODELSCOPE_CURATED_MAPPINGS: CuratedMapping[] = MODELSCOPE_IMAGE_MODELS.flatMap((m) =>
+  m.mappings.map((mp) => ({
+    id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+    create: mp.create, query: MODELSCOPE_IMAGE_QUERY, statusMapping: MODELSCOPE_IMAGE_STATUS,
+  })),
+);
+
 /**
  * **退役的 curated 记录（变体合并迁移，2026-06-16）**：Seedance 一族原是 4 个独立 catalog 行
  * （标准/fast/face/fast-face），合并成 1 行 + 4 变体后，老装机里残留 3 个变体模型 + 6 条 mapping 成孤儿
@@ -164,7 +177,7 @@ function pruneRetiredMappings(mappings: Mapping[], retiredIds: readonly string[]
 }
 
 /** 供应商种子（裸 baseUrl + bearer）。存在即跳过（用户配置不覆盖）。返回是否变更。 */
-function seedVendor(vendors: Vendor[], seed: typeof KIE_VENDOR_SEED | typeof APIMART_VENDOR_SEED, now: string): boolean {
+function seedVendor(vendors: Vendor[], seed: typeof KIE_VENDOR_SEED | typeof APIMART_VENDOR_SEED | typeof MODELSCOPE_VENDOR_SEED, now: string): boolean {
   if (vendors.some((v) => v.key === seed.key)) return false;
   vendors.push({
     key: seed.key, name: seed.name, enabled: true,
@@ -251,6 +264,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // 供应商：kie + apimart（apimart 为核心变现通道）。
   if (seedVendor(vendors, KIE_VENDOR_SEED, now)) changed = true;
   if (seedVendor(vendors, APIMART_VENDOR_SEED, now)) changed = true;
+  if (seedVendor(vendors, MODELSCOPE_VENDOR_SEED, now)) changed = true;
 
   // 退役 curated 记录清理（变体合并迁移：删 Seedance 旧变体模型 + mapping 孤儿，picker 收成 1 项）。
   if (pruneRetiredModels(models, APIMART_VENDOR_SEED.key, RETIRED_APIMART_VIDEO_MODEL_KEYS)) changed = true;
@@ -260,6 +274,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // 模型 insert + 对账（两家各跑同一套逻辑）。
   if (reconcileModels(models, KIE_VENDOR_SEED.key, KIE_CURATED_MODELS, now)) changed = true;
   if (reconcileModels(models, APIMART_VENDOR_SEED.key, APIMART_CURATED_MODELS, now)) changed = true;
+  if (reconcileModels(models, MODELSCOPE_VENDOR_SEED.key, MODELSCOPE_CURATED_MODELS, now)) changed = true;
 
   // kie 历史包袱 repair：把视频形状的坏 (kie, text_to_image) 替换成正确的 GPT Image 2 文生图契约
   // （旧 onboarding 抽错留下的；契约见 kieGptImage2.ts 直连实测确认）。apimart 无此历史，不需要。
@@ -280,6 +295,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // mapping insert + 对账（两家各跑同一套逻辑）。
   if (reconcileMappings(mappings, KIE_VENDOR_SEED.key, KIE_CURATED_MAPPINGS, now)) changed = true;
   if (reconcileMappings(mappings, APIMART_VENDOR_SEED.key, APIMART_CURATED_MAPPINGS, now)) changed = true;
+  if (reconcileMappings(mappings, MODELSCOPE_VENDOR_SEED.key, MODELSCOPE_CURATED_MAPPINGS, now)) changed = true;
 
   if (!changed) return { state, changed: false };
   return { state: { ...state, vendors, models, mappings }, changed: true };

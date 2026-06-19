@@ -58,6 +58,16 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
       url: 'https://kie.ai', // TODO: 替换为专属 ?ref 链接
     },
   },
+  {
+    vendorKey: 'modelscope',
+    glyph: '魔',
+    tagline: '官方原生 · 绑定阿里云每天免费额度',
+    promo: {
+      text: '魔搭社区由阿里达摩院运营，绑定阿里云账号后每天有免费推理额度。去官网拿 API Key。',
+      ctaLabel: '去魔搭注册',
+      url: 'https://modelscope.cn/my/myaccesstoken',
+    },
+  },
 ] as const
 
 const KNOWN_VENDOR_BY_KEY = new Map<string, KnownVendor>(
