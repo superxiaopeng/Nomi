@@ -105,6 +105,10 @@ export default function TimelinePanel({ density = 'compact', regionLabel, action
   const rulerWidth = Math.max(frameToPixel(rulerEndFrame, timeline.scale), minScrollableWidth)
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // 预览(full)与生成(compact)两个 TimelinePanel 因 keep-alive 同时挂载，各注册一个 window keydown。
+      // 不去重会双触发（⌘Z 撤销两步、方向键 playhead 走两帧、Delete 删两次）。本处理的每条分支都会
+      // preventDefault，故第二个监听器见 defaultPrevented 即跳过 → 单一真相、零重复（不动 keep-alive 架构）。
+      if (event.defaultPrevented) return
       const target = event.target as HTMLElement | null
       if (target?.closest('input, textarea, [contenteditable="true"]')) return
       // 撤销时间轴编辑（⌘Z / Ctrl+Z），不带 shift（shift+Z 留给将来 redo）
