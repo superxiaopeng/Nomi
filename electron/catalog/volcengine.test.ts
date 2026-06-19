@@ -14,21 +14,25 @@ describe("火山 Seedream 接入（真实 API 形状锁·同步）", () => {
     expect(VOLCENGINE_VENDOR_SEED.authType).toBe("bearer");
   });
 
-  it("Seedream 5.0：同步 create（无 query），结果在 data.0.url", () => {
-    expect(VOLCENGINE_IMAGE_MODELS).toHaveLength(1);
-    const model = VOLCENGINE_IMAGE_MODELS[0];
-    expect(model.modelKey).toBe("doubao-seedream-5-0-260128");
-    expect(model.archetypeId).toBe("volcengine-seedream");
-    const mp = model.mappings[0];
-    expect(mp.taskKind).toBe("text_to_image");
-    const create = mp.create;
-    expect(create.path).toBe("/api/v3/images/generations");
-    expect(create.response_mapping?.image_url).toBe("data.0.url");
-    // 同步族：create 不声明 task_id（无轮询）。
-    expect(create.response_mapping?.task_id).toBeUndefined();
-    expect((create.body as Record<string, unknown>).size).toBe("{{request.params.size}}");
-    // 默认去水印（火山「AI生成」角标）。
-    expect((create.body as Record<string, unknown>).watermark).toBe(false);
+  it("Seedream 全 family（5.0/4.5/4.0）：同步 create（无 query），结果在 data.0.url", () => {
+    expect(VOLCENGINE_IMAGE_MODELS).toHaveLength(3);
+    expect(VOLCENGINE_IMAGE_MODELS.map((m) => m.modelKey)).toEqual([
+      "doubao-seedream-5-0-260128",
+      "doubao-seedream-4-5-251128",
+      "doubao-seedream-4-0-250828",
+    ]);
+    for (const model of VOLCENGINE_IMAGE_MODELS) {
+      expect(model.archetypeId).toBe("volcengine-seedream");
+      const create = model.mappings[0].create;
+      expect(model.mappings[0].taskKind).toBe("text_to_image");
+      expect(create.path).toBe("/api/v3/images/generations");
+      expect(create.response_mapping?.image_url).toBe("data.0.url");
+      // 同步族：create 不声明 task_id（无轮询）。
+      expect(create.response_mapping?.task_id).toBeUndefined();
+      const body = create.body as Record<string, unknown>;
+      expect(body.size).toBe("{{request.params.size}}");
+      expect(body.watermark).toBe(false); // 默认去「AI生成」角标
+    }
   });
 
   it("真实同步响应经 runtime 解析器：有图即 succeeded（无 status 字段也不卡 queued）", () => {

@@ -24,19 +24,26 @@ export type VolcengineImageModel = {
   mappings: { id: string; taskKind: ProfileKind; name: string; create: HttpOperation }[];
 };
 
-// v1 只接已开通且真实出图验证的 Seedream 5.0。其余 Seedream（4.5/4.0）与 Seedance 视频待用户开通。
-export const VOLCENGINE_IMAGE_MODELS: VolcengineImageModel[] = [
-  {
-    modelKey: "doubao-seedream-5-0-260128",
-    labelZh: "Seedream 5.0",
+/** 一个 Seedream 文生图模型（全 family 共用同步 create op + volcengine-seedream 档案）。 */
+function seedreamModel(modelKey: string, labelZh: string, slug: string): VolcengineImageModel {
+  return {
+    modelKey,
+    labelZh,
     archetypeId: "volcengine-seedream",
-    mappings: [
-      {
-        id: "seed-volcengine-seedream-5-text_to_image",
-        taskKind: "text_to_image",
-        name: "Seedream 5.0 · 文生图",
-        create: seedreamCreateOp(),
-      },
-    ],
-  },
+    mappings: [{
+      id: `seed-volcengine-${slug}-text_to_image`,
+      taskKind: "text_to_image",
+      name: `${labelZh} · 文生图`,
+      create: seedreamCreateOp(),
+    }],
+  };
+}
+
+// 声明火山 Seedream 全 family（目录式：谁开通谁能用，未开通调用明确报 ModelNotOpen）。
+// 同步图片 API 形状一致（5.0 已真实 E2E 出图验证；4.x 同端点同契约）。modelKey 取自 Ark /api/v3/models。
+// 3.0 已 Retiring，不放。Seedance 视频是异步族（另一形状），待单独接（见方案文档）。
+export const VOLCENGINE_IMAGE_MODELS: VolcengineImageModel[] = [
+  seedreamModel("doubao-seedream-5-0-260128", "Seedream 5.0", "seedream-5"),
+  seedreamModel("doubao-seedream-4-5-251128", "Seedream 4.5", "seedream-4-5"),
+  seedreamModel("doubao-seedream-4-0-250828", "Seedream 4.0", "seedream-4-0"),
 ];
