@@ -51,6 +51,24 @@ response_mapping: { status: "task_status", image_url: "output_images.0", error_m
 > LoRA（Daniel8152/film 等）魔搭支持但属进阶，v1 不做（避免一次堆参数，符合 R2）。
 > 魔搭也有 OpenAI 兼容 chat（Qwen3，`/v1/chat/completions`）→ 可作文本 vendor，但本批只做图片，chat 留后。
 
+## 2'. 火山实测发现（2026-06-19，用户 key 真实 probe）—— 阻塞在「模型未开通」
+
+用真实 key 直接 probe 火山 Ark，钉死了几件事，也暴露了硬阻塞：
+
+- **认证**：核心生成走 **Bearer API key**（用户给的 `ark-` key），不是 AK/SK V4 签名。
+  IC 里的 V4 签名只用于「头像素材管理」子系统，Seedream/Seedance 生成用 Bearer（已 probe 证实）。
+- **modelKey 用模型直连名**（不用 endpoint id）。错误文案 `InvalidEndpointOrModel.NotFound` 证实两者都收。
+- **❌ 阻塞：账号未开通任何模型**。视频端点明确回 `{"code":"ModelNotOpen","message":"account
+  2126482930 has not activated the model ... activate in the Ark Console"}`；图片同样 404。
+  → **真实出图/出片验证不可能**，直到用户在 Ark 控制台「开通管理」激活 Seedream + Seedance。
+- **⚠️ Seedream 尺寸契约刁且不可凭猜**：IC 的 `normalize_volcengine_size` 有整套吸附（按比例 + 最小
+  像素数 ~3686400(≈1920²) + 16 对齐 + 边长上限），错误样本含 "image size must be at least N pixels"
+  / "Seedream 5.0 建议从 2K 起步"。**没有 live 模型根本调不准**——这正是不该凭猜写进默认目录的地方。
+
+**结论**：火山不照魔搭那样"先写后验"——它的参数契约必须 live 验证。**待用户开通模型后，一次性写
++真实出片/出图验证再并入默认目录**（与魔搭同标准）。在此之前不 seed 火山 vendor（避免给用户显示
+跑不通的模型）。下方是已扒到的形状，开通后照此写+验。
+
 ## 2. 官方火山引擎 Ark（图片 Seedream 同步 + 视频 Seedance 异步）
 
 来源：Infinite-Canvas `VOLCENGINE_DEFAULT_BASE_URL` + Ark 官方协议（实现前 R5 用火山官方文档逐字核对）。
