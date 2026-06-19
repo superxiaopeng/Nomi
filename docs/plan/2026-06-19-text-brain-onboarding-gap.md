@@ -71,7 +71,18 @@
 |---|---|---|---|
 | S1 | Part A 种子 + 单测 | `electron/catalog/apimartTexts.ts`（新）、`seedBuiltins.ts`、`seedBuiltins.test.ts` | vitest 幂等/自愈 |
 | S2 | 真实 E2E 验 deepseek-v4-pro tool_use | `tests/transport-spike/` | `APIMART_E2E=1` 跑通 |
-| S3 | Part B 错误码贯通 | `agentChatV2.ts`、错误码常量、两入口路径 | typecheck + 单测 |
-| S4 | Part B 卡片样张 → 拍板 → 实现 | `CreationAiPanel.tsx`、新卡片组件 | R8 对账 + R13 走查 |
+| S3 | Part B 触发判定（改用真实目录状态，非错误码字符串匹配）| `CreationAiPanel.tsx`(useHasTextModel) | typecheck |
+| S4 | Part B 卡片样张 → 拍板 → 实现 | `NoTextModelRecoveryCard.tsx`、`CreationAiPanel.tsx` | ✅ R8 对账 + R13 走查 |
 
 S1+S2 可先落（纯后端，直接修复上报者的案例）；S3+S4 是体验加固，紧随其后。
+
+## 7. 实现回填（2026-06-19）
+
+- **S1+S2 ✅ 已并 main（commit d9b7ef0）**：apimart 种子加 deepseek-v4-pro 文本大脑 + 真实 E2E 验 chat/tool_use 双通 + 五门绿。
+- **S3 触发判定调整（比原方案更稳，P2）**：不引入跨进程错误码，改由 `useHasTextModel` 查**真实目录状态**——`message.status==='error' && hasTextModel===false` 即「无大脑」，渲染恢复卡。不靠匹配英文报错串。
+- **S4 卡片 ✅ 已实现 + 真机走查**：
+  - 新组件 `src/workbench/ai/NoTextModelRecoveryCard.tsx`：身份行复用 `NomiIdentityRow`（统一 logo+「Nomi」字样，export 出来单一真相源 P1，不手搓）。
+  - **一键启用是派生的，不 hardcode 模型描述符（P1）**：从目录找「供应商已配 key 但被禁用」的文本模型 → 一键启用它（读它自己 labelZh，如「启用 DeepSeek V4 Pro」）；找不到 → 只给「去模型设置」。比原样张「一键添加 DeepSeek V4 Pro」更稳（派生 vs 硬编码）。
+  - 「黏住」收尾：一键启用后 `hasTextModel` 翻 true，用 `recoveryShownIds` 让卡片不被卸载、展示自己的「大脑已就位」done 态，不露旧报错文本。
+  - 窄面板按钮竖排全宽不换行（真机实测主按钮原会换行 → 改 flex-col w-full whitespace-nowrap）。
+  - **R13 走查**：禁用全部文本模型造无大脑态 → 创作助手发消息 → 恢复卡正确出现（截图 rc2-crop）→ 点「启用 DeepSeek V4 Pro」→ deepseek 真启用 + done 态（截图 rc-done-crop）。

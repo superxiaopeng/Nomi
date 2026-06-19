@@ -7,6 +7,8 @@ import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../a
 import { startNewConversation } from '../ai/conversationPersistence'
 import { clearWorkbenchAgentSession } from '../../api/desktopClient'
 import { AssistantMessageView, UserMessageBubble } from '../ai/AssistantMessageView'
+import { NoTextModelRecoveryCard } from '../ai/NoTextModelRecoveryCard'
+import { useHasTextModel } from '../library/useHasTextModel'
 import AssistantModelPicker from '../ai/AssistantModelPicker'
 import StoryboardPlanCard from './storyboard/StoryboardPlanCard'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
@@ -84,6 +86,11 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   const messages = useWorkbenchStore((state) => state.creationAiMessages)
   // S1b 诚实分隔线:气泡有历史而 LLM 记忆为空 → 在历史末尾画「以上对话 AI 已不再记得」。
   const staleBoundaryId = useStaleConversationBoundary(messages.map((message) => message.id), 'creation')
+  // Issue #9：agent 报错且目录里没有 enabled 文本模型 → 报错气泡换成「缺大脑」恢复卡（判真实状态非匹配串）。
+  // recoveryShownIds：某条报错已进入恢复卡后「黏住」——一键启用使 hasTextModel 翻 true 也不卸载卡片，
+  // 让它能展示自己的「大脑已就位」done 态，而不是露出旧报错文本。
+  const { hasTextModel, refresh: refreshTextModel } = useHasTextModel()
+  const [recoveryShownIds, setRecoveryShownIds] = React.useState<ReadonlySet<string>>(() => new Set())
   const attachments = useWorkbenchStore((state) => state.creationAiAttachments)
   const error = useWorkbenchStore((state) => state.creationAiError)
   const setModeId = useWorkbenchStore((state) => state.setCreationAiModeId)
@@ -479,6 +486,13 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
             <React.Fragment key={message.id}>
               {message.role === 'user' ? (
                 <UserMessageBubble content={message.content} attachments={message.attachments} />
+              ) : message.status === 'error' && (hasTextModel === false || recoveryShownIds.has(message.id)) ? (
+                <NoTextModelRecoveryCard
+                  onResolved={() => {
+                    setRecoveryShownIds((prev) => new Set(prev).add(message.id))
+                    refreshTextModel()
+                  }}
+                />
               ) : (
                 <AssistantMessageView
                   content={message.status === 'pending' ? '' : message.content}

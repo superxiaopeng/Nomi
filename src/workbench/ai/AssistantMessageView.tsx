@@ -12,8 +12,9 @@ import { narrateTurnStats } from '../observability/narrate'
 import type { WorkbenchAiMessage } from './workbenchAiTypes'
 import type { ComposerAttachment } from './composer/composerAttachmentTypes'
 
-/** 一行轻身份：真 brand logo mark + 「Nomi」名。两个助手共用，是「同一个 Nomi」的锚。 */
-function NomiIdentityRow(): JSX.Element {
+/** 一行轻身份：真 brand logo mark + 「Nomi」名。两个助手共用，是「同一个 Nomi」的锚。
+ *  export 供恢复卡等同样「以 Nomi 身份发言」的组件复用（统一 logo+文字规则，单一真相源 P1）。 */
+export function NomiIdentityRow(): JSX.Element {
   return (
     <div className={cn('flex items-center gap-1.5 mb-1')} data-assistant-identity="true">
       <NomiLogoMark size={16} />

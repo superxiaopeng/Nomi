@@ -100,3 +100,14 @@ export async function listWorkbenchModelCatalogModels(params?: {
 }): Promise<ModelCatalogModelDto[]> {
   return requireDesktopRuntime('model catalog').modelCatalog.listModels(params) as ModelCatalogModelDto[]
 }
+
+/** 启用/更新一个已存在的目录模型（恢复卡「一键启用被禁用的文本大脑」用）。 */
+export async function upsertWorkbenchModelCatalogModel(payload: {
+  vendorKey: string
+  modelKey: string
+  labelZh?: string
+  kind?: BillingModelKind
+  enabled?: boolean
+}): Promise<ModelCatalogModelDto> {
+  return requireDesktopRuntime('model catalog').modelCatalog.upsertModel(payload) as ModelCatalogModelDto
+}
