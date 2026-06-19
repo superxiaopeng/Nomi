@@ -36,6 +36,22 @@ issue：「一些中转站没有接口文档，或者用 **newapi** 没有自己
 - 视频：通用 new-api 视频 archetype（`prompt/duration/size/image` 公共字段，能出片）。model-specific metadata（kling 的 image_tail 等）留后续按 archetype 细化。
 - 目标：**任何 new-api 模型都能"接上并出片"**，先解决 issue 的"不能接入"。
 
+## 2c. 最终用户体验（样张已拍板 2026-06-19）
+
+**中转优先 · 一次拉全 · 按模型分类**（不在顶上按图片/视频一刀切——那样只能一次弄一种）：
+1. 填一次中转（协议[new-api 默认] + 服务器地址 + key）。
+2. 「拉取这个中转开放的模型」(`/v1/models`，现有 `handleFetchModels` 已有)。
+3. 列出全部模型，每个**自动判类型**（`guessModelKind` 按 id 关键词猜，图片/视频/文本，**用户可下拉改**）。
+4. 勾选 → 「添加选中的 N 个」，一次混合加多类型。
+**实现 = 扩现有「手填」路径**（[OnboardingWizard.tsx](../../src/ui/onboarding/OnboardingWizard.tsx) manual 分支已有 预设/baseURL/key/TagsInput 拉取/测试/保存），不另起 UI（P1）。现状它把模型全当 text 提交（[catalogCommit.ts:268](../../electron/catalog/catalogCommit.ts)）——改成带 per-model kind。
+
+## 2d. 参数 UI 策略（避免造通用 archetype 的 P1 风险）
+
+- **已知模型**（flux/kling…）：commit 不写死 archetypeId，渲染层 `resolveArchetypeForModel` 按 `identifierPatterns` **自动命中现有 archetype**（架构本就供应商无关）。
+- **未知模型**：commit 时给**标准 flat 参数** `meta.parameters`（`ModelParameterControl[]`，含 `image-url` 类型表达参考图槽），渲染层 archetype 解析失败时 fallback 到它。
+- **不造通用 archetype**（广 identifierPatterns 会盖具体模型 = P1 风险）。
+- ⚠️ **待 mock 验证**：runtime fallback 的图片 body 把节点参数塞在嵌套 `extras` 发（[runtime.ts:634](../../electron/runtime.ts)），vendor 可能不认 → 富参数可能需给图片也建显式 mapping（基础 prompt→出图 fallback 够，size/quality 选择器要 mapping）。mock 跑一次定夺。
+
 ## 3. 切片（分两片，解耦）
 
 | # | 切片 | 内容 | 验证 |
