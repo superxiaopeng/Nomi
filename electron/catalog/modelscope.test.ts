@@ -16,10 +16,9 @@ describe("ModelScope 接入（真实 API 形状锁）", () => {
     expect(MODELSCOPE_VENDOR_SEED.authType).toBe("bearer");
   });
 
-  it("两个 curated 模型都挂 modelscope-image 档案 + 异步提交头", () => {
-    expect(MODELSCOPE_IMAGE_MODELS).toHaveLength(2);
+  it("全部 curated 模型：异步提交头 + 顶层 task_id；文生图挂 image 档案、改图挂 edit 档案", () => {
+    expect(MODELSCOPE_IMAGE_MODELS).toHaveLength(5);
     for (const model of MODELSCOPE_IMAGE_MODELS) {
-      expect(model.archetypeId).toBe("modelscope-image");
       const create = model.mappings[0].create;
       expect(create.path).toBe("/v1/images/generations");
       expect(create.headers?.["X-ModelScope-Async-Mode"]).toBe("true");
@@ -27,6 +26,16 @@ describe("ModelScope 接入（真实 API 形状锁）", () => {
       expect(create.response_mapping?.task_id).toBe("task_id");
       expect(create.provider_meta_mapping?.task_id).toBe("task_id");
     }
+    const t2i = MODELSCOPE_IMAGE_MODELS.filter((m) => m.mappings[0].taskKind === "text_to_image");
+    const edit = MODELSCOPE_IMAGE_MODELS.filter((m) => m.mappings[0].taskKind === "image_edit");
+    expect(t2i).toHaveLength(4);
+    expect(edit).toHaveLength(1);
+    for (const m of t2i) expect(m.archetypeId).toBe("modelscope-image");
+    // 改图：挂 edit 档案，body 带 image_url（参考图入参），无 size。
+    expect(edit[0].archetypeId).toBe("modelscope-image-edit");
+    const editBody = edit[0].mappings[0].create.body as Record<string, unknown>;
+    expect(editBody.image_url).toBe("{{request.params.image_url}}");
+    expect(editBody.size).toBeUndefined();
   });
 
   it("轮询 op：task_id 走路径 + image_generation 头 + output_images.0", () => {

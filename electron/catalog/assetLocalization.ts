@@ -132,6 +132,8 @@ const CURATED_ASSET_INGESTION: Record<string, AssetIngestion> = {
   // apimart:POST /v1/uploads/images（multipart/form-data），返回有效 72h 公网 URL（field: url）。
   // 统一走 upload-multipart，图片端点 inline-base64 也可，但 upload 路径对所有端点（视频）通用。
   apimart: { strategy: "upload-multipart", endpoint: "https://api.apimart.ai/v1/uploads/images", urlPath: "url" },
+  // 魔搭：改图（Qwen-Image-Edit）的 image_url 直收 data URL（真实 E2E 验证 2026-06-19），无需上传端点。
+  modelscope: { strategy: "inline-base64" },
 };
 
 /** 取某 vendor 的吞入策略:优先持久化声明,回退 curated 注册表。 */

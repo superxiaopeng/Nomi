@@ -26,7 +26,7 @@ export const MODELSCOPE_IMAGE_ARCHETYPE: ModelArchetype = {
   transportTaskKind: "text_to_image",
   // 用魔搭命名空间形式（带斜杠），不与 apimart 的裸名 z-image / qwen-image 撞；
   // 且 seed 模型已显式带 archetypeId（resolveArchetypeForModel 显式优先），这里只是给用户自接同名模型兜底。
-  identifierPatterns: ["tongyi-mai/z-image", "qwen/qwen-image", "modelscope"],
+  identifierPatterns: ["tongyi-mai/z-image", "qwen/qwen-image-2", "black-forest-labs/flux", "modelscope"],
   modes: [
     {
       id: "t2i",
@@ -37,6 +37,31 @@ export const MODELSCOPE_IMAGE_ARCHETYPE: ModelArchetype = {
       transportTaskKind: "text_to_image",
       slots: [],
       params: [SIZE_PARAM],
+    },
+  ],
+};
+
+// 魔搭改图档案（Qwen-Image-Edit）。给图 + 提示词改图——真实 E2E 验证（2026-06-19）：
+// 输入图走 image_url（data URL 数组，vendor inline-base64 ingestion）。输出尺寸跟随输入图，故无 size 参数。
+export const MODELSCOPE_IMAGE_EDIT_ARCHETYPE: ModelArchetype = {
+  id: "modelscope-image-edit",
+  family: "modelscope",
+  label: "魔搭改图",
+  kind: "image",
+  defaultModeId: "edit",
+  transportTaskKind: "image_edit",
+  identifierPatterns: ["qwen/qwen-image-edit", "modelscope-edit"],
+  modes: [
+    {
+      id: "edit",
+      intent: "edit",
+      vendorTerm: "改图",
+      hint: "给图 + 提示词改图",
+      promptRequired: true,
+      transportTaskKind: "image_edit",
+      // 输入图槽 → request.params.image_url（魔搭 body 字段名），inline-base64 转 data URL 后铺进 body。
+      slots: [{ kind: "image_ref", label: "输入图", min: 1, max: 4, inputKey: "image_url" }],
+      params: [],
     },
   ],
 };

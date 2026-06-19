@@ -22,6 +22,19 @@ function imageCreateOp(extraBody: Record<string, unknown> = {}): HttpOperation {
   };
 }
 
+/** 改图 op：输入图走 image_url（vendor inline-base64 把 nomi-local 转成 data URL 数组再铺进 body）。
+ *  输出尺寸跟随输入图，故不带 size。真实 E2E 验证（Qwen-Image-Edit-2511，2026-06-19）。 */
+function imageEditOp(): HttpOperation {
+  return {
+    method: "POST",
+    path: "/v1/images/generations",
+    headers: CREATE_HEADERS,
+    body: { model: "{{model.modelKey}}", prompt: "{{request.prompt}}", image_url: "{{request.params.image_url}}" },
+    response_mapping: { task_id: "task_id" },
+    provider_meta_mapping: { task_id: "task_id" },
+  };
+}
+
 const SIZE = "{{request.params.size}}"; // 像素 WxH，由档案 size 枚举给
 
 /** 一个魔搭图片模型的 curated 定义（catalog 行 + 档案指针 + mapping）。 */
@@ -32,34 +45,37 @@ export type ModelscopeImageModel = {
   mappings: { id: string; taskKind: ProfileKind; name: string; create: HttpOperation }[];
 };
 
-// v1 只接两条**已真实出图验证**的文生图链路。
-// Qwen-Image-Edit（需参考图 data URL 入参，另一条 ingestion 验证面）与 FLUX.2-klein 留下一批。
+// 全部 modelKey 经真实 API 逐个验证出图（2026-06-19）。文生图共用 modelscope-image 档案（像素 size），
+// 改图用 modelscope-image-edit 档案（image_url data URL）。FLUX.1-dev 实测 40212 不可用，已剔除。
+function t2iModel(modelKey: string, labelZh: string, slug: string): ModelscopeImageModel {
+  return {
+    modelKey,
+    labelZh,
+    archetypeId: "modelscope-image",
+    mappings: [{
+      id: `seed-modelscope-${slug}-text_to_image`,
+      taskKind: "text_to_image",
+      name: `${labelZh} · 文生图`,
+      create: imageCreateOp({ size: SIZE }),
+    }],
+  };
+}
+
 export const MODELSCOPE_IMAGE_MODELS: ModelscopeImageModel[] = [
+  t2iModel("Tongyi-MAI/Z-Image-Turbo", "Z-Image Turbo", "z-image-turbo"),
+  t2iModel("Qwen/Qwen-Image-2512", "Qwen-Image", "qwen-image"),
+  t2iModel("black-forest-labs/FLUX.2-klein-9B", "FLUX.2 Klein", "flux2-klein"),
+  t2iModel("black-forest-labs/FLUX.1-Krea-dev", "FLUX.1 Krea", "flux1-krea"),
   {
-    modelKey: "Tongyi-MAI/Z-Image-Turbo",
-    labelZh: "Z-Image Turbo",
-    archetypeId: "modelscope-image",
-    mappings: [
-      {
-        id: "seed-modelscope-z-image-turbo-text_to_image",
-        taskKind: "text_to_image",
-        name: "Z-Image Turbo · 文生图",
-        create: imageCreateOp({ size: SIZE }),
-      },
-    ],
-  },
-  {
-    modelKey: "Qwen/Qwen-Image-2512",
-    labelZh: "Qwen-Image",
-    archetypeId: "modelscope-image",
-    mappings: [
-      {
-        id: "seed-modelscope-qwen-image-text_to_image",
-        taskKind: "text_to_image",
-        name: "Qwen-Image · 文生图",
-        create: imageCreateOp({ size: SIZE }),
-      },
-    ],
+    modelKey: "Qwen/Qwen-Image-Edit-2511",
+    labelZh: "Qwen-Image 改图",
+    archetypeId: "modelscope-image-edit",
+    mappings: [{
+      id: "seed-modelscope-qwen-image-edit-image_edit",
+      taskKind: "image_edit",
+      name: "Qwen-Image · 改图",
+      create: imageEditOp(),
+    }],
   },
 ];
 
