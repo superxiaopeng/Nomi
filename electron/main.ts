@@ -162,6 +162,16 @@ async function createWindow(): Promise<void> {
   });
 
   const rendererUrl = getRendererUrl();
+
+  // 纵深防御：setWindowOpenHandler 只拦新窗口，拦不住顶层框架自身被诱导导航
+  // （window.location = 'http://evil'）。一旦发生，整个 app 会变成加载远端页面的浏览器。
+  // 这里把任何「离开本地渲染入口」的顶层导航一律拦下；外链改走系统浏览器。
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url === rendererUrl) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  });
+
   registerDevDiagnostics(mainWindow, rendererUrl);
   await loadRendererWithRetry(mainWindow, rendererUrl);
 
@@ -315,6 +325,51 @@ function registerIpc(): void {
   setEventLogSecretsProvider(catalogSecretsProvider);
 }
 
+// 纵深防御：渲染层此前在「无 CSP」环境运行，contextIsolation 是唯一防线。
+// 注入严格 CSP，让任何被注入的脚本/远端内容无法自由 eval、连外站、加外部资源。
+// dev/prod 分治：dev 下 vite HMR 需要 unsafe-eval + inline + ws 回连，故放宽；
+// prod（打包后从 file:// 加载）收紧——脚本只许 'self'，外联仅图片/媒体/连接到 https。
+function buildContentSecurityPolicy(): string {
+  const common = [
+    "default-src 'self' nomi-local:",
+    "img-src 'self' nomi-local: https: data: blob:",
+    "media-src 'self' nomi-local: https: data: blob:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-src 'none'",
+    "worker-src 'self' blob:",
+  ];
+  if (isDev) {
+    // vite dev server：HMR 走 ws、sourcemap/模块求值需要 eval、注入 inline 脚本与样式。
+    return [
+      ...common,
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:5173",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' nomi-local: https: ws://127.0.0.1:5173 http://127.0.0.1:5173",
+    ].join("; ");
+  }
+  return [
+    ...common,
+    // prod：vite 产物为外链脚本，无需 inline/eval。Tailwind/内联 style 需要 style 的 unsafe-inline。
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' nomi-local: https:",
+  ].join("; ");
+}
+
+function installContentSecurityPolicy(targetSession: Electron.Session): void {
+  const csp = buildContentSecurityPolicy();
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [csp],
+      },
+    });
+  });
+}
+
 function registerLocalProtocol(): void {
   protocol.handle("nomi-local", async (request) => {
     try {
@@ -338,8 +393,25 @@ function registerLocalProtocol(): void {
   });
 }
 
+// 单实例锁：本地优先应用的全局 index（catalog.json / recent-workspaces.json）是单一文件，
+// 每次变更走「读全量 → 改 → 写全量」的非原子 read-modify-write。两个实例并发改写会互相
+// 用旧快照覆盖（A 读 N 条→B 删 1 条写回→A 基于旧 N 条写回，B 的删除被整体覆盖蒸发）——
+// 这正是「并行会话抢 index 推坏」的运行时同类。拿不到锁直接退出、把已有窗口前置，根治整类。
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+app.on("second-instance", () => {
+  const [existing] = BrowserWindow.getAllWindows();
+  if (!existing) return;
+  if (existing.isMinimized()) existing.restore();
+  existing.focus();
+});
+
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return; // 第二个实例：已在退出，引导一律跳过
   registerLocalProtocol();
+  installContentSecurityPolicy(session.defaultSession);
   // 启动即探测系统/环境代理并应用到全局 fetch，让"测试连接/调 AI API/拉模型"能穿透代理。
   // 失败只记日志、不抛——绝不拖垮启动。须在任何出站请求前完成。
   await applySystemProxy(session.defaultSession);

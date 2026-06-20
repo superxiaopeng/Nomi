@@ -13,6 +13,7 @@ import { resolveFfmpegPath } from "../export/ffmpegRunner";
 import { ensureExecutable } from "../export/ensureExecutable";
 import { probeMediaMetadata } from "../export/mediaProbe";
 import { absolutePathFromLocalAssetUrl } from "../assets/localAssetFile";
+import { hardenedFetch } from "../hardenedFetch";
 import { writeAsset } from "../runtime";
 
 export type VideoFrameWhich = "first" | "last" | number;
@@ -50,11 +51,17 @@ async function resolveVideoLocalPath(
     return { filePath: abs, cleanup: noop };
   }
   if (/^https?:\/\//i.test(videoUrl)) {
-    const response = await fetch(videoUrl);
-    if (!response.ok) throw new VideoFrameError(`源视频下载失败（HTTP ${response.status}）`);
-    const bytes = Buffer.from(await response.arrayBuffer());
+    // SSRF/DoS 加固：走 hardenedFetch（私网/回环拦截 + 重定向终点复检 + 大小/超时上限），
+    // 与 importRemoteAsset / readAudioBytes 同源。不限 content-type——relay 常以
+    // application/octet-stream 发视频，真伪交给随后的 ffmpeg 解码兜底。
+    let result;
+    try {
+      result = await hardenedFetch(videoUrl, { maxBytes: 300 * 1024 * 1024, timeoutMs: 60_000 });
+    } catch (error) {
+      throw new VideoFrameError(`源视频下载失败：${error instanceof Error ? error.message : String(error)}`);
+    }
     const tmp = path.join(os.tmpdir(), `nomi-relay-src-${crypto.randomUUID()}.mp4`);
-    fs.writeFileSync(tmp, bytes);
+    fs.writeFileSync(tmp, result.bytes);
     return { filePath: tmp, cleanup: () => { try { fs.unlinkSync(tmp); } catch { /* non-fatal */ } } };
   }
   if (path.isAbsolute(videoUrl) && fs.existsSync(videoUrl)) {
