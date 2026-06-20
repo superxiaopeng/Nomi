@@ -181,14 +181,16 @@ infinite-canvas 被迫用 MCP+SSE 桥，**因为它是浏览器**。Nomi 是 Ele
 
 ### ✅ 真机端到端已验证（2026-06-21，隔离 worktree + 真 catalog 真 key 真调）
 - **B 模式 headless host spawn 往返**：CLI → spawn 真 Electron host → 建项目 / 加节点 / 连线 / 读画布 → `project.json` 真落盘（2 节点、kind/prompt 正确、自动错开不重叠）。
-- **真实生成 E2E**：headless host 直读真 catalog → 真调 `modelscope/Qwen3-8B`（text）→ status `succeeded`、文本返回 + 落节点。**接通**（接入即验证铁律达成，文本链路）。
-- **真机测试挖出并修 2 个真 bug**（单测全绿照不出）：
+- **真实文本生成 E2E**：headless host 直读真 catalog → 真调 `modelscope/Qwen3-8B`（text）→ `succeeded`、文本返回 + 落节点。
+- **真实图片生成 E2E**：真调 `modelscope/Z-Image-Turbo`（text_to_image，异步）→ 轮询 15s → `succeeded` → 1.16MB / 760×1280 PNG 本地化落盘，**人眼确认图像与 prompt 一致**（柴犬戴墨镜赛博朋克街，R13）。**接通**（接入即验证铁律达成，图/文链路）。
+- **真机测试挖出并修 3 个真 bug**（单测全绿照不出）：
   1. **headless 解密身份不匹配**：dev `electron host.js` spawn 时 getName 默认 "Electron"，与主 app 加密 safeStorage key 的身份（"nomi"）不符 → 解不开 key（"API key missing"）。修：spawner 经 `NOMI_APP_NAME` 传主 app 身份（package.json name），host `setName` 对齐 + 默认 userData 指真数据。实测三身份对照确认 `nomi` 能解、`Nomi`/`Electron` 不能。（生产 host 在打包 app 内、身份天然正确，不受影响。）
   2. **文本结果没捕获**：textTaskRunner 返回 `assets:[]`，文本在 `raw`；core 只读 assets → 丢文本。修：`extractTextFromRaw` best-effort 抽取。
-  - 修复 commit `863c417`，五门复跑全过。
+  3. **异步任务没轮询**：modelscope 图/视频首调返 `queued`，core 只调一次 runTask 就返回 → 永远拿不到图。修：generateOnProject 注入 fetchTaskResultFn，**在同一 host 进程内**轮询到终态（taskCache 进程内、host 退出即丢，不能跨调用轮询）。
+  - 修复 commit `863c417` + `c32f407`，五门各自复跑全过。
 
 ### ⚠️ 仍未验证 / 后续（按 P3 诚实标注）
-- **真实图/视频生成 E2E**：本机带 key 的 vendor（apimart/modelscope/dm-fox…）当前**只 enable 了文本模型**；图/视频模型（kie/*）无 key → 没法在本机真跑图/视频生成。待用户 enable 一个带 key 的图模型再补验（文本链路已证明 archetype→runTask 通路对，图/视频同路）。
+- **真实视频生成 E2E**：图/文已验，视频同路（image_to_video mapping 在、轮询超时已给 5min）但没真跑一次（更慢更贵）。
 - **A 模式实时桥接**：app 开着时图变更目前是 RPC **409 拒绝**（防覆盖，honest），**没做**「转发 ops 给 renderer 实时反映到 UI」——A 模式真正的活，需 renderer applier + 真机走查。
 - **MCP 在真 Claude Code 内**：握手/tools.list standalone 验过（含本机 tools/call 经 host 真跑），没在真实 Claude Code 客户端里挂载连过。
 - **单实例锁真为**：代码已加，没真起两个实例验证让出行为。
