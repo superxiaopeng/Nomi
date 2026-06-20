@@ -67,7 +67,7 @@ export function runAgentLoop(
     tools: req.tools,
     maxSteps: req.maxSteps ?? maxStepsForSkill(req.skillKey ?? ""),
     maxRetries: AGENT_MAX_RETRIES,
-    experimental_repairToolCall: createToolCallRepair(req.model),
+    experimental_repairToolCall: createToolCallRepair(req.model, req.abortSignal),
     ...(typeof req.temperature === "number" ? { temperature: req.temperature } : {}),
     ...(typeof req.maxTokens === "number" ? { maxTokens: req.maxTokens } : {}),
     ...(req.abortSignal ? { abortSignal: req.abortSignal } : {}),
