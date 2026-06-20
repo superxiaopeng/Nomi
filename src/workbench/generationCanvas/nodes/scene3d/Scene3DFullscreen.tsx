@@ -111,6 +111,12 @@ import {
   editorCameraFromSceneCamera,
   eulerToArray,
   vectorAlmostEqual,
+  cameraPoseSampleChanged,
+  type CameraPoseSample,
+  crowdRows,
+  crowdColumns,
+  crowdSpacing,
+  crowdCount,
   clonePoseValue,
   poseMatchesPreset,
   rememberMannequinRestPose,
@@ -624,22 +630,6 @@ function Mannequin({ color, pose }: { color: string; pose?: Record<string, Scene
 }
 
 useGLTF.preload(MANNEQUIN_MODEL_URL)
-
-function crowdRows(object: Scene3DObject): number {
-  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdRows || 1)))
-}
-
-function crowdColumns(object: Scene3DObject): number {
-  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdColumns || 1)))
-}
-
-function crowdSpacing(object: Scene3DObject): number {
-  return Math.min(10, Math.max(0.2, object.crowdSpacing || 1.2))
-}
-
-function crowdCount(object: Scene3DObject): number {
-  return object.type === 'mannequinCrowd' ? crowdRows(object) * crowdColumns(object) : 1
-}
 
 function mannequinFootRingRadius(object: Scene3DObject): number {
   const scaleX = Math.max(0.08, Math.abs(object.scale[0] || 1))
@@ -2877,6 +2867,9 @@ function CameraViewEditController({
   const activeCameraIdRef = React.useRef('')
   const targetDistanceRef = React.useRef(3)
   const lastPatchTimeRef = React.useRef(0)
+  // 上一帧位姿采样（dirty 基准，复用 CameraStateRecorder 同一套扁平判断）+ 每帧复用的 Vector3。
+  const lastSampleRef = React.useRef<CameraPoseSample | null>(null)
+  const worldDirRef = React.useRef(new THREE.Vector3())
 
   React.useLayoutEffect(() => {
     if (!cameraData) {
@@ -2891,6 +2884,7 @@ function CameraViewEditController({
     }
     if (activeCameraIdRef.current === cameraData.id) return
     activeCameraIdRef.current = cameraData.id
+    lastSampleRef.current = null // 换相机：清 dirty 基准，新相机首帧必提交
     targetDistanceRef.current = Math.max(
       0.75,
       vectorFromArray(cameraData.target || CAMERA_DEFAULT_TARGET).distanceTo(vectorFromArray(cameraData.position)),
@@ -2907,17 +2901,22 @@ function CameraViewEditController({
     lastPatchTimeRef.current = state.clock.elapsedTime
 
     const position = vectorToArray(camera.position)
-    const direction = new THREE.Vector3()
+    const direction = worldDirRef.current
     camera.getWorldDirection(direction)
     const target = vectorToArray(camera.position.clone().addScaledVector(direction, targetDistanceRef.current))
     const rotation = eulerToArray(camera.rotation)
     const editorCamera = { position, target, rotation, mode: 'fly' } satisfies Scene3DState['editorCamera']
     onEditorCameraDraft(editorCamera)
-    onCameraPatch(cameraData.id, {
-      position,
-      target,
-      rotation,
-    })
+    // dirty 检测（复用 CameraStateRecorder 同一套扁平判断，P1 单一实现）：姿态无可见变化（含
+    // 相机静止）→ 跳过 setState，不再每 80ms 重建 state.cameras 触发全场景 reconcile。运动时照常提交。
+    const sample: CameraPoseSample = {
+      px: position[0], py: position[1], pz: position[2],
+      rx: rotation[0], ry: rotation[1], rz: rotation[2],
+      tx: target[0], ty: target[1], tz: target[2],
+    }
+    if (!cameraPoseSampleChanged(lastSampleRef.current, sample)) return
+    lastSampleRef.current = sample
+    onCameraPatch(cameraData.id, { position, target, rotation })
   })
 
   return null
