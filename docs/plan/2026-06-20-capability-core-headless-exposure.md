@@ -179,13 +179,20 @@ infinite-canvas 被迫用 MCP+SSE 桥，**因为它是浏览器**。Nomi 是 Ele
 ### S2 处理（不复制 renderer 投影，不违 P1）
 `generateOnProject` 不重建 archetype→body：构造高层 `TaskRequest`（kind + prompt + extras{modelKey/projectId/nodeId/referenceImages/params}）→ `runTask` 主进程内部据 catalog mapping 自己组装请求体。**没把 renderer 的 `buildArchetypeInputParams` 搬过来**（那需跨 tsconfig 且易造并行版）。代价：archetype **变体特化**参数（如 Seedance 全能参考的 per-mode 投影）目前要调用方显式传 params，不自动从档案推——列为后续切片。
 
-### ⚠️ 未验证 / 后续（需真机 + 额度，按 P3 诚实标注，不谎称完成）
-1. **真实生成 E2E**：generate 请求体构造已测（注入 runTask），但**真 vendor 调用（花额度）没跑** → 按「接入即验证」铁律，generate 尚未算「真接通」。
-2. **A 模式实时桥接**：app 开着时图变更目前是 RPC **409 拒绝**（防覆盖，honest），**没做**「转发 ops 给 renderer 实时反映到 UI」——这是 A 模式真正的活，需 renderer applier + 真机走查。
-3. **headless host spawn 往返**：host.ts 逻辑复用已测 dispatch，但 `electron host.js` 真 spawn 往返没跑（需 dist-electron 构建 + 真机；沙箱 GPU 限制）。
-4. **MCP 在真 Claude Code 内**：握手/tools.list standalone 验过，没在真实 Claude Code 客户端里连过。
-5. **单实例锁真为**：代码已加，没真起两个实例验证让出行为。
-6. **付费守卫集成**：仓库里有并行会话在做的 `nomi:tasks:grant-spend`（铸一次性令牌绑 nodeIds）。外部 generate 目前只过 token 门，**没接** in-app 付费令牌 → 防止外部静默烧钱的最终形态应接这套，列为集成点。
+### ✅ 真机端到端已验证（2026-06-21，隔离 worktree + 真 catalog 真 key 真调）
+- **B 模式 headless host spawn 往返**：CLI → spawn 真 Electron host → 建项目 / 加节点 / 连线 / 读画布 → `project.json` 真落盘（2 节点、kind/prompt 正确、自动错开不重叠）。
+- **真实生成 E2E**：headless host 直读真 catalog → 真调 `modelscope/Qwen3-8B`（text）→ status `succeeded`、文本返回 + 落节点。**接通**（接入即验证铁律达成，文本链路）。
+- **真机测试挖出并修 2 个真 bug**（单测全绿照不出）：
+  1. **headless 解密身份不匹配**：dev `electron host.js` spawn 时 getName 默认 "Electron"，与主 app 加密 safeStorage key 的身份（"nomi"）不符 → 解不开 key（"API key missing"）。修：spawner 经 `NOMI_APP_NAME` 传主 app 身份（package.json name），host `setName` 对齐 + 默认 userData 指真数据。实测三身份对照确认 `nomi` 能解、`Nomi`/`Electron` 不能。（生产 host 在打包 app 内、身份天然正确，不受影响。）
+  2. **文本结果没捕获**：textTaskRunner 返回 `assets:[]`，文本在 `raw`；core 只读 assets → 丢文本。修：`extractTextFromRaw` best-effort 抽取。
+  - 修复 commit `863c417`，五门复跑全过。
 
-### 🚧 五门 / 提交阻塞（非本 slice 问题）
-electron typecheck/build 当前**红**，唯一错是并行会话半成品 `electron/main.ts:36 import './spendGrant'`（文件未建）。我的代码独立 typecheck 干净。**未提交**——等并行会话的 spendGrant 落地、build 转绿后再走五门 + 提交（避免推他们的半成品 / 用 `git add -p` 拆我的 hunk）。
+### ⚠️ 仍未验证 / 后续（按 P3 诚实标注）
+- **真实图/视频生成 E2E**：本机带 key 的 vendor（apimart/modelscope/dm-fox…）当前**只 enable 了文本模型**；图/视频模型（kie/*）无 key → 没法在本机真跑图/视频生成。待用户 enable 一个带 key 的图模型再补验（文本链路已证明 archetype→runTask 通路对，图/视频同路）。
+- **A 模式实时桥接**：app 开着时图变更目前是 RPC **409 拒绝**（防覆盖，honest），**没做**「转发 ops 给 renderer 实时反映到 UI」——A 模式真正的活，需 renderer applier + 真机走查。
+- **MCP 在真 Claude Code 内**：握手/tools.list standalone 验过（含本机 tools/call 经 host 真跑），没在真实 Claude Code 客户端里挂载连过。
+- **单实例锁真为**：代码已加，没真起两个实例验证让出行为。
+- **付费守卫集成**：并行会话在做 `nomi:tasks:grant-spend`（铸令牌绑 nodeIds）。外部 generate 目前只过 token 门，**没接** in-app 付费令牌——列为集成点。
+
+### 交付：隔离 worktree 绕开并行会话缠绕
+主工作树被并行会话半成品 `electron/spendGrant.ts`（未建）卡死 build。故起 sibling worktree `/Users/aoqimin/Desktop/Nomi-capability-core`（分支 `feat/capability-core-headless`）从干净 main 重应用我的接线 → **五门全过** → commit `f344d4c`+`863c417` → push → PR https://github.com/aqm857886159/Nomi/pull/10。
