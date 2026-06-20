@@ -343,6 +343,11 @@ export function roleColorForIndex(index: number): string {
   return ROLE_COLOR_SEQUENCE[index % ROLE_COLOR_SEQUENCE.length]
 }
 
+export function mannequinRoleLabel(index: number): string {
+  if (index < 26) return `角色${String.fromCharCode(65 + index)}`
+  return `角色A${index - 25}`
+}
+
 export function clampCrowdOptions(options: CrowdAddOptions): CrowdAddOptions {
   return {
     rows: Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(options.rows))),
