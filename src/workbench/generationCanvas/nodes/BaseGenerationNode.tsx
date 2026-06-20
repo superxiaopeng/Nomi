@@ -8,6 +8,7 @@ import {
     IconUpload,
 } from "@tabler/icons-react";
 import ProvenancePanel from "./ProvenancePanel";
+import { resolveNodeRenderKind, isCardRenderKind } from "./resolveRenderKind";
 import { getBuiltinCategoryById } from "../../project/projectCategories";
 import CharacterCardNode from "./render/CharacterCardNode";
 import TextDocumentNode from "./render/TextDocumentNode";
@@ -261,17 +262,9 @@ function BaseGenerationNodeImpl({
     // 素材节点：永远走纯图片预览。强制 renderKind=undefined，否则落进 cast/scene 分类的素材
     // 会被推断成角色卡/场景卡（A1.5 边界 1）。素材不挂 composer、不渲染生成占位。
     const isAssetKind = node.kind === "asset";
-    const renderKind = isAssetKind
-        ? undefined
-        : ((node.renderKind as string | undefined) ??
-          // audio kind 强制 audio-strip（声音节点可建在任意分类，按 kind 而非 categoryId 渲染）。
-          (node.kind === "audio" ? "audio-strip"
-              : node.categoryId === "cast" ? "character-card"
-              : node.categoryId === "scene" ? "scene-card"
-              : node.categoryId === "prop" ? "prop-card"
-              : node.categoryId === "audio" ? "audio-strip"
-              : undefined));
-    const isCardKind = ["character-card", "scene-card", "prop-card", "audio-strip"].includes(renderKind as string);
+    // renderKind 分发收口在 resolveRenderKind（纯函数,单测锁优先级:kind > categoryId）。
+    const renderKind = resolveNodeRenderKind(node);
+    const isCardKind = isCardRenderKind(renderKind);
     // C5: 文本节点走专属可编辑 body（TextDocumentNode），像 card 那样脱离图片预览。
     const isTextKind = node.kind === "text";
     const isImageGridSplitNode =
