@@ -33,6 +33,8 @@ import {
   ensureBuiltinModelSeeds,
 } from "./runtime";
 import { extractVideoFrameToAsset } from "./video/extractVideoFrame";
+import { listSkillsForRenderer } from "./skills/skillIpc";
+import { exportSkillPackageByName, importSkillPackageToUserDir } from "./skills/skillPackage";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
 import { installCrashHandlers, logCrash } from "./crashLog";
@@ -233,6 +235,13 @@ function registerIpc(): void {
   registerSyncIpc("nomi:model-catalog:mapping:delete", deleteModelCatalogMapping);
   registerSyncIpc("nomi:model-catalog:export", exportModelCatalogPackage);
   registerSyncIpc("nomi:model-catalog:import", importModelCatalogPackage);
+
+  // Skill / Playbook 域（业务函数在 electron/skills/*，这里只接同步 IPC 管道）。
+  registerSyncIpc("nomi:skill:list", listSkillsForRenderer);
+  registerSyncIpc("nomi:skill:export", (dirName: unknown) =>
+    exportSkillPackageByName(String(dirName || ""), Date.now()),
+  );
+  registerSyncIpc("nomi:skill:import", (payload: unknown) => importSkillPackageToUserDir(payload));
 
   ipcMain.handle("nomi:model-catalog:docs:fetch", (_event, payload) => fetchModelCatalogDocs(payload));
   ipcMain.handle("nomi:workspace:select-folder", async () => {

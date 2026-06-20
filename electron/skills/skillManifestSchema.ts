@@ -102,6 +102,8 @@ export const skillManifestSchema = z.object({
   stages: z.array(skillStageSchema).optional(),
   /** Author handle for cards / sharing (optional). */
   author: z.string().min(1).optional(),
+  /** Human display label for cards / picker (optional; falls back to `name`). */
+  label: z.string().min(1).optional(),
 });
 export type SkillManifest = z.infer<typeof skillManifestSchema>;
 

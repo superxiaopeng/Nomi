@@ -255,6 +255,11 @@ export type DesktopBridge = {
     testMapping: (id: string, payload: unknown) => Promise<unknown>
     fetchDocs: (payload: unknown) => Promise<unknown>
   }
+  skill: {
+    list: () => unknown[]
+    exportPackage: (dirName: string) => unknown
+    importPackage: (payload: unknown) => unknown
+  }
 }
 
 declare global {

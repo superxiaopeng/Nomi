@@ -101,6 +101,8 @@ type WorkbenchState = {
   creationDocumentTools: CreationDocumentTools | null
   creationSelectionText: string
   creationAiModeId: string
+  /** 手动锁定的 active skill（覆盖 mode 推导的 skillKey）。null = 自动（用创作模式默认）。 */
+  creationActiveSkill: { key: string; name: string } | null
   creationAiDraft: string
   creationAiMessages: WorkbenchAiMessage[]
   creationAiAttachments: ComposerAttachment[]
@@ -142,6 +144,7 @@ type WorkbenchState = {
   setCreationDocumentTools: (tools: CreationDocumentTools | null) => void
   setCreationSelectionText: (text: string) => void
   setCreationAiModeId: (modeId: string) => void
+  setCreationActiveSkill: (skill: { key: string; name: string } | null) => void
   setCreationAiDraft: (draft: string) => void
   setCreationAiMessages: (messages: WorkbenchAiMessage[] | ((messages: WorkbenchAiMessage[]) => WorkbenchAiMessage[])) => void
   setCreationAiAttachments: (attachments: ComposerAttachment[] | ((attachments: ComposerAttachment[]) => ComposerAttachment[])) => void
@@ -282,6 +285,7 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   creationDocumentTools: null,
   creationSelectionText: '',
   creationAiModeId: 'general',
+  creationActiveSkill: null,
   creationAiDraft: '',
   creationAiMessages: [],
   creationAiAttachments: [],
@@ -318,6 +322,9 @@ export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector(
   },
   setCreationAiModeId: (creationAiModeId) => {
     set({ creationAiModeId })
+  },
+  setCreationActiveSkill: (creationActiveSkill) => {
+    set({ creationActiveSkill })
   },
   setCreationAiDraft: (creationAiDraft) => {
     set({ creationAiDraft })

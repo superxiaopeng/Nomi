@@ -1,6 +1,7 @@
 {
   "name": "brand.promo",
   "version": "1.0.0",
+  "label": "品牌宣传片",
   "description": "做产品/品牌宣传片。当用户要把产品文案、卖点或品牌介绍做成一条短宣传视频，或提到「宣传片 / 产品视频 / 品牌短片 / promo / 广告片」时用我。",
   "author": "@nomi",
   "tools": [

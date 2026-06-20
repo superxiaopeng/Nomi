@@ -15,6 +15,7 @@ import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
 import { routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
+import ActiveSkillChip from '../ai/ActiveSkillChip'
 import { MemoryFold } from '../generationCanvas/components/MemoryFold'
 import { useWorkbenchStore } from '../workbenchStore'
 import { runStoryboardPlanner } from '../generationCanvas/agent/runStoryboardPlanner'
@@ -82,6 +83,8 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   const documentTools = useWorkbenchStore((state) => state.creationDocumentTools)
   const selectedText = useWorkbenchStore((state) => state.creationSelectionText)
   const modeId = useWorkbenchStore((state) => state.creationAiModeId)
+  const activeSkill = useWorkbenchStore((state) => state.creationActiveSkill)
+  const setActiveSkill = useWorkbenchStore((state) => state.setCreationActiveSkill)
   const draft = useWorkbenchStore((state) => state.creationAiDraft)
   const messages = useWorkbenchStore((state) => state.creationAiMessages)
   // S1b 诚实分隔线:气泡有历史而 LLM 记忆为空 → 在历史末尾画「以上对话 AI 已不再记得」。
@@ -264,8 +267,9 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         ...(attachmentPayload.length ? { attachments: attachmentPayload } : {}),
         sessionKey: workbenchSessionKey('creation'),
         projectId: readWindowUrlParam('projectId'),
-        skillKey: `workbench.creation.${activeMode.id}`,
-        skillName: activeMode.title,
+        // 手动锁定的 active skill 优先（如「品牌宣传片」playbook）；否则回退创作模式推导。
+        skillKey: activeSkill ? activeSkill.key : `workbench.creation.${activeMode.id}`,
+        skillName: activeSkill ? activeSkill.name : activeMode.title,
         onContent: (_delta, streamedText) => {
           if (!handle.isCurrent()) return
           setMessages((prev) => prev.map((message) => (
@@ -400,6 +404,7 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
           <span className={cn('text-body-sm font-semibold text-nomi-ink')}>创作助手</span>
         </div>
         <div className={cn('inline-flex items-center gap-2 ml-auto min-w-0')}>
+          <ActiveSkillChip activeSkill={activeSkill} autoLabel={activeMode.title} onSelect={setActiveSkill} />
           <WorkbenchAiHeaderActions
             area="creation"
             className={cn('inline-flex items-center flex-nowrap gap-1')}

@@ -183,4 +183,9 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     testMapping: (id: string, payload: unknown) => ipcRenderer.invoke("nomi:model-catalog:mapping:test", id, payload),
     fetchDocs: (payload: unknown) => ipcRenderer.invoke("nomi:model-catalog:docs:fetch", payload),
   },
+  skill: {
+    list: () => invokeSync("nomi:skill:list"),
+    exportPackage: (dirName: string) => invokeSync("nomi:skill:export", dirName),
+    importPackage: (payload: unknown) => invokeSync("nomi:skill:import", payload),
+  },
 });
