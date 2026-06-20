@@ -174,6 +174,10 @@ export type DesktopBridge = {
     update: (projectId: string, factId: string, patch: { text?: string; pinned?: boolean }) => Promise<{ ok: boolean; facts: unknown[] }>
     remove: (projectId: string, factId: string) => Promise<{ ok: boolean; facts: unknown[] }>
   }
+  /** 提示词库:主进程聚合公开仓库提示词(图/视频)+1h 缓存,renderer 取全量后本地过滤。 */
+  promptLibrary?: {
+    list: () => Promise<{ ok: boolean; prompts: unknown[]; error?: string }>
+  }
   /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
   review?: {
     onEvent: (callback: (payload: unknown) => void) => () => void
