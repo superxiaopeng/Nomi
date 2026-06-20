@@ -138,6 +138,15 @@
 
 复用而非另造：参数/参考槽渲染复用 `NodeParameterControls.tsx` + `AssetReference.tsx` + `ModelParameterControl`；建议改文件 = `render/CharacterCardNode.tsx`/`SceneCardNode.tsx`/`CardCommon.tsx`/`nodeMetaFields.ts`。
 
+**路径现状（2026-06-20 当前代码核实，非旧记忆 — 用户路径图 show_widget `setting_card_user_path`）**：设定卡活在「生成画布」阶段，诞生于拆镜头（创作区→画布），消费于逐镜生成。逐触点状态：
+- ✅ **拆镜头自动建角色/场景卡**：`storyboardPlan.ts:242` 视觉锚→character/scene 节点+character_ref 连边落画布（`applyCanvasToolCall.ts:171`）。
+- ✅ **喂参考进 vendor（核心管线，今天通）**：character_ref 边源图真进 `reference_image_urls`（`generationReferenceResolver.ts:70`→`catalogTaskActions.ts:72`→`archetypeMeta.ts:393`），有回归锁 `catalogTaskActions.test.ts:82`。**6-13/6-14「丢参考」已修**（之前本文档的过期 caveat 作废）。条件：角色卡已出图 + 目标是认档案的模型；非档案模型仍走只兜首尾帧老路（窄）。
+- ✅ **定妆入口可见**：`BaseGenerationNode.tsx:557` 无条件传 onMakeup，已出图图片节点选中即见（6-13「不可见」已修）。
+- ⚠️ **半通：拆镜头产的卡落错分类**：`storyboardPlan.ts:302` `groupCategoryId:'shots'` 把角色卡钉进 shots 分类，`renderKind` 推断（`BaseGenerationNode.tsx:269` 只认 `categoryId==='cast'`）落空→退化成普通图片外观、侧边栏归错类。**切片1 必修的真 bug。**
+- ❌ **断：镜头面无「挂了谁」常驻标记**：不选中镜头时节点面无角色归属可视，唯一线索是连线；选中才在 composer 参考槽见缩略图。**切片1 要补镜头面挂载徽章。**
+
+→ 切片1 落刀点据此排：先修「落错分类」(P0 真 bug，低风险) → 卡面升级(参考图行/别名/参数摘要) → 镜头面挂载徽章 → 自动挂载三态。weight/出镜角色 vendor 门控的留后。
+
 **诚实缺口（D4，实现时如实兑现）**：参考强度 weight + 主体/出镜/背景出镜角色，底层依赖 vendor 能力——按档案声明槽（P4），不声明的卡面**灰掉/隐藏**，不假装通用。
 
 ---
