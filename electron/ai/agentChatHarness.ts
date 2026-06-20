@@ -144,11 +144,14 @@ export function buildAgentPromptParts(
 // args for complex schemas. Ask the same model to fix its own JSON instead of
 // crashing the whole turn; return null to let the SDK report the original error.
 // 全仓唯一 repair 实现(S0 不变量②)——两条循环都经 agentLoop 取用,不许复制。
-export function createToolCallRepair(model: LanguageModelV1): ToolCallRepairFunction<ToolSet> {
+export function createToolCallRepair(model: LanguageModelV1, abortSignal?: AbortSignal): ToolCallRepairFunction<ToolSet> {
   return async ({ toolCall, error, messages }) => {
     try {
       const repaired = await generateText({
         model,
+        // 透传主循环的 abortSignal:用户按 Stop / 流被 abort 时,这次自愈调用也要一起取消,
+        // 否则它会脱离主流继续烧 token 到自己返回(planner 24 步每步都可能触发一次 repair)。
+        ...(abortSignal ? { abortSignal } : {}),
         system:
           "You are a JSON repair assistant. Given a tool call with broken arguments, return ONLY the corrected JSON object that matches the tool's parameter schema.",
         messages: [
