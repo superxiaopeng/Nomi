@@ -30,6 +30,15 @@ export function getWorkspaceRepositoryDeps(): WorkspaceRepositoryDeps {
   };
 }
 
+/**
+ * 可写的用户 skills 目录（userData/skills）—— 导入/创建的 skill 落这里。
+ * 安装目录是只读的，分享导入必须有一个可写根。排在 getSkillsRoots 末尾，故内置同名 skill
+ * 优先（skillStore 去重 = 先出现的根胜），导入的包无法覆盖内置。
+ */
+export function getUserSkillsRoot(): string {
+  return path.join(getSettingsRoot(), "skills");
+}
+
 export function getSkillsRoots(): string[] {
   const candidates = [
     String(process.env[SKILLS_ROOT_ENV] || "").trim(),
@@ -37,6 +46,7 @@ export function getSkillsRoots(): string[] {
     path.join(app.getAppPath(), "skills"),
     path.join(__dirname, "../skills"),
     path.join(process.resourcesPath || "", "skills"),
+    getUserSkillsRoot(),
   ].filter(Boolean);
   return Array.from(new Set(candidates.map((item) => path.resolve(item))));
 }
