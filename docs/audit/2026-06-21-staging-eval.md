@@ -53,3 +53,13 @@
 
 **结论：agent 能做好多角色/多站位/带朝向**——会用 high 配围坐、overhead 配俯拍、behind+facing[away/toward] 配前后跟踪。词汇表 + 工具取景指引生效。
 小偏：「并排」偶被映射成 line(纵队) 而非 side-by-side——可在工具描述补「并排=side-by-side、纵队/列队=line」澄清（下次迭代）。
+
+## C 层 · 真实生成 A/B（图像层，apimart gemini-2.5-flash-image，真实额度跑过）
+
+`scripts/staging-ab.mjs`：硬场景各出图两次 A=纯文本 / B=文本+staging 灰模图(image_edit)。
+
+- **反套路求婚（女跪男站）**：A 纯文本**也对了**（现代 gemini 图像模型对显式双人 blocking 服从度高）；B 带 staging 额外把 3/4 低机位+构图也锁进来了。→ **简单显式双人，文本已够，staging 增益主要在机位/构图。**
+- **三人各异姿势（左坐/中站/右单膝跪）**：A 纯文本直接 failed/难产；B 带 staging **精确锁住三人各自姿势+站位+连颜色都复刻**。→ **多人特定姿势是 staging 的硬价值区。**
+- **真限制（重要）**：用 `image_edit` 喂 staging 会让输出**偏 CGI/3D 渲染感**（三人组 B 像给灰模上色），太贴源图美学。→ 写实关键帧应把 staging 当**构图/姿态控制**（ControlNet 式，控布局不控像素）或加强写实 prompt，而非全图 edit。反套路 B 仍写实，说明因图而异。
+
+**净结论**：staging 在「**多角色特定姿势 + 精确机位/构图**」处价值明确；简单显式双人现代图像模型已能从文本做好；image_edit 模式有 CGI 美学副作用，是下一步要优化的（composition-control 而非 edit）。视频层运动漂移未跑（更贵，留后）。
