@@ -33,6 +33,7 @@ import {
   ensureBuiltinModelSeeds,
 } from "./runtime";
 import { extractVideoFrameToAsset } from "./video/extractVideoFrame";
+import { mintSpendGrant } from "./spendGrant";
 import { listSkillsForRenderer } from "./skills/skillIpc";
 import { exportSkillPackageByName, importSkillPackageToUserDir } from "./skills/skillPackage";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
@@ -47,14 +48,32 @@ import { registerConversationsIpc } from "./conversations/conversationsIpc";
 import { setEventLogSecretsProvider } from "./events/eventLogRepository";
 import { registerEventsIpc } from "./events/eventsIpc";
 import { registerMemoryIpc } from "./memory/memoryIpc";
+import { registerPromptLibraryIpc } from "./promptLibrary/promptLibraryIpc";
 import { catalogSecretsProvider } from "./events/secretsProvider";
 import { VendorRequestError, encodeVendorErrorMessage } from "./vendor/vendorHttp";
 import { traceVendorCompleted } from "./events/vendorCallTrace";
 import { registerOnboardingIpc } from "./ai/onboarding/onboardingIpc";
 import { registerUpdaterIpc } from "./update/autoUpdater";
+import { startCapabilityCore, stopCapabilityCore, setOpenProjectId } from "./capabilityCore/appIntegration";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
+
+// 单实例锁（能力核前提，docs/plan/2026-06-20）：保证同一 user-data 只有一个 app 实例 = 工程文件的
+// 唯一写者，外部 CLI/MCP 才能安全地「app 开着走 RPC、关着走 headless」。隔离实例（eval/promo 用独立
+// --user-data-dir）拿到的是各自的锁，不受影响。拿不到锁 = 已有实例在跑 → 让出（聚焦老窗后退出）。
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [existing] = BrowserWindow.getAllWindows();
+    if (existing) {
+      if (existing.isMinimized()) existing.restore();
+      existing.focus();
+    }
+  });
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -312,13 +331,24 @@ function registerIpc(): void {
   ipcMain.handle("nomi:assets:download", (_event, payload) => downloadAssetToDisk(payload));
   ipcMain.handle("nomi:video:extract-frame", (_event, payload) => extractVideoFrameToAsset(payload));
   registerExportJobIpc();
+  // 付费守卫铸令牌：仅由渲染层「真人确认」事件链调用（务实纵深：铸造面小而审计过 + 主进程硬闸兜底）。
+  ipcMain.handle("nomi:tasks:grant-spend", (_event, payload) => {
+    const raw = (payload || {}) as { nodeIds?: unknown; maxAttemptsPerNode?: unknown };
+    const nodeIds = Array.isArray(raw.nodeIds) ? raw.nodeIds.map((id) => String(id)) : [];
+    const maxAttemptsPerNode = typeof raw.maxAttemptsPerNode === "number" ? raw.maxAttemptsPerNode : undefined;
+    return { grantId: mintSpendGrant({ nodeIds, ...(maxAttemptsPerNode ? { maxAttemptsPerNode } : {}) }) };
+  });
   ipcMain.handle("nomi:tasks:run", (_event, payload) => runTaskIpcGuard(payload, () => runTask(payload)));
   ipcMain.handle("nomi:tasks:result", (_event, payload) => runTaskIpcGuard(payload, () => fetchTaskResult(payload)));
+  // 能力核 A/B 守卫：renderer 在打开/切换/关闭项目时上报当前打开的 projectId，
+  // 让外部调用拒绝直写「正在窗口里编辑」的工程（防内存 store 回盘覆盖，见 capabilityCore/rpcServer）。
+  ipcMain.on("nomi:capability:active-project", (_event, projectId: unknown) => setOpenProjectId(String(projectId || "")));
   registerAgentChatV2Ipc();
   registerTextStreamIpc();
   registerConversationsIpc();
   registerEventsIpc();
   registerMemoryIpc();
+  registerPromptLibraryIpc();
   registerOnboardingIpc();
   registerUpdaterIpc();
   // S4-1 评测安全铁律:事件落盘前,已配置的 vendor key 精确匹配脱敏(形态兜底之外的地基)。
@@ -396,23 +426,9 @@ function registerLocalProtocol(): void {
   });
 }
 
-// 单实例锁：本地优先应用的全局 index（catalog.json / recent-workspaces.json）是单一文件，
-// 每次变更走「读全量 → 改 → 写全量」的非原子 read-modify-write。两个实例并发改写会互相
-// 用旧快照覆盖（A 读 N 条→B 删 1 条写回→A 基于旧 N 条写回，B 的删除被整体覆盖蒸发）——
-// 这正是「并行会话抢 index 推坏」的运行时同类。拿不到锁直接退出、把已有窗口前置，根治整类。
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
-if (!hasSingleInstanceLock) {
-  app.quit();
-}
-app.on("second-instance", () => {
-  const [existing] = BrowserWindow.getAllWindows();
-  if (!existing) return;
-  if (existing.isMinimized()) existing.restore();
-  existing.focus();
-});
-
-app.whenReady().then(async () => {
-  if (!hasSingleInstanceLock) return; // 第二个实例：已在退出，引导一律跳过
+// 非主实例（没拿到单实例锁）不启动 UI / RPC——已让出给老实例（second-instance 已聚焦它）。
+// 单实例锁本身在文件顶部定义（main 与本批独立都加了同一锁，合并去重，根治全局 index 并发覆盖）。
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
   registerLocalProtocol();
   installContentSecurityPolicy(session.defaultSession);
   // 启动即探测系统/环境代理并应用到全局 fetch，让"测试连接/调 AI API/拉模型"能穿透代理。
@@ -425,6 +441,9 @@ app.whenReady().then(async () => {
     console.error("[nomi:desktop] ensureBuiltinModelSeeds failed:", error);
   }
   registerIpc();
+  // 能力核对外口（RPC + 实例广告）：让外部 Claude Code/Codex 经 CLI/MCP 在本地驱动 Nomi。
+  // fail-open：内部不抛，绝不影响 app 启动。
+  await startCapabilityCore(runTask, fetchTaskResult);
   await createWindow();
 
   app.on("activate", () => {
@@ -446,6 +465,8 @@ app.on("window-all-closed", () => {
 // 退出时中止所有在跑导出，否则 ffmpeg 子进程会变孤儿（继续占 CPU/写文件，直到自己跑完）。
 // abort → ffmpegRunner 监听 abort 后 kill 子进程。同步、不抛，绝不拖住退出。
 app.on("before-quit", () => {
+  // 能力核退出清理：清实例广告 + 关 RPC，让外部探测立刻知道「app 已关」。同步、不抛。
+  stopCapabilityCore();
   try {
     const aborted = abortAllActiveExports();
     if (aborted > 0) console.log(`[nomi:desktop] aborted ${aborted} in-flight export(s) on quit`);

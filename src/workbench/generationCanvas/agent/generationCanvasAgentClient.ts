@@ -3,7 +3,6 @@ import { runWorkbenchAgent, workbenchSessionKey, type ToolCallEvent } from '../.
 import type { GenerationCanvasSnapshot, GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { getAgentCreatableGenerationNodeKinds } from '../model/generationNodeKinds'
 import { applyCanvasToolCall } from './applyCanvasToolCall'
-import { applyProposalBatch } from './proposalTxn'
 import { evaluateGate } from './gate'
 import { buildLockGateContext } from './lockGateContext'
 import { listAvailableModelsForAgent, formatAvailableModelsForPrompt } from './availableModels'
@@ -81,8 +80,8 @@ function buildStaticAgentSystemPrompt(mode: SendGenerationCanvasAgentMessageInpu
     '',
     '硬约束：',
     '- 同一个计划的节点与边必须在一次 create_canvas_nodes 调用里一起提交（nodes + edges）——用户对整个计划只确认一次，拆开会造成重复审批。',
-    '- 拆镜头默认建 kind=image 节点（关键画面先行，用户后续再决定动画化）；只有用户明确要「视频 / 动起来 / 直接出视频」时才建 kind=video。',
-    '- 顺序叙事的相邻镜头默认连成时序链：把 n1→n2→n3 的引用边（mode=reference）一并写进同一次 create_canvas_nodes 的 edges 字段（不要用 connect_canvas_edges 另开一轮）；只有用户明确说「独立镜头 / 不要连线」时才不连。',
+    '- 拆镜头默认建 kind=video 节点（分镜产物就是视频，与创作区主链路一致）；只有用户明确要「只要图 / 先出关键画面 / 静帧」时才建 kind=image。',
+    '- 相邻镜头默认**不连**时序链：视频→视频的首尾帧接力当前未实现，连了也是裸跑；镜头连贯靠共享角色卡/场景卡参考，不靠镜头间连线。只有用户明确说「按顺序连起来 / 串成时序链」时，才把 n1→n2→n3 的引用边（mode=reference）一并写进同一次 create_canvas_nodes 的 edges 字段（不要用 connect_canvas_edges 另开一轮）。',
     '- 你写进节点 prompt 字段的提示词，也要用与用户相同的语言（用户用中文就写中文提示词），不要固定用英文。',
     '- 用户必须先在 UI 上确认你的每一次工具调用，再实际生效。',
     '- 节点创建出来默认是 idle 状态，用户会自己点生成按钮，不要假定节点会立即出图。',
@@ -129,14 +128,13 @@ async function defaultExecuteToolCall(event: ToolCallEvent): Promise<void> {
     }
     return
   }
-  const effectiveArgs = (args && typeof args === 'object') ? args as Record<string, unknown> : {}
-  const outcome = await applyProposalBatch([{ toolCallId: event.toolCallId, toolName, effectiveArgs }])
-  if (outcome.status === 'committed') {
-    // S6-0:auto-execute 无用户 override,effectiveArgs ≡ args(对账统一有米,无 overridesDelta)。
-    await confirm({ ok: true, result: outcome.results[0], effectiveArgs, proposalId: outcome.proposalId })
-  } else {
-    await confirm({ ok: false, message: outcome.reason })
-  }
+  // 付费守卫（红队洞 5）：ask（costy/写）绝不在「无 onToolCall」的 auto 路径静默放行——
+  // 否则谁忘传 onToolCall 就是一条 AI 静默烧钱的雷。这里直接拒绝，要求走真人确认 UI（生产面板）。
+  await confirm({
+    ok: false,
+    denied: true,
+    message: '该操作需用户在确认面板批准后才能执行（自动放行路径已禁用）',
+  })
 }
 
 export async function sendGenerationCanvasAgentMessage(

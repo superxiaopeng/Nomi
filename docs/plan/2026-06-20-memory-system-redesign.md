@@ -142,10 +142,10 @@
 - ✅ **拆镜头自动建角色/场景卡**：`storyboardPlan.ts:242` 视觉锚→character/scene 节点+character_ref 连边落画布（`applyCanvasToolCall.ts:171`）。
 - ✅ **喂参考进 vendor（核心管线，今天通）**：character_ref 边源图真进 `reference_image_urls`（`generationReferenceResolver.ts:70`→`catalogTaskActions.ts:72`→`archetypeMeta.ts:393`），有回归锁 `catalogTaskActions.test.ts:82`。**6-13/6-14「丢参考」已修**（之前本文档的过期 caveat 作废）。条件：角色卡已出图 + 目标是认档案的模型；非档案模型仍走只兜首尾帧老路（窄）。
 - ✅ **定妆入口可见**：`BaseGenerationNode.tsx:557` 无条件传 onMakeup，已出图图片节点选中即见（6-13「不可见」已修）。
-- ⚠️ **半通：拆镜头产的卡落错分类**：`storyboardPlan.ts:302` `groupCategoryId:'shots'` 把角色卡钉进 shots 分类，`renderKind` 推断（`BaseGenerationNode.tsx:269` 只认 `categoryId==='cast'`）落空→退化成普通图片外观、侧边栏归错类。**切片1 必修的真 bug。**
-- ❌ **断：镜头面无「挂了谁」常驻标记**：不选中镜头时节点面无角色归属可视，唯一线索是连线；选中才在 composer 参考槽见缩略图。**切片1 要补镜头面挂载徽章。**
+- ✅ **角色卡落 `shots` 分类是「用户拍板 A」不是 bug**（2026-06-20 纠正我之前的武断）：`storyboardPlan.ts:301` 注释明写「角色/场景与镜头同处一个视图，参考边同屏可见可连」。机制：**分类 = 独立子画布**（`GenerationCanvas.tsx:59` 按 activeCategoryId 过滤节点），落 `cast` 会让角色卡跑到「角色」子画布、与「分镜」子画布的镜头**不同屏 → 参考边没法在一屏上连 → 在分镜里没法调用**。所以落 shots 是对的。**唯一残留是装饰耦合**：`renderKind` 推断（`BaseGenerationNode.tsx:269`）只认 `categoryId==='cast'`，导致 character-kind 节点在 shots 分类里渲染成普通图片样式而非角色卡样式。**可选**：把 renderKind 推断从「categoryId==='cast'」解耦成「node.kind==='character'」，让它在分镜子画布里也长成卡——这是装饰优化，**不是 bug、绝不改分类**。
+- ❌ **断：镜头面无「挂了谁」常驻标记**：不选中镜头时节点面无角色归属可视，唯一线索是连线；选中才在 composer 参考槽见缩略图。**切片1 可补镜头面挂载徽章。**
 
-→ 切片1 落刀点据此排：先修「落错分类」(P0 真 bug，低风险) → 卡面升级(参考图行/别名/参数摘要) → 镜头面挂载徽章 → 自动挂载三态。weight/出镜角色 vendor 门控的留后。
+**重要重判（2026-06-20）**：核心一致性链路（锚卡→参考边→喂生成）**今天已经通**。设定卡升级（别名/自动挂载三态/挂载徽章/参考强度/多参考图）是给这条已通的链路**加可用性**，不是修 broken。真正的记忆断点是「创作助手失明」（切片0已修）+「软偏好」（待做）。设定卡升级的优先级/做哪几片，需用户在「值不值」上重新拍——别默认全做。
 
 **诚实缺口（D4，实现时如实兑现）**：参考强度 weight + 主体/出镜/背景出镜角色，底层依赖 vendor 能力——按档案声明槽（P4），不声明的卡面**灰掉/隐藏**，不假装通用。
 

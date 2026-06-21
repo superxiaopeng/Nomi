@@ -6,16 +6,13 @@ import {
   IconAlertTriangle,
   IconCheck,
   IconChevronDown,
-  IconLock,
   IconMovie,
   IconSparkles,
-  IconUpload,
   IconWand,
 } from '@tabler/icons-react'
 import { ConversationHistoryPopover } from './ConversationHistoryPopover'
 import {
   getAvailableSkillProviders,
-  importWorkbenchSkill,
   listWorkbenchSkills,
   providerLabel,
   skillCapabilityFor,
@@ -24,6 +21,10 @@ import {
 } from '../api/skillApi'
 
 type ActiveSkill = { key: string; name: string }
+
+// 「让 AI 帮我写技能」激活的元 skill：用户贴/说他的 skill，创作 Agent 用它转写成 Nomi 技能。
+// key 以 workbench.creation. 开头 → 路由到 document 工具组（拿到 author_skill）。
+const SKILL_AUTHOR: ActiveSkill = { key: 'workbench.creation.skill-author', name: 'AI 写技能' }
 
 function openModelCatalog(): void {
   window.dispatchEvent(new Event('nomi-open-model-catalog'))
@@ -39,11 +40,9 @@ export default function ActiveSkillChip({
   onSelect: (skill: ActiveSkill | null) => void
 }): JSX.Element {
   const anchorRef = React.useRef<HTMLButtonElement>(null)
-  const fileRef = React.useRef<HTMLInputElement>(null)
   const [open, setOpen] = React.useState(false)
   const [skills, setSkills] = React.useState<SkillListItemDto[]>([])
   const [available, setAvailable] = React.useState<ReadonlySet<SkillProviderKind>>(new Set())
-  const [importMsg, setImportMsg] = React.useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
 
   const refresh = React.useCallback(() => {
     try {
@@ -60,31 +59,6 @@ export default function ActiveSkillChip({
 
   const activeItem = activeSkill ? skills.find((s) => s.name === activeSkill.key) ?? null : null
   const activeMissing = activeItem ? skillCapabilityFor(activeItem, available).missing : []
-
-  const onImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    file
-      .text()
-      .then((text) => {
-        let payload: unknown
-        try {
-          payload = JSON.parse(text)
-        } catch {
-          setImportMsg({ kind: 'err', text: '不是合法的 JSON 技能包' })
-          return
-        }
-        const result = importWorkbenchSkill(payload)
-        if (result.ok) {
-          setImportMsg({ kind: 'ok', text: `已导入「${result.skillName || result.dirName}」` })
-          refresh()
-        } else {
-          setImportMsg({ kind: 'err', text: result.error || '导入失败' })
-        }
-      })
-      .catch(() => setImportMsg({ kind: 'err', text: '读取文件失败' }))
-  }
 
   const chipActive = Boolean(activeSkill)
   return (
@@ -215,28 +189,18 @@ export default function ActiveSkillChip({
             <div className="my-1 border-t border-nomi-line-soft" />
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex w-full items-center gap-2 rounded-nomi-sm px-2.5 py-2 text-left text-nomi-ink-80 hover:bg-nomi-ink-05 transition-colors duration-[var(--nomi-transition-fast)]"
+              onClick={() => {
+                onSelect(SKILL_AUTHOR)
+                setOpen(false)
+              }}
+              className="flex w-full items-center gap-2 rounded-nomi-sm px-2.5 py-2 text-left text-nomi-accent hover:bg-nomi-accent-soft transition-colors duration-[var(--nomi-transition-fast)]"
             >
-              <IconUpload size={16} stroke={1.5} className="shrink-0" />
-              <span className="flex-1">导入技能（.json）</span>
-              {activeSkill && (
-                <IconLock size={13} stroke={1.6} className="shrink-0 text-nomi-ink-40" aria-hidden />
-              )}
+              <IconWand size={16} stroke={1.5} className="shrink-0" />
+              <span className="flex-1 min-w-0">
+                <span className="block font-medium">让 AI 帮我写技能</span>
+                <span className="block text-micro text-nomi-ink-60">贴别家的技能 / 说需求 / 附文档，AI 转写成 Nomi 能用的</span>
+              </span>
             </button>
-            {importMsg && (
-              <div
-                className={[
-                  'mx-1 mt-1 rounded-nomi-sm px-2.5 py-1.5 text-micro',
-                  importMsg.kind === 'ok'
-                    ? 'bg-workbench-success-soft text-workbench-success-ink'
-                    : 'bg-workbench-danger-soft text-workbench-danger',
-                ].join(' ')}
-              >
-                {importMsg.text}
-              </div>
-            )}
-            <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
           </div>
         </ConversationHistoryPopover>
       )}

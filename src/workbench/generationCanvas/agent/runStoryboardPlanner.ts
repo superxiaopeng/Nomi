@@ -4,6 +4,7 @@ import { applyCanvasToolCall } from './applyCanvasToolCall'
 import { evaluateGate } from './gate'
 import { buildLockGateContext } from './lockGateContext'
 import { STORYBOARD_PLANNER_SKILL, buildStoryboardPlanningMessage } from './storyboardLauncher'
+import type { StoryboardPlan } from './storyboardPlan'
 
 /**
  * 在**创作区**就地跑分镜规划师（流程 A：不切到生成区，无弹区闪屏）。
@@ -13,12 +14,20 @@ import { STORYBOARD_PLANNER_SKILL, buildStoryboardPlanningMessage } from './stor
  * 不该花钱（规划免费铁律）。propose_storyboard_plan 落库时会把工作区切到 creation（本就在），编辑器随即展开。
  */
 export async function runStoryboardPlanner(input: {
-  storyText: string
+  /** 首次拆镜头：剧本正文。*/
+  storyText?: string
+  /** 修改现方案（P0-9 Slice 3）：当前方案 + 修改要求。*/
+  currentPlan?: StoryboardPlan | null
+  revisionRequest?: string
   onContent?: (text: string) => void
   onCancelReady?: (cancel: () => void) => void
 }): Promise<{ text: string }> {
   const response = await sendGenerationCanvasAgentMessage({
-    message: buildStoryboardPlanningMessage(input.storyText),
+    message: buildStoryboardPlanningMessage({
+      storyText: input.storyText,
+      currentPlan: input.currentPlan,
+      revisionRequest: input.revisionRequest,
+    }),
     snapshot: generationCanvasTools.read_canvas(),
     selectedNodes: [],
     mode: 'agent',

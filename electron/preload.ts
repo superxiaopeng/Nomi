@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
   tasks: {
     run: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:run", payload),
     result: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:result", payload),
+    // 付费守卫：真人确认后铸一次性令牌（绑 nodeIds），返回不透明 grantId 随生成请求下传。
+    grantSpend: (payload: unknown) => ipcRenderer.invoke("nomi:tasks:grant-spend", payload) as Promise<{ grantId: string }>,
     // 文本任务流式（逐 token）：start 返回 streamId，onTextEvent 收 delta/done/error。
     runTextStream: (payload: unknown) =>
       ipcRenderer.invoke("nomi:tasks:text:stream", payload) as Promise<{ streamId: string }>,
@@ -88,6 +90,10 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
       ipcRenderer.invoke("nomi:memory:update", { projectId, factId, patch }) as Promise<{ ok: boolean; facts: unknown[] }>,
     remove: (projectId: string, factId: string) =>
       ipcRenderer.invoke("nomi:memory:remove", { projectId, factId }) as Promise<{ ok: boolean; facts: unknown[] }>,
+  },
+  promptLibrary: {
+    list: () => ipcRenderer.invoke("nomi:prompt-library:list") as Promise<{ ok: boolean; prompts: unknown[]; error?: string }>,
+    textBrain: () => ipcRenderer.invoke("nomi:prompt-library:text-brain") as Promise<{ ok: boolean; brain: { vendor: string; modelKey: string } | null }>,
   },
   review: {
     onEvent: (callback: (payload: unknown) => void) => {
@@ -187,5 +193,9 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     list: () => invokeSync("nomi:skill:list"),
     exportPackage: (dirName: string) => invokeSync("nomi:skill:export", dirName),
     importPackage: (payload: unknown) => invokeSync("nomi:skill:import", payload),
+  },
+  // 能力核：上报当前窗口打开的项目，供外部调用的 A/B 守卫（防外部直写正在编辑的工程）。
+  capability: {
+    setActiveProject: (projectId: string) => ipcRenderer.send("nomi:capability:active-project", projectId),
   },
 });
