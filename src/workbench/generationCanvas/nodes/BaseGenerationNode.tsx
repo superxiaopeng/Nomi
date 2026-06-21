@@ -5,12 +5,11 @@ import {
     IconInfoCircle,
     IconLayoutGrid,
     IconMaximize,
-    IconPhoto,
     IconUpload,
-    IconUser,
 } from "@tabler/icons-react";
 import ProvenancePanel from "./ProvenancePanel";
 import { resolveNodeRenderKind, isCardRenderKind } from "./resolveRenderKind";
+import ShotMountBadges from "./render/ShotMountBadges";
 import { getBuiltinCategoryById } from "../../project/projectCategories";
 import CharacterCardNode from "./render/CharacterCardNode";
 import TextDocumentNode from "./render/TextDocumentNode";
@@ -622,42 +621,8 @@ function BaseGenerationNodeImpl({
                 ) : null}
             </header>
 
-            {/* 切片2：镜头挂载的设定卡徽章（bottom-left caption）——不选中也能一眼看「挂了谁」。
-                只对非卡节点（镜头）且有挂载时显示；最多 2 个 + 「+N」，名字过长截断。 */}
-            {!isCardKind && mountedCards.length > 0 ? (
-                <div
-                    className={cn(
-                        "absolute bottom-[10px] left-[10px] z-[2] flex items-center gap-1 max-w-[calc(100%-20px)]",
-                        "pointer-events-none",
-                    )}>
-                    {mountedCards.slice(0, 2).map((card) => (
-                        <span
-                            key={card.id}
-                            title={`挂载：${card.title}`}
-                            className={cn(
-                                "inline-flex items-center gap-1 min-w-0 py-[3px] px-2 rounded-nomi-sm",
-                                "text-micro text-nomi-ink-60 bg-nomi-paper/[0.82] backdrop-blur-[8px]",
-                            )}>
-                            {card.kind === "character" ? (
-                                <IconUser size={11} stroke={1.8} aria-hidden='true' />
-                            ) : (
-                                <IconPhoto size={11} stroke={1.8} aria-hidden='true' />
-                            )}
-                            <span className='truncate max-w-[88px]'>{card.title}</span>
-                        </span>
-                    ))}
-                    {mountedCards.length > 2 ? (
-                        <span
-                            title={mountedCards.slice(2).map((card) => card.title).join("、")}
-                            className={cn(
-                                "py-[3px] px-2 rounded-nomi-sm text-micro text-nomi-ink-60",
-                                "bg-nomi-paper/[0.82] backdrop-blur-[8px]",
-                            )}>
-                            +{mountedCards.length - 2}
-                        </span>
-                    ) : null}
-                </div>
-            ) : null}
+            {/* 切片2：镜头挂载的设定卡徽章——不选中也能一眼看「挂了谁」（卡节点不显，组件空挂载自返 null）。 */}
+            {!isCardKind ? <ShotMountBadges cards={mountedCards} /> : null}
 
             <ProvenancePanel
                 node={node}
