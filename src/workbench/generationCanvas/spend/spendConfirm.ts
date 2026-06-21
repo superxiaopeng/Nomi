@@ -63,9 +63,9 @@ export async function confirmAndMintGrant(opts: {
 }
 
 /** 人话出片预估（C1：只显件数 + 预计时长，不显金额——守卫不依赖金额）。 */
-export function describeGenerationCost(count: number, kind: 'image' | 'video' | 'mixed' = 'image'): string {
-  const perItemSec = kind === 'video' ? 40 : 12
+export function describeGenerationCost(count: number, kind: 'image' | 'video' | 'audio' | 'mixed' = 'image'): string {
+  const perItemSec = kind === 'video' ? 40 : kind === 'audio' ? 20 : 12
   const mins = Math.max(1, Math.round((count * perItemSec) / 60))
-  const unit = kind === 'video' ? '段视频' : kind === 'mixed' ? '个画面' : '张画面'
+  const unit = kind === 'video' ? '段视频' : kind === 'audio' ? '段配音' : kind === 'mixed' ? '个素材' : '张画面'
   return `将生成 ${count} ${unit} · 预计约 ${mins} 分钟 · 会消耗模型额度`
 }

@@ -53,7 +53,7 @@ export const PromptCard = React.memo(function PromptCard({ prompt, onSelect }: P
 
       <span className={cn(
         'absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-px rounded-full text-micro leading-none',
-        'bg-[oklch(0.2_0.01_80/0.55)] text-nomi-paper backdrop-blur-sm',
+        'bg-nomi-overlay-chip text-nomi-paper backdrop-blur-sm',
       )}>
         {isVideo ? <IconPlayerPlayFilled size={9} /> : null}
         {isVideo ? '视频' : '图片'}
@@ -61,7 +61,7 @@ export const PromptCard = React.memo(function PromptCard({ prompt, onSelect }: P
 
       <span className={cn(
         'absolute left-0 right-0 bottom-0 px-2 pt-3 pb-1.5',
-        'bg-gradient-to-t from-[oklch(0_0_0/0.62)] to-transparent',
+        'bg-gradient-to-t from-nomi-media-veil to-transparent',
       )}>
         <span className={cn('block text-caption text-nomi-paper font-medium truncate')}>{prompt.title}</span>
         <span className={cn('block text-micro text-nomi-paper/70 truncate')}>{prompt.source}</span>

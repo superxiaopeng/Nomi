@@ -11,6 +11,26 @@ import { parseVendorErrorFromMessage, stripVendorErrorMarker } from './vendorErr
 import type { DependencyWavePlan } from './dependencyWaves'
 import { resolveGenerationReferences } from './generationReferenceResolver'
 import { currentArchetypeMode, hasArchetypeArrayReferences, resolveArchetypeForModel } from '../nodes/controls/archetypeMeta'
+import type { GenerationNodeKind } from '../model/generationCanvasTypes'
+
+/** 节点 kind → 付费预估用的产物口径（视频/配音/画面），喂给 describeGenerationCost 报对名词与时长。 */
+function spendCostKind(kind: GenerationNodeKind): 'image' | 'video' | 'audio' {
+  const exec = getGenerationNodeExecutionKind(kind)
+  return exec === 'video' ? 'video' : exec === 'audio' ? 'audio' : 'image'
+}
+
+/** 一批节点的产物口径：全同则取该类，混合则 'mixed'，喂给 describeGenerationCost 报对名词。 */
+export function spendCostKindForNodes(ids: string[]): 'image' | 'video' | 'audio' | 'mixed' {
+  const nodes = useGenerationCanvasStore.getState().nodes
+  const kinds = new Set(
+    ids
+      .map((id) => nodes.find((n) => n.id === id))
+      .filter((n): n is GenerationCanvasNode => Boolean(n))
+      .map((n) => spendCostKind(n.kind)),
+  )
+  if (kinds.size === 1) return [...kinds][0]
+  return kinds.size === 0 ? 'image' : 'mixed'
+}
 
 export type RunGenerationNodeOptions = {
   executor?: GenerationNodeExecutor
@@ -379,9 +399,10 @@ export async function runGenerationNodesByPlan(
  * BaseGenerationNode（后者 908 行顶格巨壳，不喂；BaseGenerationNode 复用其现有 controller import 行）。
  */
 export async function confirmAndRunNode(nodeId: string, opts: { rerun?: boolean } = {}): Promise<void> {
+  const node = useGenerationCanvasStore.getState().nodes.find((n) => n.id === nodeId)
   const ok = await useSpendConfirmStore.getState().requestConfirm({
     title: opts.rerun ? '重新生成' : '开始生成',
-    message: describeGenerationCost(1),
+    message: describeGenerationCost(1, node ? spendCostKind(node.kind) : 'image'),
     confirmLabel: opts.rerun ? '重新生成' : '生成',
     light: true,
   })

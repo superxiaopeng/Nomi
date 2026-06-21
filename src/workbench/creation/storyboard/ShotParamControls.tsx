@@ -121,14 +121,16 @@ export default function ShotParamControls({ modelOption, modeId, params, onUpdat
                     </label>
                   )
                 }
+                // 文本型参数（如负面提示词）可能很长——给整行多行框，别用单行 input 横向裁切看不全。
                 return (
-                  <input
+                  <textarea
                     key={c.key}
                     aria-label={c.label}
                     placeholder={c.placeholder || c.label}
                     value={valueOf(c)}
                     onChange={(event) => setParam(c, event.target.value)}
-                    className="h-7 px-2 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-body-sm text-nomi-ink-80 focus:border-nomi-accent min-w-[140px]"
+                    rows={2}
+                    className="basis-full w-full resize-y px-2 py-1.5 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-body-sm text-nomi-ink-80 focus:border-nomi-accent"
                   />
                 )
               })}

@@ -16,8 +16,9 @@ import { usePromptLibrary } from './usePromptLibrary'
 import { PromptCard } from './PromptCard'
 import { PromptPreviewOverlay } from './PromptPreviewOverlay'
 
-const GRID_COLS = 4
-const ESTIMATED_ROW_HEIGHT = 188
+const GRID_GAP = 12 // gap-3
+const MIN_CARD_WIDTH = 200 // 卡片最小宽,据此推列数(窄窗自动减列,不再写死 4 列挤压)
+const CARD_ASPECT = 3 / 4 // PromptCard 为 aspect-[4/3]，行高由实际卡宽推出，不再写死 188
 
 const CATEGORY_OPTIONS: { value: PromptCategory; label: string }[] = [
   { value: 'all', label: '全部' },
@@ -42,13 +43,35 @@ export function PromptLibraryPanel({ opened, onClose }: Props): JSX.Element | nu
   const { items, loading, error, reload } = usePromptLibrary(opened)
   const visible = React.useMemo(() => filterPrompts(items, category, query), [items, category, query])
 
-  const rowCount = Math.ceil(visible.length / GRID_COLS)
+  // 响应式列数 + 由实际卡宽推出的行高（替代写死的 grid-cols-4 / 188），窄窗也不挤压、滚动不跳。
+  const [contentWidth, setContentWidth] = React.useState(0)
+  React.useEffect(() => {
+    if (!scrollEl) return
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width
+      if (w) setContentWidth(w)
+    })
+    ro.observe(scrollEl)
+    return () => ro.disconnect()
+  }, [scrollEl])
+
+  const width = contentWidth || 920 // 测量前的合理回退（960 面板 - 左右内边距）
+  const cols = Math.max(2, Math.min(5, Math.floor((width + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP))))
+  const cardWidth = (width - (cols - 1) * GRID_GAP) / cols
+  const rowHeight = cardWidth * CARD_ASPECT + GRID_GAP
+
+  const rowCount = Math.ceil(visible.length / cols)
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollEl,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 3,
   })
+
+  // 列数/行高变化（窗口缩放）后重新测量，避免虚拟化用旧行高错位。
+  React.useEffect(() => {
+    rowVirtualizer.measure()
+  }, [rowVirtualizer, rowHeight, cols])
 
   React.useEffect(() => {
     if (!opened) return
@@ -83,7 +106,7 @@ export function PromptLibraryPanel({ opened, onClose }: Props): JSX.Element | nu
     <Portal>
       <div
         className={cn('fixed inset-0 grid place-items-center p-6')}
-        style={{ zIndex: 4000, background: 'oklch(0.2 0.01 80 / 0.34)', animation: 'nomi-fade 140ms cubic-bezier(.2,.7,.3,1)' }}
+        style={{ zIndex: 4000, background: 'var(--nomi-scrim)', animation: 'nomi-fade 140ms cubic-bezier(.2,.7,.3,1)' }}
         onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
       >
         <div
@@ -165,14 +188,14 @@ export function PromptLibraryPanel({ opened, onClose }: Props): JSX.Element | nu
             ) : (
               <div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const start = virtualRow.index * GRID_COLS
-                  const rowItems = visible.slice(start, start + GRID_COLS)
+                  const start = virtualRow.index * cols
+                  const rowItems = visible.slice(start, start + cols)
                   return (
                     <div
                       key={virtualRow.key}
                       data-index={virtualRow.index}
-                      className={cn('grid grid-cols-4 gap-3 pb-3')}
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)` }}
+                      className={cn('grid gap-3 pb-3')}
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualRow.start}px)`, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
                     >
                       {rowItems.map((prompt) => (
                         <PromptCard key={prompt.id} prompt={prompt} onSelect={handleSelect} />

@@ -98,7 +98,7 @@ export function NoTextModelRecoveryCard({ onResolved }: { onResolved?: () => voi
                 onClick={() => void enableBrain()}
               >
                 <IconBulb />
-                启用 {recoverable.labelZh}
+                <span className="min-w-0 truncate">启用 {recoverable.labelZh}</span>
               </WorkbenchButton>
             ) : null}
             <WorkbenchButton variant="default" className="w-full" onClick={openSettings}>

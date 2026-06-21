@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { routeCreationIntent } from './creationIntentRouting'
+import { extractStoryFromRequest, routeCreationIntent } from './creationIntentRouting'
 
 describe('routeCreationIntent（删 chip 后自然语言是唯一入口，覆盖面=可用性）', () => {
   it('「只要镜头图」类说法 → storyboard', () => {
@@ -35,6 +35,25 @@ describe('routeCreationIntent（删 chip 后自然语言是唯一入口，覆盖
   it('普通创作请求 → null（走通用创作 AI，不误触发跨面板动作）', () => {
     for (const text of ['帮我把这段写得更生动', '续写下一段', '这句话怎么改', '总结一下', '']) {
       expect(routeCreationIntent(text)).toBeNull()
+    }
+  })
+})
+
+describe('extractStoryFromRequest（编辑器空时把对话里的故事捞出来，免用户重搬 D1）', () => {
+  it('「拆成镜头：<故事>」式 → 取冒号后的正文', () => {
+    const story = '清晨，戴金丝眼镜的咖啡馆老板林夏打开店门，常客陈默推门而入。'
+    expect(extractStoryFromRequest(`把这个故事拆成镜头：${story}`)).toBe(story)
+    expect(extractStoryFromRequest(`拆镜头: ${story}`)).toBe(story)
+  })
+
+  it('没冒号但带实质故事正文 → 整条交给规划师（LLM 自会忽略命令词）', () => {
+    const msg = '清晨咖啡馆里林夏打开店门擦拭吧台，常客陈默推门而入，把它拆成镜头'
+    expect(extractStoryFromRequest(msg)).toBe(msg)
+  })
+
+  it('裸命令抠不出故事 → 空串（维持「先写故事」提示，不拿命令词当故事）', () => {
+    for (const text of ['帮我拆镜头', '拆镜头', '把这段拆成 6 个镜头', '做个分镜', '', '生成视频']) {
+      expect(extractStoryFromRequest(text)).toBe('')
     }
   })
 })

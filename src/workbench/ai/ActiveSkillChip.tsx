@@ -170,7 +170,7 @@ export default function ActiveSkillChip({
 
             {activeMissing.length > 0 && (
               <div className="mx-1 mt-1.5 flex items-center justify-between gap-2 rounded-nomi-sm bg-nomi-ink-05 px-2.5 py-2">
-                <span className="text-micro text-nomi-ink-80">
+                <span className="min-w-0 text-micro text-nomi-ink-80">
                   缺{activeMissing.map(providerLabel).join('、')}模型，跑到生成会卡住
                 </span>
                 <button

@@ -26,3 +26,19 @@ export function routeCreationIntent(text: string): CreationIntent {
   if (FIXATION_REQUEST_PATTERN.test(trimmed)) return 'fixation'
   return null
 }
+
+/**
+ * 编辑器为空时，从用户这条对话消息里抠出「故事正文」当拆镜头素材——别让他把已经
+ * 敲在对话框里的故事再手动搬去左侧（D1 摩擦）。两种命中：
+ *  ①「…拆成镜头：<故事>」式：冒号后的正文即故事；
+ *  ② 没冒号但剥掉命令短语后仍有实质内容：把整条消息交给规划师（LLM 自会忽略命令词）。
+ * 裸命令（「帮我拆镜头」）剥完不够长 → 返回 ''，维持「先写故事」提示，不拿命令词当故事。
+ */
+export function extractStoryFromRequest(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  const afterColon = trimmed.split(/[:：]/).slice(1).join('：').trim()
+  if (afterColon.length >= 12) return afterColon
+  const withoutCommand = trimmed.replace(STORYBOARD_REQUEST_PATTERN, '').replace(/[\s,，。、!！?？]+/g, '')
+  return withoutCommand.length >= 12 ? trimmed : ''
+}

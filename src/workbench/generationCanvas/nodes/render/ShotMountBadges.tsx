@@ -10,10 +10,18 @@ import type { MountedCard } from "../../hooks/useNodeRelationships";
  */
 export default function ShotMountBadges({ cards }: { cards: readonly MountedCard[] }): JSX.Element | null {
   if (cards.length === 0) return null;
+  const rest = cards.slice(2);
+  // +N 悬浮列表：截断名字唯一的可读回退，但别甩出整屏长串——超 5 个收成「…等 N 个」。
+  const restTitle =
+    rest.length > 5
+      ? `${rest.slice(0, 5).map((card) => card.title).join("、")}…等 ${rest.length} 个`
+      : rest.map((card) => card.title).join("、");
   return (
+    // 行本身 pointer-events-none（空隙不挡画布拖拽/选中）；每个 chip 单独放开指针事件，
+    // 否则截断名字 / +N 的 title 悬浮提示永远不触发（截断的唯一查看回退就失效了）。
     <div
       className={cn(
-        "absolute bottom-[10px] left-[10px] z-[2] flex items-center gap-1 max-w-[calc(100%-20px)]",
+        "absolute bottom-[10px] left-[10px] z-[2] flex items-center gap-1 max-w-[calc(100%-20px)] overflow-hidden",
         "pointer-events-none",
       )}>
       {cards.slice(0, 2).map((card) => (
@@ -21,7 +29,7 @@ export default function ShotMountBadges({ cards }: { cards: readonly MountedCard
           key={card.id}
           title={`挂载：${card.title}`}
           className={cn(
-            "inline-flex items-center gap-1 min-w-0 py-[3px] px-2 rounded-nomi-sm",
+            "pointer-events-auto cursor-default inline-flex items-center gap-1 min-w-0 py-[3px] px-2 rounded-nomi-sm",
             "text-micro text-nomi-ink-60 bg-nomi-paper/[0.82] backdrop-blur-[8px]",
           )}>
           {card.kind === "character" ? (
@@ -32,14 +40,14 @@ export default function ShotMountBadges({ cards }: { cards: readonly MountedCard
           <span className="truncate max-w-[88px]">{card.title}</span>
         </span>
       ))}
-      {cards.length > 2 ? (
+      {rest.length > 0 ? (
         <span
-          title={cards.slice(2).map((card) => card.title).join("、")}
+          title={restTitle}
           className={cn(
-            "py-[3px] px-2 rounded-nomi-sm text-micro text-nomi-ink-60",
+            "pointer-events-auto cursor-default py-[3px] px-2 rounded-nomi-sm text-micro text-nomi-ink-60",
             "bg-nomi-paper/[0.82] backdrop-blur-[8px]",
           )}>
-          +{cards.length - 2}
+          +{rest.length}
         </span>
       ) : null}
     </div>

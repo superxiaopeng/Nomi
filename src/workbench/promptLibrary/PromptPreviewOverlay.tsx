@@ -83,7 +83,7 @@ export function PromptPreviewOverlay({ prompt, originRect, onClose, onSendToCanv
         role="dialog"
         aria-label={prompt.title}
         className={cn('fixed inset-0 grid place-items-center p-6')}
-        style={{ zIndex: 4200, background: 'oklch(0.2 0.01 80 / 0.42)', animation: `nomi-fade ${ANIM_MS}ms ${EASE}` }}
+        style={{ zIndex: 4200, background: 'var(--nomi-scrim)', animation: `nomi-fade ${ANIM_MS}ms ${EASE}` }}
         onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}
       >
         <div
@@ -104,14 +104,14 @@ export function PromptPreviewOverlay({ prompt, originRect, onClose, onSendToCanv
                 <span className={cn('text-caption text-nomi-ink-40')}>此条暂无封面媒体</span>
               </div>
             )}
-            <span className={cn('absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-micro', 'bg-[oklch(0.2_0.01_80/0.55)] text-nomi-paper backdrop-blur-sm')}>
+            <span className={cn('absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-micro', 'bg-nomi-overlay-chip text-nomi-paper backdrop-blur-sm')}>
               {isVideo ? '视频' : '图片'} · {prompt.source}
             </span>
             <button
               type="button"
               aria-label="关闭"
               onClick={close}
-              className={cn('absolute top-2 right-2 w-7 h-7 grid place-items-center rounded-full cursor-pointer border-0', 'bg-[oklch(0.2_0.01_80/0.5)] text-nomi-paper hover:bg-[oklch(0.2_0.01_80/0.7)]')}
+              className={cn('absolute top-2 right-2 w-7 h-7 grid place-items-center rounded-full cursor-pointer border-0', 'bg-nomi-overlay-chip text-nomi-paper hover:bg-nomi-overlay-chip-strong')}
             >
               <IconX size={16} stroke={2} />
             </button>

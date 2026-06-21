@@ -12,7 +12,7 @@ import { useHasTextModel } from '../library/useHasTextModel'
 import AssistantModelPicker from '../ai/AssistantModelPicker'
 import StoryboardPlanCard from './storyboard/StoryboardPlanCard'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
-import { routeCreationIntent } from './creationIntentRouting'
+import { extractStoryFromRequest, routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
 import ActiveSkillChip from '../ai/ActiveSkillChip'
@@ -163,7 +163,12 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     const store = useWorkbenchStore.getState()
     const currentPlan = store.storyboardPlan
     const isRevision = Boolean(currentPlan && !store.storyboardPlanCommitted && revisionRequest?.trim())
-    const storyText = (selectedText || documentText).trim()
+    const docStory = (selectedText || documentText).trim()
+    // 编辑器为空但用户把故事打在了对话里 → 用对话正文，并补写进文稿（单一真相源），
+    // 别让他把已经敲过的故事再搬一遍（D1）。裸命令抠不出故事则维持下面的提示。
+    const chatStory = docStory ? '' : extractStoryFromRequest(displayPrompt)
+    if (chatStory) documentToolsRef.current?.appendToEnd(chatStory)
+    const storyText = docStory || chatStory
     if (!isRevision && !storyText) {
       setError('先在左侧写一段故事，再让 AI 拆镜头。')
       return

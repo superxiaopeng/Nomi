@@ -2,7 +2,7 @@
 // 语义铁律:进入预览 ≠ 开始生成——确认前零 vendor 调用零扣费;取消即散,画布零变化。
 import { create } from 'zustand'
 import { toast } from '../../../ui/toast'
-import { runGenerationNodesByPlan } from '../runner/generationRunController'
+import { runGenerationNodesByPlan, spendCostKindForNodes } from '../runner/generationRunController'
 import { mintSpendGrant } from '../../api/taskApi'
 import { confirmAndMintGrant, describeGenerationCost } from '../spend/spendConfirm'
 import type { DependencyWavePlan } from '../runner/dependencyWaves'
@@ -65,7 +65,7 @@ export async function confirmAndRunPlan(plan: DependencyWavePlan): Promise<void>
   const grantId = await confirmAndMintGrant({
     nodeIds: ids,
     title: '开始生成',
-    message: describeGenerationCost(ids.length),
+    message: describeGenerationCost(ids.length, spendCostKindForNodes(ids)),
     confirmLabel: '生成',
     light: true,
   })

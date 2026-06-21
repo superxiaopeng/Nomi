@@ -49,6 +49,10 @@ export default {
           'line-soft': 'var(--nomi-line-soft)',
           accent: 'var(--nomi-accent)',
           'accent-soft': 'var(--nomi-accent-soft)',
+          scrim: 'var(--nomi-scrim)',
+          'overlay-chip': 'var(--nomi-overlay-chip)',
+          'overlay-chip-strong': 'var(--nomi-overlay-chip-strong)',
+          'media-veil': 'var(--nomi-media-veil)',
         },
         workbench: {
           bg: 'var(--workbench-bg)',
