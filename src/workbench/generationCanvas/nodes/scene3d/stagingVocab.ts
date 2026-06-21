@@ -53,3 +53,17 @@ export const ENV_PRESET: Record<StagingEnvironment, { backgroundColor: string; s
 
 // 角色脚下站位间距（角色 scale 2.5，约 1 单位宽，留余量）。
 export const STAGING_CHARACTER_SPACING = 1.5
+
+// 景别 → 间距缩放：近景收紧（两人靠近不留大空），全景略放。治「close+facing 中间大片空」。
+export const SHOT_SPACING_SCALE: Record<StagingShot, number> = { close: 0.62, medium: 1, wide: 1.15 }
+
+// 每个 layout 的「最佳默认机位」（agent 没显式指定 angle/height 时用）：
+// 空间关系要读得出——环绕/纵深需俯视或斜上、纵队需侧面、面对面/并排正面或斜。
+export const LAYOUT_CAMERA_DEFAULT: Record<StagingLayout, { angle?: StagingCameraAngle; height?: StagingCameraHeight }> = {
+  solo: { angle: 'front', height: 'eye' },
+  facing: { angle: 'three-quarter', height: 'eye' },
+  'side-by-side': { angle: 'front', height: 'eye' },
+  line: { angle: 'side', height: 'eye' },
+  behind: { angle: 'three-quarter', height: 'high' },
+  circle: { angle: 'front', height: 'high' },
+}

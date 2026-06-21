@@ -12,6 +12,8 @@ import {
   CAMERA_ANGLE_AZIMUTH_DEG,
   CAMERA_HEIGHT_POSE,
   SHOT_FRAMING,
+  SHOT_SPACING_SCALE,
+  LAYOUT_CAMERA_DEFAULT,
   ENV_PRESET,
   STAGING_CHARACTER_SPACING,
   type StagingLayout,
@@ -42,9 +44,8 @@ const FACING_DEG: Record<StagingFacing, number | null> = { camera: 0, away: 180,
 
 type Placed = { x: number; z: number; faceDeg: number }
 
-// 每个 layout 的站位坐标 + 默认朝向（toward = 朝同伴/圆心）。
-function placeCharacters(count: number, layout: StagingLayout): Placed[] {
-  const s = STAGING_CHARACTER_SPACING
+// 每个 layout 的站位坐标 + 默认朝向（toward = 朝同伴/圆心）。spacing 由景别缩放传入。
+function placeCharacters(count: number, layout: StagingLayout, s: number): Placed[] {
   if (count <= 1) return [{ x: 0, z: 0, faceDeg: 0 }]
   switch (layout) {
     case 'facing': {
@@ -52,14 +53,14 @@ function placeCharacters(count: number, layout: StagingLayout): Placed[] {
         const d = s * 0.9
         return [{ x: -d, z: 0, faceDeg: 90 }, { x: d, z: 0, faceDeg: -90 }]
       }
-      return placeCircle(count)
+      return placeCircle(count, s)
     }
     case 'line': // 纵队：沿 Z 一前一后，朝镜头
       return Array.from({ length: count }, (_, i) => ({ x: 0, z: (i - (count - 1) / 2) * s, faceDeg: 0 }))
     case 'behind': // 一前一后（默认 2 人，多于 2 退化为纵队）
       return Array.from({ length: count }, (_, i) => ({ x: 0, z: ((count - 1) / 2 - i) * (s * 1.2), faceDeg: 0 }))
     case 'circle':
-      return placeCircle(count)
+      return placeCircle(count, s)
     case 'side-by-side':
     case 'solo':
     default:
@@ -67,8 +68,8 @@ function placeCharacters(count: number, layout: StagingLayout): Placed[] {
   }
 }
 
-function placeCircle(count: number): Placed[] {
-  const radius = Math.max(1.2, (STAGING_CHARACTER_SPACING * count) / (2 * Math.PI))
+function placeCircle(count: number, s: number): Placed[] {
+  const radius = Math.max(1.2, (s * count) / (2 * Math.PI))
   return Array.from({ length: count }, (_, i) => {
     const a = (i / count) * Math.PI * 2
     const x = Math.sin(a) * radius
@@ -79,9 +80,10 @@ function placeCircle(count: number): Placed[] {
   })
 }
 
-function buildCharacterObjects(spec: StagingSpec): Scene3DObject[] {
-  const layout = spec.layout ?? (spec.characters.length > 1 ? 'side-by-side' : 'solo')
-  const placed = placeCharacters(spec.characters.length, layout)
+function buildCharacterObjects(spec: StagingSpec, layout: StagingLayout): Scene3DObject[] {
+  const shot: StagingShot = spec.camera?.shot ?? 'medium'
+  const spacing = STAGING_CHARACTER_SPACING * SHOT_SPACING_SCALE[shot]
+  const placed = placeCharacters(spec.characters.length, layout, spacing)
   return spec.characters.map((character, index) => {
     const place = placed[index] ?? { x: 0, z: 0, faceDeg: 0 }
     const facingOverride = character.facing ? FACING_DEG[character.facing] : null
@@ -120,9 +122,11 @@ function buildCrowdObject(spec: StagingSpec, centerX: number, backZ: number): Sc
   }
 }
 
-function buildStagingCamera(objects: Scene3DObject[], camera: StagingSpec['camera']): Scene3DCamera {
-  const angle: StagingCameraAngle = camera?.angle ?? 'three-quarter'
-  const height: StagingCameraHeight = camera?.height ?? 'eye'
+function buildStagingCamera(objects: Scene3DObject[], camera: StagingSpec['camera'], layout: StagingLayout): Scene3DCamera {
+  // agent 没指定 angle/height 时按 layout 取「能读出空间关系」的默认机位（环绕→俯、纵队→侧…）。
+  const layoutDefault = LAYOUT_CAMERA_DEFAULT[layout]
+  const angle: StagingCameraAngle = camera?.angle ?? layoutDefault.angle ?? 'three-quarter'
+  const height: StagingCameraHeight = camera?.height ?? layoutDefault.height ?? 'eye'
   const shot: StagingShot = camera?.shot ?? 'medium'
   const xs = objects.map((o) => o.position[0])
   const zs = objects.map((o) => o.position[2])
@@ -156,12 +160,13 @@ function buildStagingCamera(objects: Scene3DObject[], camera: StagingSpec['camer
 
 export function buildStagingScene(spec: StagingSpec): Scene3DState {
   const base = createDefaultScene3DState()
-  const objects = buildCharacterObjects(spec)
+  const layout: StagingLayout = spec.layout ?? (spec.characters.length > 1 ? 'side-by-side' : 'solo')
+  const objects = buildCharacterObjects(spec, layout)
   const centerX = objects.reduce((sum, o) => sum + o.position[0], 0) / Math.max(1, objects.length)
   const backZ = Math.min(...objects.map((o) => o.position[2]), 0)
   const crowd = buildCrowdObject(spec, centerX, backZ)
   const allObjects = crowd ? [...objects, crowd] : objects
-  const camera = buildStagingCamera(objects, spec.camera)
+  const camera = buildStagingCamera(objects, spec.camera, layout)
   const env = ENV_PRESET[spec.environment ?? 'studio']
   return {
     ...base,
