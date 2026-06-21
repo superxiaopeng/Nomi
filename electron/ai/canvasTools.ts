@@ -142,7 +142,7 @@ export const stagingReferenceParamsSchema = z.object({
   layout: z
     .enum(["solo", "facing", "side-by-side", "line", "behind", "circle"])
     .optional()
-    .describe("Spatial arrangement. facing = two face each other; behind = one in front of another; line = a queue; circle = around a center."),
+    .describe("Spatial arrangement. side-by-side = shoulder-to-shoulder in a row (并排/一排/一字排开, e.g. a lineup or saluting row); line = a single-file queue front-to-back (纵队/列队前后排); facing = two face each other (对峙/对坐/对话); behind = one in front of another (一前一后/跟踪); circle = around a center (围绕/环绕)."),
   camera: z
     .object({
       angle: z.enum(["front", "three-quarter", "side", "back"]).optional(),

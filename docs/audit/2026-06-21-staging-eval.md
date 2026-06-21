@@ -36,6 +36,20 @@
 - circle 纯方位关系顶视最清；front/high 是「能看脸+大致看圈」的折中。
 - 5+ 人身份撞色。
 
-## 待办（B 层 · agent 选择质量）
+## B 层 · agent 选择质量（已跑）
 
-NL 旅途 → agent 产 spec → 渲染 → 判 agent 选的 layout/facing/camera 对不对（验「指引是否让 agent 用对默认/布局」）。复用 `tests/ux/staging-reference.e2e.mjs` 模式，gated 文本额度。
+`tests/ux/staging-agent-eval.e2e.mjs`（gated 文本额度）：8 个自然语言场景 → 真 LLM 产 spec → 判它选的 layout/poses/facing/camera。结果 **7–8/8 合理**：
+
+| 场景 | agent 选择 | 判 |
+|---|---|---|
+| 求婚 | 跪+站·facing | ✓ |
+| 围篝火坐 | 3坐·circle·high | ✓ |
+| 站逼问坐 | 站+坐·facing | ✓ |
+| 面对面争吵 | 双叉腰·facing·low | ✓ |
+| 四士兵敬礼 | 4人·line·low | 🟡「并排」该用 side-by-side，agent 选了 line(纵队) |
+| 人群欢呼 | cheer·solo+crowd | ✓ |
+| 俯拍对坐下棋 | 2坐·facing·overhead | ✓ |
+| 一前一后跟踪 | 2 walk·behind·facing[away/toward] | ✓ |
+
+**结论：agent 能做好多角色/多站位/带朝向**——会用 high 配围坐、overhead 配俯拍、behind+facing[away/toward] 配前后跟踪。词汇表 + 工具取景指引生效。
+小偏：「并排」偶被映射成 line(纵队) 而非 side-by-side——可在工具描述补「并排=side-by-side、纵队/列队=line」澄清（下次迭代）。
