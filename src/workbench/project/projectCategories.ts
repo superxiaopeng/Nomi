@@ -25,6 +25,7 @@ export type TablerIconName =
   | 'IconPhoto'
   | 'IconBox'
   | 'IconChartBar'
+  | 'IconTag' // 自定义顶层分类统一用的通用图标
 
 export type ProjectCategory = {
   id: string
@@ -109,7 +110,37 @@ const tablerIconNameSchema = z.enum([
   'IconPhoto',
   'IconBox',
   'IconChartBar',
+  'IconTag',
 ])
+
+/** 自定义顶层分类的默认外观：通用图标 + 通用「分镜帧」节点样式（用户已拍板：通用第一）。 */
+export const CUSTOM_CATEGORY_ICON_NAME: TablerIconName = 'IconTag'
+export const CUSTOM_CATEGORY_RENDER_KIND: NodeRenderKind = 'shot-frame'
+
+/** 生成不与现有 id 冲突的自定义分类 id。 */
+export function createCustomCategoryId(existingIds: readonly string[]): string {
+  const taken = new Set(existingIds)
+  let n = existingIds.length + 1
+  let id = `cat-${n}`
+  while (taken.has(id)) {
+    n += 1
+    id = `cat-${n}`
+  }
+  return id
+}
+
+/** 按名称 + 排序号造一个自定义顶层分类（通用外观）。 */
+export function createCustomCategory(input: { id: string; name: string; order: number }): ProjectCategory {
+  return {
+    id: input.id,
+    name: input.name.trim() || '新分类',
+    icon: '',
+    iconName: CUSTOM_CATEGORY_ICON_NAME,
+    defaultNodeRenderKind: CUSTOM_CATEGORY_RENDER_KIND,
+    order: input.order,
+    isBuiltin: false,
+  }
+}
 
 export const projectCategorySchema = z.object({
   id: z.string().min(1),
@@ -142,8 +173,9 @@ export function normalizeCategories(input: unknown): ProjectCategory[] {
   for (const item of input) {
     const parsed = projectCategorySchema.safeParse(item)
     if (!parsed.success) continue
-    if (!isBuiltinCategoryId(parsed.data.id)) continue
-    merged.set(parsed.data.id, parsed.data)
+    // 自定义顶层分类（非内置 id）一并保留；isBuiltin 标志强制与 id 真相对齐，
+    // 防止持久化数据把自定义分类伪装成「内置只读」或反之。
+    merged.set(parsed.data.id, { ...parsed.data, isBuiltin: isBuiltinCategoryId(parsed.data.id) })
   }
   return Array.from(merged.values()).sort((a, b) => a.order - b.order)
 }

@@ -1,11 +1,12 @@
 import {
   CATEGORY_IDS,
+  getDefaultCategoryForNodeKind,
   type CategoryId,
   type GenerationCanvasEdge,
   type GenerationCanvasNode,
   type GenerationCanvasSnapshot,
   type NodeGroup,
-} from '../generationCanvasV2/model/generationCanvasTypes'
+} from '../generationCanvas/model/generationCanvasTypes'
 import type { WorkbenchProjectPayload, WorkbenchProjectRecordV1 } from './projectRecordSchema'
 import { cloneBuiltinCategories } from './projectCategories'
 
@@ -52,7 +53,10 @@ function mapLegacyCategoryId(categoryId: string): CategoryId | null {
   if (Object.prototype.hasOwnProperty.call(LEGACY_CATEGORY_MAP, categoryId)) {
     return LEGACY_CATEGORY_MAP[categoryId]
   }
-  return isCategoryId(categoryId) ? categoryId : null
+  // 自定义顶层分类 id（非内置、非 legacy 别名）原样保留——否则迁移会把用户新建的
+  // 分类连同其下节点/子组一并丢弃。只有空 id 才判为非法。
+  const trimmed = typeof categoryId === 'string' ? categoryId.trim() : ''
+  return trimmed ? trimmed : null
 }
 
 export function migrateNodeToCategoryId(
@@ -62,15 +66,36 @@ export function migrateNodeToCategoryId(
   const existingCategoryId = readCategoryId(node)
   if (existingCategoryId) return mapLegacyCategoryId(existingCategoryId)
 
-  const kind = node.kind
-  if (kind === 'character') return 'cast'
-  if (kind === 'scene' || kind === 'panorama') return 'scene'
-  if (kind === 'image' || kind === 'video' || kind === 'keyframe' || kind === 'shot') return 'shots'
-  return null
+  // 无 categoryId → 按 kind 推断，走与创建路径同一份映射（唯一真相源），且永不返回
+  // null：迁移侧此前自持一份映射并把 text 等 kind 判 null 删除，导致「新建空白项目
+  // 过迁移被静默删默认节点」（审计 A4）。删除只保留给 legacy 废弃分类（上面的分支）。
+  return getDefaultCategoryForNodeKind(node.kind)
 }
 
 function unique(values: readonly string[]): string[] {
   return Array.from(new Set(values))
+}
+
+// 幂等判定用语义相等而非引用相等（P2）：迁移结果与输入做结构化深比较，这样即便上游
+// 换了「内容一致但引用不同」的画布，alreadyMigrated 也能正确判 true，不会因引用变化触发
+// 整链 changed → re-save → revision 漂移。只比较 JSON 可序列化的画布数据。
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function deepEquals(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    return a.every((item, index) => deepEquals(item, b[index]))
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keysA = Object.keys(a).filter((key) => a[key] !== undefined)
+    const keysB = Object.keys(b).filter((key) => b[key] !== undefined)
+    if (keysA.length !== keysB.length) return false
+    return keysA.every((key) => Object.prototype.hasOwnProperty.call(b, key) && deepEquals(a[key], b[key]))
+  }
+  return false
 }
 
 function normalizeGroups(input: unknown, existingNodeIds: ReadonlySet<string>): { groups: NodeGroup[]; changed: boolean } {
@@ -134,13 +159,13 @@ export function migrateGenerationCanvasSnapshot(
 
   const nextNodeIds = new Set(nextNodes.map((node) => node.id))
   const nextEdges = snapshot.edges.filter((edge) => nextNodeIds.has(edge.source) && nextNodeIds.has(edge.target))
-  const nextSelectedNodeIds = snapshot.selectedNodeIds.filter((nodeId) => nextNodeIds.has(nodeId))
+  const nextSelectedNodeIds = (snapshot.selectedNodeIds ?? []).filter((nodeId) => nextNodeIds.has(nodeId))
   const groupsNormalization = normalizeGroups((snapshot as { groups?: unknown }).groups, nextNodeIds)
   const nextGroups = groupsNormalization.groups
   const removedCount = snapshot.nodes.length - nextNodes.length
 
   if (!migratedCount && !removedCount && nextEdges.length === snapshot.edges.length &&
-    nextSelectedNodeIds.length === snapshot.selectedNodeIds.length && !groupsNormalization.changed) {
+    nextSelectedNodeIds.length === (snapshot.selectedNodeIds ?? []).length && !groupsNormalization.changed) {
     return { snapshot, migratedCount: 0, removedCount: 0, removedCategoryIds: [] }
   }
 
@@ -182,8 +207,11 @@ export function migrateProjectPayload(payload: WorkbenchProjectPayload): {
   const categoryIds = payload.categories?.map((category) => category.id) || []
   const nextCategoryIds = categoryNormalization.categories?.map((category) => category.id) || []
   const categoriesChanged = categoryIds.length !== nextCategoryIds.length || categoryIds.some((id, index) => id !== nextCategoryIds[index])
-  const alreadyMigrated = !categoriesChanged && nodeMigration.snapshot === payload.generationCanvas &&
-    nodeMigration.migratedCount === 0 && nodeMigration.removedCount === 0
+  // 语义相等（不靠 nodeMigration.snapshot === payload.generationCanvas 引用相等）：
+  // 节点零迁移/零删除，且画布结构（节点/边/选择/分组）与输入深比较一致 → 已迁移。
+  const alreadyMigrated = !categoriesChanged &&
+    nodeMigration.migratedCount === 0 && nodeMigration.removedCount === 0 &&
+    deepEquals(nodeMigration.snapshot, payload.generationCanvas)
   if (alreadyMigrated) {
     return {
       payload,

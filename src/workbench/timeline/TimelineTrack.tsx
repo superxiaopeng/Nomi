@@ -1,7 +1,7 @@
 import React from 'react'
 import { useWorkbenchStore } from '../workbenchStore'
 import { cn } from '../../utils/cn'
-import { buildClipFromGenerationNode } from '../generationCanvasV2/model/buildClipFromGenerationNode'
+import { buildClipFromGenerationNode } from '../generationCanvas/model/buildClipFromGenerationNode'
 import { clientXToFrame } from './timelineEdit'
 import { buildTimelineDropPreview, type TimelineDropPreview } from './timelineDropFeedback'
 import {
@@ -17,8 +17,11 @@ type TimelineTrackProps = {
   track: TimelineTrackData
 }
 
-export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Element {
-  const timeline = useWorkbenchStore((state) => state.timeline)
+function TimelineTrack({ track }: TimelineTrackProps): JSX.Element {
+  // 只订阅渲染真正用到的 scale/fps，**不订阅整条 timeline**：播放推进每帧换 timeline 引用，
+  // 订阅整条会让本轨道（连同所有 clip）每帧重渲；playhead 由独立 overlay 订阅 playheadFrame。
+  const scale = useWorkbenchStore((state) => state.timeline.scale)
+  const fps = useWorkbenchStore((state) => state.timeline.fps)
   const addTimelineClipAtFrame = useWorkbenchStore((state) => state.addTimelineClipAtFrame)
   const setTimelinePlayhead = useWorkbenchStore((state) => state.setTimelinePlayhead)
   const setTimelineSelection = useWorkbenchStore((state) => state.setTimelineSelection)
@@ -30,15 +33,15 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
   const resolveFrame = React.useCallback((clientX: number) => {
     const rect = clipsRef.current?.getBoundingClientRect()
     if (!rect) return 0
-    return clientXToFrame(clientX, rect.left, timeline.scale)
-  }, [timeline.scale])
+    return clientXToFrame(clientX, rect.left, scale)
+  }, [scale])
 
   const resolveDropPreview = React.useCallback((event: React.DragEvent<HTMLDivElement>): TimelineDropPreview | null => {
     const generationNodePayload = decodeTimelineGenerationNodeDragPayload(event.dataTransfer.getData(TIMELINE_GENERATION_NODE_DRAG_MIME))
     if (!generationNodePayload) return null
     const startFrame = resolveFrame(event.clientX)
     const clip = buildClipFromGenerationNode(generationNodePayload.node, {
-      fps: timeline.fps,
+      fps,
       startFrame,
       resultId: generationNodePayload.resultId,
     })
@@ -47,10 +50,10 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
       track,
       clip,
       startFrame,
-      scale: timeline.scale,
-      fps: timeline.fps,
+      scale,
+      fps,
     })
-  }, [resolveFrame, timeline.fps, timeline.scale, track])
+  }, [resolveFrame, fps, scale, track])
 
   const handleDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
     const preview = resolveDropPreview(event) || dragPreview
@@ -94,7 +97,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
           'flex-none min-w-0 h-auto ml-auto px-1.5 py-px',
           'inline-grid place-items-center border-0 rounded-full',
           'bg-[var(--nomi-ink-05)] text-[var(--nomi-ink-40)]',
-          'text-[10.5px] font-bold tabular-nums',
+          'text-micro font-bold tabular-nums',
         )}>{track.clips.length}</span>
       </div>
       <div
@@ -116,6 +119,8 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
         data-drag-over={dragPreview ? 'true' : 'false'}
         data-drop-valid={dragPreview ? String(dragPreview.canPlace) : undefined}
         onClick={(event) => {
+          // 剪刀模式：点轨道空白不移 playhead（只有点在 clip 上才分割，由 TimelineClip 处理）
+          if (useWorkbenchStore.getState().timelineSplitMode) return
           // 点轨道空白：移动 playhead 并清空多选（点 clip 会 stopPropagation，不触发此处）
           setTimelinePlayhead(resolveFrame(event.clientX))
           if (!event.shiftKey) setTimelineSelection([])
@@ -145,7 +150,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
             'workbench-timeline-track__empty',
             'absolute inset-0 flex items-center justify-center',
             'border border-dashed border-[var(--nomi-line)] rounded-[var(--nomi-radius-sm)]',
-            'text-[var(--nomi-ink-40)] leading-none text-[11px] font-medium pointer-events-none',
+            'text-[var(--nomi-ink-40)] leading-none text-micro font-medium pointer-events-none',
           )}>从生成区拖入素材</div>
         ) : null}
         {dragPreview ? (
@@ -153,7 +158,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
             className={cn(
               'workbench-timeline-track__drop-preview',
               'absolute top-[5px] h-9 z-[2] pointer-events-none',
-              'flex items-center justify-center overflow-visible rounded text-[11px] font-semibold',
+              'flex items-center justify-center overflow-visible rounded text-micro font-semibold',
               'border border-dashed backdrop-blur-[8px] shadow-[0_8px_20px_rgba(18,24,38,0.12)]',
               dragPreview.canPlace
                 ? 'border-[color-mix(in_srgb,var(--workbench-accent)_58%,transparent)] bg-[color-mix(in_srgb,var(--workbench-accent)_20%,var(--nomi-paper))] text-[var(--workbench-ink)]'
@@ -174,3 +179,7 @@ export default function TimelineTrack({ track }: TimelineTrackProps): JSX.Elemen
     </div>
   )
 }
+
+// TimelinePanel 为 playhead 线每帧重渲，但 track 引用在播放推进时稳定（immer）；memo 后
+// 未变的轨道（连同其 clip 子树）跳过重渲，把每帧重渲范围收窄到「只有 playhead 那根竖线」。
+export default React.memo(TimelineTrack)

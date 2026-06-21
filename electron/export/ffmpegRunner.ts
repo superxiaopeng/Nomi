@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createExportTempDir, createSafeOutputPaths } from "./exportPaths";
+import { ensureExecutable } from "./ensureExecutable";
 import { buildWebmToMp4Args } from "./ffmpegCommandBuilder";
 import { parseFfmpegProgressChunk, progressFromOutTime } from "./ffmpegProgress";
 import type { ExportProfile } from "./exportTypes";
@@ -214,6 +215,7 @@ function defaultRunProcess(command: string, args: string[], options: RunFfmpegPr
       return;
     }
 
+    ensureExecutable(command);
     const child = spawn(command, args, { windowsHide: true });
     let stderr = "";
     let settled = false;

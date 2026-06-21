@@ -1,6 +1,8 @@
 import { getDesktopBridge, type DesktopBridge } from '../../desktop/bridge'
+import type { BillingModelKind } from '../../api/desktopClient'
 
-export type BillingModelKind = 'text' | 'image' | 'video'
+// 单一真相源：复用 desktopClient 的 BillingModelKind（含 'audio'），避免两份定义漂移。
+export type { BillingModelKind }
 
 export type ModelCatalogVendorAuthType = 'none' | 'bearer' | 'x-api-key' | 'query'
 
@@ -97,4 +99,15 @@ export async function listWorkbenchModelCatalogModels(params?: {
   enabled?: boolean
 }): Promise<ModelCatalogModelDto[]> {
   return requireDesktopRuntime('model catalog').modelCatalog.listModels(params) as ModelCatalogModelDto[]
+}
+
+/** 启用/更新一个已存在的目录模型（恢复卡「一键启用被禁用的文本大脑」用）。 */
+export async function upsertWorkbenchModelCatalogModel(payload: {
+  vendorKey: string
+  modelKey: string
+  labelZh?: string
+  kind?: BillingModelKind
+  enabled?: boolean
+}): Promise<ModelCatalogModelDto> {
+  return requireDesktopRuntime('model catalog').modelCatalog.upsertModel(payload) as ModelCatalogModelDto
 }

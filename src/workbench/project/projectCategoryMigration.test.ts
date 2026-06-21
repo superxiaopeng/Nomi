@@ -11,7 +11,7 @@ import type {
   GenerationCanvasNode,
   GenerationNodeKind,
   NodeGroup,
-} from '../generationCanvasV2/model/generationCanvasTypes'
+} from '../generationCanvas/model/generationCanvasTypes'
 
 function makeNode(overrides: Partial<Omit<GenerationCanvasNode, 'categoryId'>> & {
   kind: GenerationNodeKind
@@ -64,17 +64,26 @@ describe('migrateNodeToCategoryId', () => {
     expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'style' }), [])).toBeNull()
     expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'inbox' }), [])).toBeNull()
     expect(migrateNodeToCategoryId(makeNode({ kind: 'output', categoryId: 'exports' }), [])).toBeNull()
-    expect(migrateNodeToCategoryId(makeNode({ kind: 'text', categoryId: 'unknown' }), [])).toBeNull()
   })
 
-  it('maps uncategorized legacy node kinds only into surviving v0.6 categories', () => {
+  it('preserves custom (non-legacy, non-builtin) category ids so user-created categories survive migration', () => {
+    // 自定义顶层分类启用后，未知 id 不再一律丢弃——只有显式 legacy-removed id 才删。
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'text', categoryId: 'cat-6' }), [])).toBe('cat-6')
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'image', categoryId: 'my-custom' }), [])).toBe('my-custom')
+  })
+
+  it('infers uncategorized nodes via the shared kind→category map and never removes them', () => {
+    // 与创建路径共用 getDefaultCategoryForNodeKind（单一真相源，审计 A4）：
+    // kind 可推断 → 永不返回 null。此前 text/output 被判 null 删除，导致
+    // 新建空白项目的默认 text 节点被迁移静默吞掉。
     expect(migrateNodeToCategoryId(makeNode({ kind: 'character' }), [])).toBe('cast')
     expect(migrateNodeToCategoryId(makeNode({ kind: 'scene' }), [])).toBe('scene')
     expect(migrateNodeToCategoryId(makeNode({ kind: 'panorama' }), [])).toBe('scene')
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'scene3d' }), [])).toBe('scene')
     expect(migrateNodeToCategoryId(makeNode({ kind: 'image' }), [])).toBe('shots')
     expect(migrateNodeToCategoryId(makeNode({ kind: 'video' }), [])).toBe('shots')
-    expect(migrateNodeToCategoryId(makeNode({ kind: 'text' }), [])).toBeNull()
-    expect(migrateNodeToCategoryId(makeNode({ kind: 'output' }), [])).toBeNull()
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'text' }), [])).toBe('shots')
+    expect(migrateNodeToCategoryId(makeNode({ kind: 'output' }), [])).toBe('shots')
   })
 })
 
@@ -188,6 +197,38 @@ describe('migrateProjectPayload', () => {
     }
 
     expect(workbenchProjectPayloadSchema.safeParse(payload).success).toBe(true)
+  })
+
+  it('treats a freshly created default project payload as already migrated (creation↔migration contract)', () => {
+    // 创建/迁移契约（审计 A4 的结构保证）：任何创建路径的产物必须是「已迁移形态」。
+    // 该不变量破掉的症状链：新建空白项目 → 打开即弹「项目已升级到目录树」toast →
+    // 默认节点被静默删除。新增创建入口若漏写 categoryId，本测试直接红。
+    const { payload: next, diagnostic } = migrateProjectPayload(createDefaultWorkbenchProjectPayload())
+
+    expect(diagnostic.alreadyMigrated).toBe(true)
+    expect(diagnostic.migratedNodes).toBe(0)
+    expect(diagnostic.removedNodes).toBe(0)
+    expect(diagnostic.categoriesSeeded).toBe(false)
+    // 默认空画布（删了预设两卡，用户拍板 2026-06-15）：无节点可迁移，契约仍 no-op。
+    expect(next.generationCanvas.nodes).toHaveLength(0)
+  })
+
+  it('treats a content-equal but newly-referenced canvas as already migrated (语义相等，不靠引用)', () => {
+    // 幂等判定改语义相等（P2）：即便上游迁移返回了「内容一致但引用不同」的画布，
+    // migrateProjectPayload 也应判 alreadyMigrated=true，不再因引用变化触发 re-save+revision++。
+    const base = createDefaultWorkbenchProjectPayload()
+    // 深拷贝 → 全新引用、内容完全一致。
+    const cloned = {
+      ...base,
+      generationCanvas: JSON.parse(JSON.stringify(base.generationCanvas)) as typeof base.generationCanvas,
+      categories: base.categories ? [...base.categories] : base.categories,
+    }
+    expect(cloned.generationCanvas).not.toBe(base.generationCanvas)
+
+    const { diagnostic } = migrateProjectPayload(cloned)
+    expect(diagnostic.alreadyMigrated).toBe(true)
+    expect(diagnostic.migratedNodes).toBe(0)
+    expect(diagnostic.removedNodes).toBe(0)
   })
 
   it('does not merge legacy category ids back into normalized project categories', () => {

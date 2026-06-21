@@ -43,24 +43,11 @@ export const nomiDesignTokens = {
   }
 } as const
 
-const sansSerifFontFamily = [
-  'Inter',
-  'ui-sans-serif',
-  'system-ui',
-  '-apple-system',
-  'BlinkMacSystemFont',
-  '"Segoe UI"',
-  'sans-serif'
-].join(', ')
-
-const monospaceFontFamily = [
-  'ui-monospace',
-  '"SFMono-Regular"',
-  'Menlo',
-  'Monaco',
-  'Consolas',
-  'monospace'
-].join(', ')
+// Mantine 字体与 CSS/Tailwind 共用同一真相源（nomi-tokens.css）——否则会出现
+// 「Mantine 组件用系统字体、其余 UI 用打包的 Inter Variable」两套字体并排的不一致
+// （2026-06-21 实测 Mantine 408px vs CSS 432px 的根因）。指向 var 后两边都吃 Inter/Fraunces Variable。
+const sansSerifFontFamily = 'var(--nomi-font-sans)'
+const monospaceFontFamily = 'var(--nomi-font-mono)'
 
 export function buildNomiTheme() {
   return createTheme({

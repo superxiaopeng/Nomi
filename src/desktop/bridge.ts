@@ -1,5 +1,29 @@
 import type { ExportJobEvent, ExportJobSnapshot } from '../../electron/export/exportJobManager'
 import type { WorkspaceFileListResult } from '../../electron/workspace/workspaceFileIndex'
+import type { ProviderKind } from './providerKind'
+
+export type { ProviderKind }
+
+/** 落盘的对话消息(conversation 域;draft/附件是 session 域不落盘)。 */
+export type PersistedAiMessage = { id: string; role: string; content: string }
+
+/** 一条会话线程(v2 会话历史)。messages=该线程气泡;title=一句话摘要(首句兜底)。 */
+export type PersistedThread = {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messages: PersistedAiMessage[]
+}
+/** 一个面板(创作/画布)的会话列表 + 当前活动线程。 */
+export type PersistedConversationArea = { activeId: string | null; threads: PersistedThread[] }
+/** conversations.json v2:两个面板各一份会话列表。 */
+export type PersistedConversationsV2 = {
+  v: 2
+  creation: PersistedConversationArea
+  generation: PersistedConversationArea
+  committedProposal?: unknown
+}
 
 export type DesktopAssetDto = {
   id: string
@@ -25,6 +49,12 @@ export type DesktopExportJobStartPayload = {
 
 export type DesktopExportJobStartResult = {
   jobId: string
+  /**
+   * 后端选择（导出主权决策点）：
+   * - 'filtergraph'：资产可本地解析 → ffmpeg 直读源文件渲染（所见即所得），renderer **不录 WebM**。
+   * - 'webm'：资产无法本地解析 → renderer 录 canvas WebM 上传，主进程转码（降级）。
+   */
+  backend: 'filtergraph' | 'webm'
 }
 
 export type DesktopExportTempInputWritePayload = {
@@ -39,6 +69,18 @@ export type DesktopExportTempInputWriteResult = {
 
 export type { ExportJobEvent, ExportJobSnapshot }
 
+/** 应用信息（功能需求1 查看版本号）。 */
+export type DesktopAppInfo = { version: string; platform: string; arch: string }
+
+/** 主进程更新状态广播（功能需求2/3）。renderer 状态机纯 derive 自此事件。 */
+export type DesktopUpdateEvent =
+  | { type: 'checking' }
+  | { type: 'up-to-date' }
+  | { type: 'available'; version: string; notes: string }
+  | { type: 'progress'; percent: number }
+  | { type: 'downloaded'; version: string }
+  | { type: 'error'; message: string }
+
 export type DesktopBridge = {
   platform: string
   startupProbe?: {
@@ -50,6 +92,7 @@ export type DesktopBridge = {
     openFolder: (payload: { rootPath: string; initialize?: boolean; name?: string }) => Promise<unknown>
     listFiles: (payload: { projectId: string; limit?: number }) => Promise<WorkspaceFileListResult>
     revealFile: (payload: { projectId: string; relativePath: string }) => Promise<{ ok: boolean }>
+    revealProjectFolder: (payload: { projectId: string }) => Promise<{ ok: boolean }>
   }
   projects: {
     list: () => unknown[]
@@ -82,6 +125,19 @@ export type DesktopBridge = {
       bytes: ArrayBuffer
       kind?: string
     }) => Promise<DesktopAssetDto>
+    download: (payload: {
+      url: string
+      suggestedName?: string
+    }) => Promise<{ ok: boolean; canceled?: boolean; path?: string }>
+  }
+  video: {
+    /** 视频抽帧（首/尾帧/指定秒）→ 项目素材 nomi-local:// URL。通用基建，见 electron/video/extractVideoFrame.ts。 */
+    extractFrame: (payload: {
+      videoUrl: string
+      which: 'first' | 'last' | number
+      projectId: string
+      forceRerun?: boolean
+    }) => Promise<{ url: string }>
   }
   exports: {
     startJob: (payload: DesktopExportJobStartPayload) => Promise<DesktopExportJobStartResult>
@@ -95,9 +151,12 @@ export type DesktopBridge = {
   tasks: {
     run: (payload: unknown) => Promise<unknown>
     result: (payload: unknown) => Promise<unknown>
+    grantSpend: (payload: { nodeIds: string[]; maxAttemptsPerNode?: number }) => Promise<{ grantId: string }>
+    runTextStream: (payload: unknown) => Promise<{ streamId: string }>
+    cancelTextStream: (streamId: string) => Promise<unknown>
+    onTextEvent: (streamId: string, callback: (event: unknown) => void) => () => void
   }
   agents: {
-    chat: (payload: unknown) => Promise<unknown>
     chatV2Start: (payload: unknown) => Promise<{ sessionId: string }>
     confirmTool: (
       sessionId: string,
@@ -106,30 +165,47 @@ export type DesktopBridge = {
     ) => Promise<{ ok: boolean; error?: string }>
     cancelChatV2: (sessionId: string) => Promise<{ ok: boolean; error?: string }>
     clearChatV2Session: (sessionKey: string) => Promise<{ ok: boolean; error?: string }>
+    /** 会话历史:从线程气泡重建模型工作缓存(翻回旧对话接着聊)。 */
+    seedChatV2Session?: (sessionKey: string, messages: Array<{ role: string; content: string }>) => Promise<{ ok: boolean }>
+    /** S1b 诚实探针:LLM 是否还记得这个会话(气泡在而记忆空 → 必须画「新会话」分隔线)。 */
+    chatV2SessionAlive?: (sessionKey: string) => Promise<{ alive: boolean }>
     onChatV2Event: (sessionId: string, callback: (event: unknown) => void) => () => void
   }
+  /** S5-a/b 画布事件 → 单写者日志仓库(seq/脱敏/截断在主进程单点);read 供 hydrate 尾部重放与轨迹。 */
+  events?: {
+    append: (projectId: string, events: unknown[]) => Promise<{ ok: boolean; count: number; lastSeq: number }>
+    read: (projectId: string, fromSeq: number) => Promise<{ ok: boolean; events: unknown[] }>
+  }
+  /** S9 项目记忆卡:get=增量提炼+读;update=pin/纠正(text→origin:user);remove=删+墓碑。 */
+  memory?: {
+    get: (projectId: string) => Promise<{ ok: boolean; facts: unknown[] }>
+    update: (projectId: string, factId: string, patch: { text?: string; pinned?: boolean }) => Promise<{ ok: boolean; facts: unknown[] }>
+    remove: (projectId: string, factId: string) => Promise<{ ok: boolean; facts: unknown[] }>
+    add: (projectId: string, text: string, kind?: string) => Promise<{ ok: boolean; facts: unknown[] }>
+  }
+  /** 提示词库:主进程聚合公开仓库提示词(图/视频)+1h 缓存,renderer 取全量后本地过滤。
+   *  textBrain=节点提示词优化用的文本大脑键(不含 apiKey,渲染层据此走现成文本流式)。 */
+  promptLibrary?: {
+    list: () => Promise<{ ok: boolean; prompts: unknown[]; error?: string }>
+    textBrain: () => Promise<{ ok: boolean; brain: { vendor: string; modelKey: string } | null }>
+  }
+  /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
+  review?: {
+    onEvent: (callback: (payload: unknown) => void) => () => void
+  }
+  /** S1b-3 对话持久化(conversation 域独立文件,不混画布 payload)。committedProposal=S6-5 事务回执(审计 A6),形状由画布层校验。 */
+  conversations?: {
+    read: (projectId: string) => Promise<{ ok: boolean; conversations: PersistedConversationsV2 | null }>
+    write: (projectId: string, payload: { creation: PersistedConversationArea; generation: PersistedConversationArea; committedProposal?: unknown }) => Promise<{ ok: boolean }>
+  }
   onboarding: {
-    start: (payload: {
-      docsUrl: string
-      userApiKey: string
-      targetKind?: 'text' | 'image' | 'video' | 'audio'
-      maxSteps?: number
-      agent?: {
-        providerKind?: 'openai-compatible' | 'anthropic'
-        baseUrl?: string
-        modelId?: string
-        apiKey?: string
-      }
-    }) => Promise<{ trialId: string }>
-    cancel: (trialId: string) => Promise<{ ok: boolean; error?: string }>
-    onEvent: (trialId: string, callback: (event: unknown) => void) => () => void
     manualCommit: (payload: {
       vendorName: string
       baseUrl: string
       apiKey: string
-      providerKind?: 'openai-compatible' | 'anthropic'
+      providerKind?: ProviderKind
       headers?: Record<string, string>
-      models: Array<{ id: string; displayName?: string }>
+      models: Array<{ id: string; displayName?: string; kind?: 'text' | 'image' | 'video' }>
     }) => Promise<{
       ok: boolean
       vendorKey?: string
@@ -140,17 +216,22 @@ export type DesktopBridge = {
       baseUrl: string
       apiKey: string
       modelId?: string
-      providerKind?: 'openai-compatible' | 'anthropic'
+      /** 专家强制指定的协议。省略 + autoProbe=true 时由主进程探测。 */
+      providerKind?: ProviderKind
+      /** true = 自动探测 chat↔responses（anthropic 按 hostname 提示）。 */
+      autoProbe?: boolean
       headers?: Record<string, string>
     }) => Promise<{
       ok: boolean
       status?: number
       error?: string
+      /** 探测/确认成功的协议——渲染层据此显示「用的是 X 协议」并存盘。 */
+      detectedKind?: ProviderKind
     }>
     listModels: (payload: {
       baseUrl: string
       apiKey: string
-      providerKind?: 'openai-compatible' | 'anthropic'
+      providerKind?: ProviderKind
       headers?: Record<string, string>
     }) => Promise<{
       ok: boolean
@@ -158,6 +239,18 @@ export type DesktopBridge = {
       status?: number
       error?: string
     }>
+    /** 按 id 关键词猜模型类型（图片/视频/文本），给「类型」下拉预填，用户可改（Issue #8）。 */
+    guessKinds: (payload: { ids: string[] }) => Promise<{
+      kinds: Record<string, 'text' | 'image' | 'video'>
+    }>
+  }
+  /** 版本号 + 检查更新 + 一键更新（功能需求1/2/3）。check/download/install 用户显式触发，进度/状态走 onEvent。 */
+  update?: {
+    appInfo: () => Promise<DesktopAppInfo>
+    check: () => Promise<{ ok: boolean; reason?: string }>
+    download: () => Promise<{ ok: boolean }>
+    install: () => Promise<{ ok: boolean }>
+    onEvent: (callback: (event: DesktopUpdateEvent) => void) => () => void
   }
   modelCatalog: {
     listVendors: () => unknown[]
@@ -176,6 +269,28 @@ export type DesktopBridge = {
     importPackage: (payload: unknown) => unknown
     testMapping: (id: string, payload: unknown) => Promise<unknown>
     fetchDocs: (payload: unknown) => Promise<unknown>
+  }
+  skill: {
+    list: () => unknown[]
+    exportPackage: (dirName: string) => unknown
+    importPackage: (payload: unknown) => unknown
+  }
+  /** 能力核：上报当前打开项目，供外部调用的 A/B 守卫（可选——老 preload 无此口）。 */
+  capability?: {
+    setActiveProject: (projectId: string) => void
+    /** 「接入 AI 编程助手」卡：读接入状态 + 配置片段。 */
+    mcpInfo: () => {
+      tokenReady: boolean
+      rpcRunning: boolean
+      installed: boolean
+      configPath: string
+      snippet: string
+      server: { command: string; args: string[] }
+    }
+    /** 一键写入 ~/.claude.json 的 mcpServers.nomi（合并 + 备份）。 */
+    installMcp: () => { ok: boolean; configPath: string; backupPath: string | null }
+    /** 撤销接入：删 mcpServers.nomi。 */
+    uninstallMcp: () => { ok: boolean }
   }
 }
 

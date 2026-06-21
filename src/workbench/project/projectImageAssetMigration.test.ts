@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { localizeWorkbenchProjectDataUrls, normalizeLegacyImageAssetKinds, upgradeWorkbenchProjectMediaUrls } from './projectMediaMigration'
+import { normalizeLegacyImageAssetKinds } from './projectMediaMigration'
 import { createDefaultWorkbenchProjectPayload } from './projectRecordSchema'
 import type { WorkbenchProjectRecordV1 } from './projectRecordSchema'
-import type { GenerationCanvasNode } from '../generationCanvasV2/model/generationCanvasTypes'
-import type { DesktopBridge } from '../../desktop/bridge'
+import type { GenerationCanvasNode } from '../generationCanvas/model/generationCanvasTypes'
 
 function makeNode(overrides: Partial<GenerationCanvasNode> & { id: string }): GenerationCanvasNode {
   return {
@@ -13,7 +12,6 @@ function makeNode(overrides: Partial<GenerationCanvasNode> & { id: string }): Ge
     prompt: overrides.prompt ?? '',
     position: overrides.position || { x: 0, y: 0 },
     result: overrides.result,
-    history: overrides.history,
     meta: overrides.meta,
   } as GenerationCanvasNode
 }
@@ -80,91 +78,5 @@ describe('normalizeLegacyImageAssetKinds', () => {
   it('returns the same record reference when nothing changes', () => {
     const record = makeRecord([makeNode({ id: 'plain', kind: 'image' })])
     expect(normalizeLegacyImageAssetKinds(record)).toBe(record)
-  })
-})
-
-describe('upgradeWorkbenchProjectMediaUrls', () => {
-  it('returns the same record reference when no blob urls are present', async () => {
-    const record = makeRecord([
-      makeNode({
-        id: 'plain-url',
-        kind: 'image',
-        result: { id: 'r', type: 'image', url: 'https://example.test/a.png', createdAt: 1 } as GenerationCanvasNode['result'],
-        history: [{ id: 'h', type: 'image', thumbnailUrl: 'data:image/png;base64,abc', createdAt: 2 }] as GenerationCanvasNode['history'],
-      }),
-    ])
-    const out = await upgradeWorkbenchProjectMediaUrls(record, {
-      fetchBlob: async () => {
-        throw new Error('fetchBlob should not be called without blob urls')
-      },
-    })
-    expect(out).toBe(record)
-  })
-})
-
-describe('localizeWorkbenchProjectDataUrls', () => {
-  function makeDesktop(importedUrls: string[]): DesktopBridge {
-    let index = 0
-    return {
-      platform: 'test',
-      workspace: {} as DesktopBridge['workspace'],
-      projects: {} as DesktopBridge['projects'],
-      assets: {
-        list: async () => ({ items: [], cursor: null }),
-        importFile: async () => ({ id: 'file', name: 'file', userId: 'local', projectId: 'p1', createdAt: '', updatedAt: '', data: {} }),
-        importRemoteUrl: async () => ({
-          id: `asset-${index}`,
-          name: `asset-${index}`,
-          userId: 'local',
-          projectId: 'p1',
-          createdAt: '',
-          updatedAt: '',
-          data: { url: importedUrls[index++] || `nomi-local://asset/p1/${index}.png` },
-        }),
-      },
-      exports: {} as DesktopBridge['exports'],
-      tasks: {} as DesktopBridge['tasks'],
-      agents: {} as DesktopBridge['agents'],
-      onboarding: {} as DesktopBridge['onboarding'],
-      modelCatalog: {} as DesktopBridge['modelCatalog'],
-    }
-  }
-
-  it('returns the same record reference when no embedded data media urls exist', async () => {
-    const record = makeRecord([
-      makeNode({
-        id: 'plain-url',
-        result: { id: 'r', type: 'image', url: 'nomi-local://asset/p1/a.png', createdAt: 1 } as GenerationCanvasNode['result'],
-      }),
-    ])
-    const desktop = makeDesktop([])
-    const out = await localizeWorkbenchProjectDataUrls(record, { desktop, projectId: 'p1' })
-    expect(out.record).toBe(record)
-    expect(out.stats).toEqual({ localized: 0, skipped: 0, errors: 0 })
-  })
-
-  it('localizes embedded data media urls up to maxItems', async () => {
-    const record = makeRecord([
-      makeNode({
-        id: 'n1',
-        result: { id: 'r1', type: 'image', url: 'data:image/png;base64,aaa', createdAt: 1 } as GenerationCanvasNode['result'],
-        history: [
-          { id: 'h1', type: 'image', url: 'data:image/png;base64,bbb', createdAt: 2 },
-          { id: 'h2', type: 'image', url: 'data:image/png;base64,ccc', createdAt: 3 },
-        ] as GenerationCanvasNode['history'],
-      }),
-    ])
-    const desktop = makeDesktop([
-      'nomi-local://asset/p1/r1.png',
-      'nomi-local://asset/p1/h1.png',
-    ])
-
-    const out = await localizeWorkbenchProjectDataUrls(record, { desktop, projectId: 'p1', maxItems: 2 })
-    const [node] = out.record.payload.generationCanvas.nodes
-    expect(out.record).not.toBe(record)
-    expect(out.stats).toEqual({ localized: 2, skipped: 1, errors: 0 })
-    expect(node.result?.url).toBe('nomi-local://asset/p1/r1.png')
-    expect(node.history?.[0]?.url).toBe('nomi-local://asset/p1/h1.png')
-    expect(node.history?.[1]?.url).toBe('data:image/png;base64,ccc')
   })
 })

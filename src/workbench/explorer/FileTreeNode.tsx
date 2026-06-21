@@ -41,8 +41,8 @@ export default function FileTreeNode({ node, projectId, depth = 0 }: Props): JSX
     if (node.kind !== 'directory') openPreview(projectId, node)
   }, [node, projectId, openPreview])
 
-  // 仅图片可拖进画布（画布创建图片节点）。文件已在项目里，拖拽只传引用，不重新导入。
-  const draggable = node.kind === 'image' && Boolean(projectId)
+  // 图片/视频可拖进画布（引用已在项目里的文件，不重新导入）。
+  const draggable = (node.kind === 'image' || node.kind === 'video') && Boolean(projectId)
   const handleDragStart = React.useCallback((event: React.DragEvent<HTMLButtonElement>) => {
     if (!draggable) return
     const payload: WorkspaceFileDragPayload = { projectId, relativePath: node.relativePath, name: node.name, kind: node.kind }
@@ -65,7 +65,7 @@ export default function FileTreeNode({ node, projectId, depth = 0 }: Props): JSX
           }
         }}
         className={cn(
-          'w-full h-7 flex items-center gap-1 rounded px-1 text-left text-[12px]',
+          'w-full h-7 flex items-center gap-1 rounded px-1 text-left text-caption',
           'text-nomi-ink-60 hover:text-nomi-ink hover:bg-nomi-bg',
           selected && 'bg-nomi-bg text-nomi-ink',
           draggable && 'cursor-grab active:cursor-grabbing',
@@ -73,7 +73,7 @@ export default function FileTreeNode({ node, projectId, depth = 0 }: Props): JSX
         style={{ paddingLeft: 6 + depth * 12 }}
         title={node.relativePath}
       >
-        <span className="w-7 shrink-0 text-[9px] text-nomi-ink-40">{hasChildren ? (expanded ? '▾' : '▸') : icon(node.kind)}</span>
+        <span className="w-7 shrink-0 text-micro text-nomi-ink-40">{hasChildren ? (expanded ? '▾' : '▸') : icon(node.kind)}</span>
         <span className="truncate">{label}</span>
       </button>
       {hasChildren && expanded ? (

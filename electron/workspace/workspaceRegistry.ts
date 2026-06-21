@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonFileAtomic } from "../jsonFile";
 import { normalizeRecentWorkspaceEntry, type RecentWorkspaceEntry, type WorkspaceProjectRecordV2 } from "./workspaceTypes";
 
 function readRecentWorkspaceEntries(settingsRoot: string): RecentWorkspaceEntry[] {
@@ -15,8 +16,7 @@ function readRecentWorkspaceEntries(settingsRoot: string): RecentWorkspaceEntry[
 }
 
 function writeRecentWorkspaces(settingsRoot: string, entries: RecentWorkspaceEntry[]): void {
-  fs.mkdirSync(settingsRoot, { recursive: true });
-  fs.writeFileSync(recentWorkspacesPath(settingsRoot), `${JSON.stringify(entries, null, 2)}\n`, "utf8");
+  writeJsonFileAtomic(recentWorkspacesPath(settingsRoot), entries);
 }
 
 function sortRecentWorkspaces(entries: RecentWorkspaceEntry[]): RecentWorkspaceEntry[] {
