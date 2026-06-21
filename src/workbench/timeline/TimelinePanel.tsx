@@ -8,6 +8,7 @@ import {
   IconMinus,
   IconPlus,
   IconRefresh,
+  IconSparkles,
   IconTrash,
 } from '@tabler/icons-react'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -18,6 +19,7 @@ import TimelineTrack from './TimelineTrack'
 import TimelineTextTrack from './TimelineTextTrack'
 import { frameToPixel, pixelToFrame, TIMELINE_MIN_SCALE, TIMELINE_MAX_SCALE } from './timelineEdit'
 import { buildSnapPoints, resolveSnap, pixelThresholdToFrames } from './snapping'
+import { regenerateNodeInPlace } from '../generationCanvas/runner/generationRunController'
 
 const WHEEL_ZOOM_FACTOR = 1.24
 
@@ -86,6 +88,15 @@ export default function TimelinePanel({ density = 'compact', regionLabel, action
   // 单片工具（分割/复制/微调）作用于"最后选中"的 primary
   const primaryClipId = selectedClipIds.length > 0 ? selectedClipIds[selectedClipIds.length - 1] : ''
   const hasSelection = selectedClipIds.length > 0
+  // 选中单个媒体 clip（有源节点）→ 可「就地重生成」。文字 clip 在 textClips、不在 tracks，天然不命中。
+  const primaryMediaClip = React.useMemo(() => {
+    if (selectedClipIds.length !== 1 || !primaryClipId) return null
+    for (const track of timeline.tracks) {
+      const found = track.clips.find((clip) => clip.id === primaryClipId)
+      if (found) return found.sourceNodeId ? found : null
+    }
+    return null
+  }, [selectedClipIds, primaryClipId, timeline.tracks])
   const setTimelinePlayhead = useWorkbenchStore((state) => state.setTimelinePlayhead)
   const splitTimelineClip = useWorkbenchStore((state) => state.splitTimelineClip)
   const durationFrame = computeTimelineDuration(timeline)
@@ -245,6 +256,15 @@ export default function TimelinePanel({ density = 'compact', regionLabel, action
               'workbench-timeline__clip-tools',
               'inline-flex items-center gap-0.5 pr-0 border-r-0',
             )} aria-label="选中片段操作">
+              {primaryMediaClip ? (
+                <WorkbenchIconButton
+                  className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-accent)] shadow-none cursor-pointer hover:bg-[var(--workbench-accent-soft)]')}
+                  label="重新生成这个镜头"
+                  title="重新生成这个镜头（就地重出、贴回原位；改 prompt/参数请去画布节点）"
+                  icon={<IconSparkles size={14} />}
+                  onClick={() => { void regenerateNodeInPlace(primaryMediaClip.sourceNodeId) }}
+                />
+              ) : null}
               <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label="向前微调片段" icon={<IconArrowLeft size={14} />} onClick={() => nudgeTimelineClip(primaryClipId, -1)} />
               <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label="复制片段" icon={<IconCopy size={14} />} onClick={() => duplicateTimelineClip(primaryClipId)} />
               <WorkbenchIconButton className={cn('workbench-timeline__tool', 'w-auto min-w-[30px] h-[var(--workbench-control-size)] px-2 inline-grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] shadow-none cursor-pointer hover:bg-[var(--workbench-hover)]')} label="向后微调片段" icon={<IconArrowRight size={14} />} onClick={() => nudgeTimelineClip(primaryClipId, 1)} />
