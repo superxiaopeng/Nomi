@@ -1,8 +1,13 @@
-// agent 流式消费 + 首字块超时（从 runtime.ts 抽出——规则 9/12：别喂巨壳，且单点可测）。
+// agent 流式消费 + 首字块超时 + 流中途空闲超时（从 runtime.ts 抽出——规则 9/12：别喂巨壳，且单点可测）。
 //
 // 根因修复（2026-06-06「处理中」永转）：模型流无超时 → 端点慢/挂起 = 永久「处理中」。
-// 首字块超时：streamText 启动后若 firstChunkTimeoutMs 内无任何 chunk → abort → 报错收口。
-// 只超「等模型首响应」，不超「等用户确认工具」（确认在首字块之后发生，那时 timer 已清）。
+// 两道闸都汇到同一个 abortController：
+//  ① 首字块超时：streamText 启动后 firstChunkTimeoutMs 内无任何 chunk → abort。
+//  ② 流中途空闲超时（修首字之后的下半场）：首字到达后若 idleTimeoutMs 内无新 chunk → abort。
+//     relay 吐几个 token 后 TCP 半挂起是常见故障，旧实现只堵「首字前挂」漏了「首字后挂」。
+// 关键陷阱：等用户确认工具时 fullStream 合法静默（SDK 发 tool-call → execute await 确认 → 发
+// tool-result），这段不能算空闲。用在途工具调用计数器 gate idle 计时器：>0 暂停、归 0 恢复
+// （计数支持模型一步并行多个 tool-call 的情形）。
 
 import type { AgentChatV2Hooks } from "../runtime";
 import { describeAgentError } from "./agentError";
@@ -31,9 +36,26 @@ export async function consumeAgentStreamWithTimeout(
   result: { fullStream: AsyncIterable<StreamChunk> },
   abortController: AbortController,
   hooks: AgentChatV2Hooks,
-  opts: { firstChunkTimeoutMs: number; label: string },
+  opts: { firstChunkTimeoutMs: number; idleTimeoutMs: number; label: string },
 ): Promise<AgentStreamResult> {
   let firstChunkSeen = false;
+  // 在途工具调用计数:>0 表示正等用户确认(合法静默),idle 计时器暂停。
+  let pendingToolCalls = 0;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const clearIdle = (): void => {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = undefined; }
+  };
+  // 重置空闲窗口。仅在没有在途工具确认时才真正武装计时器。
+  const armIdle = (): void => {
+    clearIdle();
+    if (pendingToolCalls > 0) return;
+    idleTimer = setTimeout(() => {
+      console.error(`[agentv2] 流中途 ${opts.idleTimeoutMs}ms 无新内容，abort（${opts.label}）`);
+      abortController.abort(new Error(`流式 ${opts.idleTimeoutMs / 1000}s 无新内容（端点中途挂起）`));
+    }, opts.idleTimeoutMs);
+  };
+
   const timer = setTimeout(() => {
     if (!firstChunkSeen) {
       console.error(`[agentv2] 模型 ${opts.firstChunkTimeoutMs}ms 内无首字块，abort（${opts.label}）`);
@@ -65,6 +87,16 @@ export async function consumeAgentStreamWithTimeout(
       if (!firstChunkSeen) {
         firstChunkSeen = true;
         clearTimeout(timer);
+      }
+      // idle 计时器管理：tool-call=进确认等待(暂停)，tool-result=出确认(恢复)，其余=有活动(重置窗口)。
+      if (chunk.type === "tool-call") {
+        pendingToolCalls += 1;
+        clearIdle();
+      } else if (chunk.type === "tool-result") {
+        pendingToolCalls = Math.max(0, pendingToolCalls - 1);
+        armIdle();
+      } else {
+        armIdle();
       }
       if (chunk.type === "text-delta") {
         finalText += chunk.textDelta ?? "";
@@ -102,6 +134,7 @@ export async function consumeAgentStreamWithTimeout(
     return { finalText, finalFinish: "error", finalUsage, ok: false };
   } finally {
     clearTimeout(timer);
+    clearIdle();
   }
 
   hooks.emit({ type: "finish", finishReason: finalFinish, usage: finalUsage });

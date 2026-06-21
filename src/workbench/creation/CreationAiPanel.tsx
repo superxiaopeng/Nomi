@@ -16,6 +16,7 @@ import { routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
 import { WorkbenchAiHeaderActions } from '../ai/WorkbenchAiHeaderActions'
 import ActiveSkillChip from '../ai/ActiveSkillChip'
+import { importWorkbenchSkill, getAvailableSkillProviders, skillCapabilityFor, type SkillProviderKind } from '../api/skillApi'
 import { MemoryFold } from '../generationCanvas/components/MemoryFold'
 import { useWorkbenchStore } from '../workbenchStore'
 import { runStoryboardPlanner } from '../generationCanvas/agent/runStoryboardPlanner'
@@ -35,6 +36,7 @@ import { AttachmentRail } from '../ai/composer/AttachmentRail'
 import { StaleConversationDivider, useStaleConversationBoundary } from '../ai/staleConversationDivider'
 import { AutoGrowTextarea } from '../ai/composer/AutoGrowTextarea'
 import { COMPOSER_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ai/composer/useComposerAttachments'
+import { useRafCoalesce } from '../ai/useRafCoalesce'
 
 
 // The creation agent's write tools map 1:1 to the editor's document mutations.
@@ -66,6 +68,8 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   const sending = useCreationTurnStore((state) => state.sending)
   const pendingToolCalls = useCreationTurnStore((state) => state.pendingToolCalls)
   const turn = useCreationTurnStore
+  // 流式吐字 rAF 合帧：把每 token 一次的整 messages 重渲合并到每帧最多一次（治掉字掉帧）。
+  const { push: pushStreamFrame, cancel: cancelStreamFrame } = useRafCoalesce()
   // 项目记忆卡刷新键:每完成一轮(sending true→false)+1,触发记忆重取(本轮可能提炼新事实)。
   const [memoryRefreshKey, setMemoryRefreshKey] = React.useState(0)
   const prevSendingRef = React.useRef(sending)
@@ -120,6 +124,10 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   documentToolsRef.current = documentTools
 
   const activeMode = getCreationAiMode(modeId as CreationAiModeId)
+  // 同理:send 是空依赖 useCallback（稳定），不能直接闭包 activeSkill/activeMode（会捕获首渲染的旧值
+  // → 点「AI 写技能」后 send 永远看不到）。用 live ref 让 send 取最新的技能选择。
+  const skillSelRef = React.useRef({ activeSkill, activeMode })
+  skillSelRef.current = { activeSkill, activeMode }
   const documentText = React.useMemo(() => extractWorkbenchDocumentText(workbenchDocument), [workbenchDocument])
 
   const resolvePending = React.useCallback((
@@ -150,9 +158,13 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     return <IconFilePlus size={13} />
   }, [])
 
-  const launchStoryboardPlanning = React.useCallback((displayPrompt = '🎬 拆镜头') => {
+  const launchStoryboardPlanning = React.useCallback((displayPrompt = '🎬 拆镜头', revisionRequest?: string) => {
+    // P0-9 Slice 3：已有未落画布的方案 + 用户给了修改要求 → 进「改方案」模式（基于现方案改，不从头拆）。
+    const store = useWorkbenchStore.getState()
+    const currentPlan = store.storyboardPlan
+    const isRevision = Boolean(currentPlan && !store.storyboardPlanCommitted && revisionRequest?.trim())
     const storyText = (selectedText || documentText).trim()
-    if (!storyText) {
+    if (!isRevision && !storyText) {
       setError('先在左侧写一段故事，再让 AI 拆镜头。')
       return
     }
@@ -161,7 +173,7 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     setMessages((prev) => [
       ...prev,
       { id: userId, role: 'user', content: displayPrompt },
-      { id: assistantId, role: 'assistant', content: '正在拆镜头，整理分镜方案…', status: 'pending' as const },
+      { id: assistantId, role: 'assistant', content: isRevision ? '正在按你的要求修改方案…' : '正在拆镜头，整理分镜方案…', status: 'pending' as const },
     ])
     setDraft('')
     setError('')
@@ -171,17 +183,19 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     void (async () => {
       try {
         const { text } = await runStoryboardPlanner({
-          storyText,
+          ...(isRevision ? { currentPlan, revisionRequest } : { storyText }),
           onContent: (streamed) => {
             if (!handle.isCurrent()) return
-            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: streamed || '正在拆镜头…', status: 'streaming' as const } : m)))
+            pushStreamFrame(() =>
+              setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: streamed || '正在拆镜头…', status: 'streaming' as const } : m))),
+            )
           },
           onCancelReady: (cancel) => turn.getState().attachCancel(handle.id, cancel),
         })
         if (!handle.isCurrent()) return // 轮次已被切项目/新对话作废:别把旧项目内容写进新项目
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, content: text || '分镜方案已生成，见下方卡片——可打开编辑、修改后确认落画布。', status: 'done' as const } : m,
+            m.id === assistantId ? { ...m, content: text || (isRevision ? '方案已按你的要求更新，见下方编辑器。' : '分镜方案已生成，见下方卡片——可打开编辑、修改后确认落画布。'), status: 'done' as const } : m,
           ),
         )
       } catch (error: unknown) {
@@ -194,10 +208,11 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
           ),
         )
       } finally {
+        cancelStreamFrame() // 终态已落定，丢弃任何挂起的流式合帧，别用过期文本盖掉终态
         turn.getState().finish(handle.id)
       }
     })()
-  }, [documentText, selectedText, setDraft, setError, setMessages, turn])
+  }, [cancelStreamFrame, documentText, pushStreamFrame, selectedText, setDraft, setError, setMessages, turn])
 
   // Tier2 定妆：把剧本交给 AI，按剧本为主要角色/场景建卡 + 注入身份板提示词（与拆镜头同构）。
   const launchFixationPlanning = React.useCallback((displayPrompt = '🎭 立角色卡') => {
@@ -230,8 +245,16 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     }
     const readyAttachments = attachments.filter((item) => item.status === 'ready' && item.url)
     if (!userRequest && !selectedText && !documentText && !readyAttachments.length) return
+    // P0-9 Slice 3：方案审阅中（编辑器替换了文档编辑器，用户正盯着方案）→ 输入即视为对现方案的
+    // 修改要求（「全部加负面词 / 统一冷调 / 第 3 镜改特写」等），交规划师基于现方案改、保留其余。
+    if (useWorkbenchStore.getState().storyboardEditorOpen && userRequest) {
+      launchStoryboardPlanning(userRequest, userRequest)
+      return
+    }
     // 对话驱动（删固定 chip，用户拍板 2026-06-13）：自然语言意图 → 甩给画布 agent。
-    const intent = routeCreationIntent(userRequest)
+    // 但手动锁定了 active skill（如「AI 写技能」）时跳过意图路由——否则含「分镜/镜头」等词的输入
+    // 会被劫持到拆镜头流程，盖过用户明确选的技能。锁定 = 用户已明确意图，直走那个 skill。
+    const intent = skillSelRef.current.activeSkill ? null : routeCreationIntent(userRequest)
     if (intent === 'storyboard') {
       launchStoryboardPlanning(userRequest || '🎬 拆镜头')
       return
@@ -268,13 +291,15 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         sessionKey: workbenchSessionKey('creation'),
         projectId: readWindowUrlParam('projectId'),
         // 手动锁定的 active skill 优先（如「品牌宣传片」playbook）；否则回退创作模式推导。
-        skillKey: activeSkill ? activeSkill.key : `workbench.creation.${activeMode.id}`,
-        skillName: activeSkill ? activeSkill.name : activeMode.title,
+        skillKey: skillSelRef.current.activeSkill ? skillSelRef.current.activeSkill.key : `workbench.creation.${skillSelRef.current.activeMode.id}`,
+        skillName: skillSelRef.current.activeSkill ? skillSelRef.current.activeSkill.name : skillSelRef.current.activeMode.title,
         onContent: (_delta, streamedText) => {
           if (!handle.isCurrent()) return
-          setMessages((prev) => prev.map((message) => (
-            message.id === pendingId ? { ...message, content: streamedText, status: 'streaming' as const } : message
-          )))
+          pushStreamFrame(() =>
+            setMessages((prev) => prev.map((message) => (
+              message.id === pendingId ? { ...message, content: streamedText, status: 'streaming' as const } : message
+            ))),
+          )
         },
         onCancelReady: (cancel) => turn.getState().attachCancel(handle.id, cancel),
         onToolCall: (event: ToolCallEvent) => {
@@ -290,6 +315,36 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
           }
           if (event.toolName === 'read_selection') {
             void event.confirm({ ok: true, result: { text: documentToolsRef.current?.readSelectionText() ?? '' } })
+            return
+          }
+          // author_skill：转写出一个 Nomi skill 并落地。低风险（存文本文件、可逆、不花钱）→
+          // 自动落地，不弹确认卡；审阅靠「试跑一次」（用户拍板的 effect-first）。把能力差集喂回 LLM，
+          // 让它在回复里诚实标缺口（缺哪个 provider）。
+          if (event.toolName === 'author_skill') {
+            const args = (event.args && typeof event.args === 'object') ? event.args as Record<string, unknown> : {}
+            const manifest = args.manifest
+            const dirName = typeof args.dirName === 'string' && args.dirName.trim() ? args.dirName : 'imported-skill'
+            const skillMarkdown = typeof args.skillMarkdown === 'string' ? args.skillMarkdown : ''
+            const pkg = {
+              version: 'nomi-skill-v1' as const,
+              exportedAt: Date.now(),
+              dirName,
+              files: { 'SKILL.md': skillMarkdown, 'skill.json': JSON.stringify(manifest ?? {}, null, 2) },
+            }
+            const res = importWorkbenchSkill(pkg)
+            if (!res.ok) {
+              void event.confirm({ ok: false, message: res.error ?? 'skill 保存失败' })
+              return
+            }
+            const needed = (manifest && typeof manifest === 'object' && Array.isArray((manifest as Record<string, unknown>).requiredProviders))
+              ? (manifest as { requiredProviders: SkillProviderKind[] }).requiredProviders
+              : []
+            void getAvailableSkillProviders()
+              .then((available) => {
+                const cap = skillCapabilityFor({ neededProviders: needed }, available)
+                void event.confirm({ ok: true, result: { saved: true, skillName: res.skillName, dirName: res.dirName, missingProviders: cap.missing, satisfied: cap.satisfied } })
+              })
+              .catch(() => void event.confirm({ ok: true, result: { saved: true, skillName: res.skillName, dirName: res.dirName } }))
             return
           }
           // Write tools wait for explicit user approval through a card.
@@ -341,9 +396,10 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
         item.id === pendingId ? { ...item, content: `（错误）${message}`, status: 'error' as const } : item
       )))
     } finally {
+      cancelStreamFrame() // 终态已落定，丢弃任何挂起的流式合帧，别用过期文本盖掉终态
       turn.getState().finish(handle.id)
     }
-  }, [activeMode, attachments, clearAttachments, documentText, draft, launchStoryboardPlanning, launchFixationPlanning, selectedText, setDraft, setError, setMessages, turn])
+  }, [activeMode, activeSkill, attachments, cancelStreamFrame, clearAttachments, documentText, draft, launchStoryboardPlanning, launchFixationPlanning, pushStreamFrame, selectedText, setDraft, setError, setMessages, turn])
 
   // 通用创作动作，贴 Nomi 视频创作调性、不绑小说题材（旧的「悬疑开场/童话语气」在产品/宣传项目里调性错配）。
   const suggestions = React.useMemo(() => [

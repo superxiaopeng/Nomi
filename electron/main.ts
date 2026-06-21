@@ -33,6 +33,7 @@ import {
   ensureBuiltinModelSeeds,
 } from "./runtime";
 import { extractVideoFrameToAsset } from "./video/extractVideoFrame";
+import { mintSpendGrant } from "./spendGrant";
 import { listSkillsForRenderer } from "./skills/skillIpc";
 import { exportSkillPackageByName, importSkillPackageToUserDir } from "./skills/skillPackage";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
@@ -47,14 +48,32 @@ import { registerConversationsIpc } from "./conversations/conversationsIpc";
 import { setEventLogSecretsProvider } from "./events/eventLogRepository";
 import { registerEventsIpc } from "./events/eventsIpc";
 import { registerMemoryIpc } from "./memory/memoryIpc";
+import { registerPromptLibraryIpc } from "./promptLibrary/promptLibraryIpc";
 import { catalogSecretsProvider } from "./events/secretsProvider";
 import { VendorRequestError, encodeVendorErrorMessage } from "./vendor/vendorHttp";
 import { traceVendorCompleted } from "./events/vendorCallTrace";
 import { registerOnboardingIpc } from "./ai/onboarding/onboardingIpc";
 import { registerUpdaterIpc } from "./update/autoUpdater";
+import { startCapabilityCore, stopCapabilityCore, setOpenProjectId } from "./capabilityCore/appIntegration";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
+
+// 单实例锁（能力核前提，docs/plan/2026-06-20）：保证同一 user-data 只有一个 app 实例 = 工程文件的
+// 唯一写者，外部 CLI/MCP 才能安全地「app 开着走 RPC、关着走 headless」。隔离实例（eval/promo 用独立
+// --user-data-dir）拿到的是各自的锁，不受影响。拿不到锁 = 已有实例在跑 → 让出（聚焦老窗后退出）。
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [existing] = BrowserWindow.getAllWindows();
+    if (existing) {
+      if (existing.isMinimized()) existing.restore();
+      existing.focus();
+    }
+  });
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -162,6 +181,16 @@ async function createWindow(): Promise<void> {
   });
 
   const rendererUrl = getRendererUrl();
+
+  // 纵深防御：setWindowOpenHandler 只拦新窗口，拦不住顶层框架自身被诱导导航
+  // （window.location = 'http://evil'）。一旦发生，整个 app 会变成加载远端页面的浏览器。
+  // 这里把任何「离开本地渲染入口」的顶层导航一律拦下；外链改走系统浏览器。
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url === rendererUrl) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  });
+
   registerDevDiagnostics(mainWindow, rendererUrl);
   await loadRendererWithRetry(mainWindow, rendererUrl);
 
@@ -302,17 +331,76 @@ function registerIpc(): void {
   ipcMain.handle("nomi:assets:download", (_event, payload) => downloadAssetToDisk(payload));
   ipcMain.handle("nomi:video:extract-frame", (_event, payload) => extractVideoFrameToAsset(payload));
   registerExportJobIpc();
+  // 付费守卫铸令牌：仅由渲染层「真人确认」事件链调用（务实纵深：铸造面小而审计过 + 主进程硬闸兜底）。
+  ipcMain.handle("nomi:tasks:grant-spend", (_event, payload) => {
+    const raw = (payload || {}) as { nodeIds?: unknown; maxAttemptsPerNode?: unknown };
+    const nodeIds = Array.isArray(raw.nodeIds) ? raw.nodeIds.map((id) => String(id)) : [];
+    const maxAttemptsPerNode = typeof raw.maxAttemptsPerNode === "number" ? raw.maxAttemptsPerNode : undefined;
+    return { grantId: mintSpendGrant({ nodeIds, ...(maxAttemptsPerNode ? { maxAttemptsPerNode } : {}) }) };
+  });
   ipcMain.handle("nomi:tasks:run", (_event, payload) => runTaskIpcGuard(payload, () => runTask(payload)));
   ipcMain.handle("nomi:tasks:result", (_event, payload) => runTaskIpcGuard(payload, () => fetchTaskResult(payload)));
+  // 能力核 A/B 守卫：renderer 在打开/切换/关闭项目时上报当前打开的 projectId，
+  // 让外部调用拒绝直写「正在窗口里编辑」的工程（防内存 store 回盘覆盖，见 capabilityCore/rpcServer）。
+  ipcMain.on("nomi:capability:active-project", (_event, projectId: unknown) => setOpenProjectId(String(projectId || "")));
   registerAgentChatV2Ipc();
   registerTextStreamIpc();
   registerConversationsIpc();
   registerEventsIpc();
   registerMemoryIpc();
+  registerPromptLibraryIpc();
   registerOnboardingIpc();
   registerUpdaterIpc();
   // S4-1 评测安全铁律:事件落盘前,已配置的 vendor key 精确匹配脱敏(形态兜底之外的地基)。
   setEventLogSecretsProvider(catalogSecretsProvider);
+}
+
+// 纵深防御：渲染层此前在「无 CSP」环境运行，contextIsolation 是唯一防线。
+// 注入严格 CSP，让任何被注入的脚本/远端内容无法自由 eval、连外站、加外部资源。
+// dev/prod 分治：dev 下 vite HMR 需要 unsafe-eval + inline + ws 回连，故放宽；
+// prod（打包后从 file:// 加载）收紧——脚本只许 'self'，外联仅图片/媒体/连接到 https。
+function buildContentSecurityPolicy(): string {
+  const common = [
+    "default-src 'self' nomi-local:",
+    "img-src 'self' nomi-local: https: data: blob:",
+    "media-src 'self' nomi-local: https: data: blob:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-src 'none'",
+    "worker-src 'self' blob:",
+  ];
+  if (isDev) {
+    // vite dev server：HMR 走 ws、sourcemap/模块求值需要 eval、注入 inline 脚本与样式。
+    // blob:：3D 编辑器（Three.js GLTF/meshopt 解码）的 worker 经 blob 脚本 importScripts。
+    return [
+      ...common,
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: http://127.0.0.1:5173",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' nomi-local: https: ws://127.0.0.1:5173 http://127.0.0.1:5173",
+    ].join("; ");
+  }
+  return [
+    ...common,
+    // prod：vite 产物为外链脚本，无需 inline/eval。但 3D 编辑器要 'wasm-unsafe-eval'（Three.js
+    // GLTF/meshopt 解码器实例化 WASM）+ blob:（解码 worker 经 blob 脚本 importScripts）。
+    // 'wasm-unsafe-eval' 只放行 WASM 编译，不开放危险的 JS eval（比 'unsafe-eval' 收得紧）。
+    "script-src 'self' 'wasm-unsafe-eval' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' nomi-local: https:",
+  ].join("; ");
+}
+
+function installContentSecurityPolicy(targetSession: Electron.Session): void {
+  const csp = buildContentSecurityPolicy();
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [csp],
+      },
+    });
+  });
 }
 
 function registerLocalProtocol(): void {
@@ -338,8 +426,11 @@ function registerLocalProtocol(): void {
   });
 }
 
-app.whenReady().then(async () => {
+// 非主实例（没拿到单实例锁）不启动 UI / RPC——已让出给老实例（second-instance 已聚焦它）。
+// 单实例锁本身在文件顶部定义（main 与本批独立都加了同一锁，合并去重，根治全局 index 并发覆盖）。
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
   registerLocalProtocol();
+  installContentSecurityPolicy(session.defaultSession);
   // 启动即探测系统/环境代理并应用到全局 fetch，让"测试连接/调 AI API/拉模型"能穿透代理。
   // 失败只记日志、不抛——绝不拖垮启动。须在任何出站请求前完成。
   await applySystemProxy(session.defaultSession);
@@ -350,6 +441,9 @@ app.whenReady().then(async () => {
     console.error("[nomi:desktop] ensureBuiltinModelSeeds failed:", error);
   }
   registerIpc();
+  // 能力核对外口（RPC + 实例广告）：让外部 Claude Code/Codex 经 CLI/MCP 在本地驱动 Nomi。
+  // fail-open：内部不抛，绝不影响 app 启动。
+  await startCapabilityCore(runTask, fetchTaskResult);
   await createWindow();
 
   app.on("activate", () => {
@@ -371,6 +465,8 @@ app.on("window-all-closed", () => {
 // 退出时中止所有在跑导出，否则 ffmpeg 子进程会变孤儿（继续占 CPU/写文件，直到自己跑完）。
 // abort → ffmpegRunner 监听 abort 后 kill 子进程。同步、不抛，绝不拖住退出。
 app.on("before-quit", () => {
+  // 能力核退出清理：清实例广告 + 关 RPC，让外部探测立刻知道「app 已关」。同步、不抛。
+  stopCapabilityCore();
   try {
     const aborted = abortAllActiveExports();
     if (aborted > 0) console.log(`[nomi:desktop] aborted ${aborted} in-flight export(s) on quit`);

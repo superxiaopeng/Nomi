@@ -141,6 +141,12 @@ export function editorCameraFromSceneCamera(cameraData: Scene3DCamera): Scene3DS
   }
 }
 
+export function cameraAimSpherical(camera: Scene3DCamera): THREE.Spherical {
+  const direction = vectorFromArray(camera.target).sub(vectorFromArray(camera.position))
+  if (direction.lengthSq() < 0.0001) direction.set(0, -0.2, 1)
+  return new THREE.Spherical().setFromVector3(direction)
+}
+
 export function eulerToArray(value: THREE.Euler): Scene3DVector3 {
   return [
     Number(value.x.toFixed(4)),
@@ -156,6 +162,23 @@ export function vectorAlmostEqual(a: Scene3DVector3, b: Scene3DVector3, epsilon 
     Math.abs(a[2] - b[2]) <= epsilon
   )
 }
+
+export function crowdRows(object: Scene3DObject): number {
+  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdRows || 1)))
+}
+
+export function crowdColumns(object: Scene3DObject): number {
+  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdColumns || 1)))
+}
+
+export function crowdSpacing(object: Scene3DObject): number {
+  return Math.min(10, Math.max(0.2, object.crowdSpacing || 1.2))
+}
+
+export function crowdCount(object: Scene3DObject): number {
+  return object.type === 'mannequinCrowd' ? crowdRows(object) * crowdColumns(object) : 1
+}
+
 
 // 相机位姿的扁平采样：9 个原始 number（位置 xyz + 旋转 xyz + 目标 xyz）。
 // 用扁平结构而非 Scene3DVector3[]，让 useFrame 每帧从 THREE 对象就地读 .x/.y/.z 填进同一个 ref 对象，
@@ -324,6 +347,11 @@ export function captureScene(
 
 export function roleColorForIndex(index: number): string {
   return ROLE_COLOR_SEQUENCE[index % ROLE_COLOR_SEQUENCE.length]
+}
+
+export function mannequinRoleLabel(index: number): string {
+  if (index < 26) return `角色${String.fromCharCode(65 + index)}`
+  return `角色A${index - 25}`
 }
 
 export function clampCrowdOptions(options: CrowdAddOptions): CrowdAddOptions {

@@ -124,6 +124,19 @@ function chooseTextModel(prefModelKey?: string, preferImageInput = false): { ven
   throw new Error("No local text model is configured. Open model settings and add an API key.");
 }
 
+/**
+ * 解析默认文本大脑的 vendor/model 键（**不含 apiKey**,供渲染层经现成文本流式管线复用——
+ * 提示词优化与创作助手用同一个脑,P4 通用）。拿不到(没配文本模型)返回 null。
+ */
+export function resolveTextBrainKeys(): { vendor: string; modelKey: string } | null {
+  try {
+    const { vendor, model } = chooseTextModel();
+    return { vendor: vendor.key, modelKey: model.modelKey };
+  } catch {
+    return null;
+  }
+}
+
 // vendor→LanguageModel 构造已抽到 ./vendorLanguageModel（单一真相,与文本任务引擎共用）。
 
 // ---------------------------------------------------------------------------
@@ -174,7 +187,9 @@ export type AgentChatV2Hooks = {
 // human-in-the-loop confirmation channel: emit `tool-call`, await the user's
 // decision, then emit `tool-result` / `tool-error` and feed a structured
 // result back to the model. Shared by both the canvas and document tool groups.
-function makeAgentTool<TParams extends z.ZodTypeAny>(
+// 导出仅供集成测试（agentLoopIntegration.test.ts）驱动真实「确认门焊接」路径——
+// 生产代码仍只经 buildCanvasToolsForV2 / 文档工具组取用，不直接调。
+export function makeAgentTool<TParams extends z.ZodTypeAny>(
   hooks: AgentChatV2Hooks,
   toolName: AgentToolName,
   description: string,
@@ -303,6 +318,7 @@ function buildDocumentToolsForV2(hooks: AgentChatV2Hooks) {
     insert_at_cursor: make("insert_at_cursor"),
     replace_selection: make("replace_selection"),
     append_to_end: make("append_to_end"),
+    author_skill: make("author_skill"),
   } as const;
 }
 
@@ -518,7 +534,7 @@ export async function runAgentChatV2(
     { mode: "stream" },
   );
 
-  const { finalText, finalFinish, finalUsage, ok } = await consumeAgentStreamWithTimeout(result, abortController, hooks, { firstChunkTimeoutMs: 90_000, label: `${vendor?.key}/${model?.modelKey}/${resolvedSkillKey}` });
+  const { finalText, finalFinish, finalUsage, ok } = await consumeAgentStreamWithTimeout(result, abortController, hooks, { firstChunkTimeoutMs: 90_000, idleTimeoutMs: 120_000, label: `${vendor?.key}/${model?.modelKey}/${resolvedSkillKey}` });
 
   // 空响应说人话（根因2）：finishReason=length + 空文本 = 典型「弱模型把内容塞进写工具 JSON
   // 被 max_tokens 截断」的失败签名（如 moonshot-v1 vision）。抛出带原因 + 换模型引导的错误，

@@ -39,7 +39,7 @@ import {
 import { getTrackTypeForClipType } from "../../timeline/timelineTypes";
 import { buildClipFromGenerationNode } from "../model/buildClipFromGenerationNode";
 import { toast } from "../../../ui/toast";
-import { canRunGenerationNode, runGenerationNode } from "../runner/generationRunController";
+import { canRunGenerationNode, confirmAndRunNode } from "../runner/generationRunController";
 import { NodeErrorReport } from "./NodeErrorReport";
 import { WorkbenchButton } from "../../../design";
 import NodeGenerationComposer from "./NodeGenerationComposer";
@@ -669,7 +669,7 @@ function BaseGenerationNodeImpl({
             {status === "error" && node.error ? (
                 <NodeErrorReport
                     message={node.error}
-                    onRetry={() => { void runGenerationNode(node.id) }}
+                    onRetry={() => { void confirmAndRunNode(node.id) }}
                 />
             ) : null}
 

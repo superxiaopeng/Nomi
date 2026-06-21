@@ -82,8 +82,9 @@ export function gradeCase(evalCase, output) {
     checks.push(component("createdShots", created.length >= min && created.length <= max, `created=${created.length} expected=[${min},${max}]`));
   }
   if (expect.kind) {
-    // kind 支持 string 或数组。用户已裁定(2026-06-15)image-first:拆镜头默认 image(先锁画面再动),
-    // 仅用户明说"要视频/动起来"才 video(数据集 sb-016 即此)。故每个 case 的 expect.kind 直接钉死期望种类。
+    // kind 支持 string 或数组。用户裁定(2026-06-21,反转 6-15 image-first):拆镜头默认 video
+    // (分镜即视频,与主链路一致),仅用户明说"只要图/先出关键画面"才 image(数据集 sb-016 即此)。
+    // 故每个 case 的 expect.kind 直接钉死期望种类。
     const allowed = Array.isArray(expect.kind) ? expect.kind : [expect.kind];
     const bad = created.filter((n) => !allowed.includes(n.kind));
     checks.push(component("kind", bad.length === 0, bad.length ? `${bad.length} 个节点 kind∉[${allowed}]` : `kind ∈ [${allowed}]`));

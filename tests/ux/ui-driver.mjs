@@ -27,9 +27,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
 for (const f of fs.readdirSync(DIR)) fs.rmSync(path.join(DIR, f), { force: true });
 
 // 多会话隔离（另一半根治）：单实例锁是 per-userData（main.ts:63）。默认用系统 userData
-// （单会话便利:能开已有/示例项目）；设 NOMI_UI_USER_DATA=<dir> 则用隔离 userData 起一份
-// 全新实例——多会话同时跑时必须用它，否则抢默认 userData 的锁会起不来/聚焦到别人的窗口。
-const isolateArgs = process.env.NOMI_UI_USER_DATA ? [`--user-data-dir=${process.env.NOMI_UI_USER_DATA}`] : [];
+// （单会话便利:能开已有/示例项目）；设 NOMI_UI_USER_DATA（兼容 main 早先的 NOMI_UI_USERDATA）
+// 则用隔离 userData 起一份全新实例——多会话同时跑时必须用它，否则抢默认 userData 的锁会起不来。
+const isolateUserData = process.env.NOMI_UI_USER_DATA || process.env.NOMI_UI_USERDATA;
+const isolateArgs = isolateUserData ? [`--user-data-dir=${isolateUserData}`] : [];
 const app = await electron.launch({ executablePath: require("electron"), args: [".", ...isolateArgs], cwd: repoRoot, env: { ...process.env } });
 const ERRLOG = path.join(DIR, "errors.log");
 const logErr = (kind, msg) => { try { fs.appendFileSync(ERRLOG, `[${kind}] ${msg}\n`); } catch { /* ignore */ } };

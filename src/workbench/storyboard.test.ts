@@ -189,7 +189,7 @@ describe('Phase C storyboard happy path', () => {
 
   describe('buildStoryboardPlanningMessage', () => {
     it('wraps the story with delimiter markers and the planner instruction', () => {
-      const message = buildStoryboardPlanningMessage('  Once upon a time...  ')
+      const message = buildStoryboardPlanningMessage({ storyText: '  Once upon a time...  ' })
       expect(message).toContain('propose_storyboard_plan')
       expect(message).toContain('分镜方案')
       expect(message).toContain('--- 故事正文 ---')
@@ -197,6 +197,24 @@ describe('Phase C storyboard happy path', () => {
       expect(message).toContain('Once upon a time...')
       // Whitespace around the story should be trimmed.
       expect(message).not.toContain('  Once')
+    })
+
+    it('修改模式：带当前方案 + 修改要求时，产出基于现方案的修改指令（P0-9 Slice 3）', () => {
+      const currentPlan = {
+        title: '测试方案 · 2 镜',
+        anchors: [{ id: 'anchor-1', kind: 'character', name: '小明', carrier: 'visual', description: '少年' }],
+        shots: [
+          { index: 1, durationSec: 5, anchorIds: ['anchor-1'], prompt: '推镜，小明走进教室' },
+          { index: 2, durationSec: 5, anchorIds: ['anchor-1'], prompt: '特写，小明坐下' },
+        ],
+      }
+      const message = buildStoryboardPlanningMessage({ currentPlan, revisionRequest: '把所有镜头时长改成 8 秒' })
+      expect(message).toContain('propose_storyboard_plan')
+      expect(message).toContain('--- 当前方案(JSON) ---')
+      expect(message).toContain('小明')
+      expect(message).toContain('把所有镜头时长改成 8 秒')
+      // 修改模式不该带「故事正文」骨架。
+      expect(message).not.toContain('--- 故事正文 ---')
     })
 
     it('exports the planner skill descriptor for the canvas assistant', () => {
