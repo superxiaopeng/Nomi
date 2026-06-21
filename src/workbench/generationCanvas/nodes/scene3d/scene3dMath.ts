@@ -157,6 +157,23 @@ export function vectorAlmostEqual(a: Scene3DVector3, b: Scene3DVector3, epsilon 
   )
 }
 
+export function crowdRows(object: Scene3DObject): number {
+  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdRows || 1)))
+}
+
+export function crowdColumns(object: Scene3DObject): number {
+  return Math.min(CROWD_MAX_AXIS, Math.max(1, Math.round(object.crowdColumns || 1)))
+}
+
+export function crowdSpacing(object: Scene3DObject): number {
+  return Math.min(10, Math.max(0.2, object.crowdSpacing || 1.2))
+}
+
+export function crowdCount(object: Scene3DObject): number {
+  return object.type === 'mannequinCrowd' ? crowdRows(object) * crowdColumns(object) : 1
+}
+
+
 // 相机位姿的扁平采样：9 个原始 number（位置 xyz + 旋转 xyz + 目标 xyz）。
 // 用扁平结构而非 Scene3DVector3[]，让 useFrame 每帧从 THREE 对象就地读 .x/.y/.z 填进同一个 ref 对象，
 // 零数组分配即可比对——只有真的动了才进入分配 cameraState + 回调的路径（消除相机静止时的 60fps churn）。

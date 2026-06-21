@@ -181,6 +181,16 @@ async function createWindow(): Promise<void> {
   });
 
   const rendererUrl = getRendererUrl();
+
+  // 纵深防御：setWindowOpenHandler 只拦新窗口，拦不住顶层框架自身被诱导导航
+  // （window.location = 'http://evil'）。一旦发生，整个 app 会变成加载远端页面的浏览器。
+  // 这里把任何「离开本地渲染入口」的顶层导航一律拦下；外链改走系统浏览器。
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url === rendererUrl) return;
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  });
+
   registerDevDiagnostics(mainWindow, rendererUrl);
   await loadRendererWithRetry(mainWindow, rendererUrl);
 
@@ -345,6 +355,54 @@ function registerIpc(): void {
   setEventLogSecretsProvider(catalogSecretsProvider);
 }
 
+// 纵深防御：渲染层此前在「无 CSP」环境运行，contextIsolation 是唯一防线。
+// 注入严格 CSP，让任何被注入的脚本/远端内容无法自由 eval、连外站、加外部资源。
+// dev/prod 分治：dev 下 vite HMR 需要 unsafe-eval + inline + ws 回连，故放宽；
+// prod（打包后从 file:// 加载）收紧——脚本只许 'self'，外联仅图片/媒体/连接到 https。
+function buildContentSecurityPolicy(): string {
+  const common = [
+    "default-src 'self' nomi-local:",
+    "img-src 'self' nomi-local: https: data: blob:",
+    "media-src 'self' nomi-local: https: data: blob:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-src 'none'",
+    "worker-src 'self' blob:",
+  ];
+  if (isDev) {
+    // vite dev server：HMR 走 ws、sourcemap/模块求值需要 eval、注入 inline 脚本与样式。
+    // blob:：3D 编辑器（Three.js GLTF/meshopt 解码）的 worker 经 blob 脚本 importScripts。
+    return [
+      ...common,
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: http://127.0.0.1:5173",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' nomi-local: https: ws://127.0.0.1:5173 http://127.0.0.1:5173",
+    ].join("; ");
+  }
+  return [
+    ...common,
+    // prod：vite 产物为外链脚本，无需 inline/eval。但 3D 编辑器要 'wasm-unsafe-eval'（Three.js
+    // GLTF/meshopt 解码器实例化 WASM）+ blob:（解码 worker 经 blob 脚本 importScripts）。
+    // 'wasm-unsafe-eval' 只放行 WASM 编译，不开放危险的 JS eval（比 'unsafe-eval' 收得紧）。
+    "script-src 'self' 'wasm-unsafe-eval' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' nomi-local: https:",
+  ].join("; ");
+}
+
+function installContentSecurityPolicy(targetSession: Electron.Session): void {
+  const csp = buildContentSecurityPolicy();
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [csp],
+      },
+    });
+  });
+}
+
 function registerLocalProtocol(): void {
   protocol.handle("nomi-local", async (request) => {
     try {
@@ -369,8 +427,10 @@ function registerLocalProtocol(): void {
 }
 
 // 非主实例（没拿到单实例锁）不启动 UI / RPC——已让出给老实例（second-instance 已聚焦它）。
+// 单实例锁本身在文件顶部定义（main 与本批独立都加了同一锁，合并去重，根治全局 index 并发覆盖）。
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   registerLocalProtocol();
+  installContentSecurityPolicy(session.defaultSession);
   // 启动即探测系统/环境代理并应用到全局 fetch，让"测试连接/调 AI API/拉模型"能穿透代理。
   // 失败只记日志、不抛——绝不拖垮启动。须在任何出站请求前完成。
   await applySystemProxy(session.defaultSession);

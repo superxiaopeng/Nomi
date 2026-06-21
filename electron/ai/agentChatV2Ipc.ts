@@ -12,12 +12,30 @@ type AgentChatV2Session = {
   webContentsId: number;
   pendingConfirmations: Map<string, {
     resolve: (decision: { ok: true; result: unknown } | { ok: false; message: string }) => void;
+    timeout: ReturnType<typeof setTimeout>;
   }>;
   cancelled: boolean;
   abortController: AbortController;
 };
 
+// 工具确认无限期等用户回话 → 渲染层崩溃/卸载/IPC 事件丢失时，主进程永久 await + session 泄漏。
+// 兜底上限：超时自动按「拒绝」收口（与用户 Stop 同出口），让 agent loop 干净退出、Map 清理。
+// 设宽松（10 分钟）——只为兜「永远不会来的确认」，正常用户深思熟虑绰绰有余。
+const CONFIRM_TIMEOUT_MS = 10 * 60_000;
+
 const agentChatV2Sessions = new Map<string, AgentChatV2Session>();
+
+// 统一取消出口：abort 在途流 + 解开所有挂起确认（清各自超时定时器）。
+// 被「cancel IPC」与「渲染层 webContents 销毁」两处复用——后者根治「窗口关了但主进程还在 await」。
+function cancelAgentChatV2Session(session: AgentChatV2Session): void {
+  session.cancelled = true;
+  session.abortController.abort();
+  for (const [toolCallId, pending] of session.pendingConfirmations) {
+    clearTimeout(pending.timeout);
+    pending.resolve({ ok: false, message: "session cancelled" });
+    session.pendingConfirmations.delete(toolCallId);
+  }
+}
 
 function sendChatV2Event(session: AgentChatV2Session, event: unknown): void {
   // 结构化轨迹旁路(S3):先记账再投递;翻译器内部吞掉一切失败,绝不影响对话。
@@ -40,6 +58,13 @@ export function registerAgentChatV2Ipc(): void {
     agentChatV2Sessions.set(sessionId, session);
     beginTurnTrace(sessionId, payload);
 
+    // 渲染层（窗口/标签）销毁 → 任何挂起确认永远不会回话。监听 destroyed，按取消收口，
+    // 根治「窗口关了主进程还在 await + session 泄漏」整类（确认超时是再下一层兜底）。
+    event.sender.once("destroyed", () => {
+      const live = agentChatV2Sessions.get(sessionId);
+      if (live) cancelAgentChatV2Session(live);
+    });
+
     // Run the agent loop asynchronously so the IPC call can return the
     // sessionId immediately; the renderer subscribes to events first.
     queueMicrotask(() => {
@@ -51,7 +76,15 @@ export function registerAgentChatV2Ipc(): void {
             resolve({ ok: false, message: "session cancelled" });
             return;
           }
-          session.pendingConfirmations.set(toolCallId, { resolve });
+          // 兜底超时：渲染层若永不回话（崩溃/事件丢失），到点自动按拒绝收口并清理。
+          const timeout = setTimeout(() => {
+            const pending = session.pendingConfirmations.get(toolCallId);
+            if (!pending) return;
+            session.pendingConfirmations.delete(toolCallId);
+            console.error(`[agentv2] 工具确认 ${CONFIRM_TIMEOUT_MS / 60_000} 分钟无响应，自动跳过（${toolName}）`);
+            pending.resolve({ ok: false, message: "工具确认超时（长时间无响应，已自动跳过）" });
+          }, CONFIRM_TIMEOUT_MS);
+          session.pendingConfirmations.set(toolCallId, { resolve, timeout });
           sendChatV2Event(session, {
             type: "tool-call-pending",
             toolCallId,
@@ -91,6 +124,7 @@ export function registerAgentChatV2Ipc(): void {
     if (!session) return { ok: false, error: "session not found" };
     const pending = session.pendingConfirmations.get(payload.toolCallId);
     if (!pending) return { ok: false, error: "tool call not pending" };
+    clearTimeout(pending.timeout);
     session.pendingConfirmations.delete(payload.toolCallId);
     if (payload.decision && payload.decision.ok === true) {
       // 只读 allow 不入日志(§6.1 纯噪声);写操作批准才记对账快照。
@@ -117,14 +151,8 @@ export function registerAgentChatV2Ipc(): void {
   ipcMain.handle("nomi:agents:chatV2:cancel", async (_event, payload: { sessionId: string }) => {
     const session = agentChatV2Sessions.get(payload.sessionId);
     if (!session) return { ok: false, error: "session not found" };
-    session.cancelled = true;
-    // Abort the in-flight stream (real cancel, not just flag) + reject pending
-    // confirmations so the agent loop exits even mid-stream.
-    session.abortController.abort();
-    for (const [toolCallId, pending] of session.pendingConfirmations) {
-      pending.resolve({ ok: false, message: "session cancelled" });
-      session.pendingConfirmations.delete(toolCallId);
-    }
+    // 真取消（abort 在途流 + 解开挂起确认并清超时定时器），与渲染层销毁共用同一出口。
+    cancelAgentChatV2Session(session);
     return { ok: true };
   });
 
