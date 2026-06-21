@@ -108,7 +108,9 @@ export class ExportJobManager {
       throw new Error("Export job projectId must match manifest.projectId");
     }
     this.hydrateProject(input.projectDir);
-    const activeJob = [...this.jobs.values()].find((job) => isActive(job.status));
+    // active 锁按 projectId 维度，而非全局：同一项目同一时刻只允许一个在跑的导出
+    // （避免互相覆盖输出/抢临时目录），但不同项目可并行导出，彼此不阻塞。
+    const activeJob = [...this.jobs.values()].find((job) => job.projectId === input.projectId && isActive(job.status));
     if (activeJob !== undefined) {
       throw new Error(`Cannot create export job while active export job ${activeJob.id} is ${activeJob.status}`);
     }
@@ -250,8 +252,26 @@ export class ExportJobManager {
     const resolvedProjectDir = path.resolve(projectDir);
     this.projectDirs.add(resolvedProjectDir);
     for (const job of this.store.loadRecentJobs(resolvedProjectDir)) {
+      if (this.jobs.has(job.id)) continue; // 本会话已在跟踪，别用磁盘旧态覆盖
+      if (isActive(job.status)) {
+        // 上个进程崩溃/退出残留的孤儿 active job：本实例并未在跑它，却会永久占用
+        // "单 active job" 名额，导致该项目再也无法导出。reap 成 failed 解锁。
+        this.reapStaleActiveJob(job);
+        continue;
+      }
       this.jobs.set(job.id, job);
       this.projectDirs.add(path.resolve(job.projectDir));
     }
+  }
+
+  private reapStaleActiveJob(job: ExportJobSnapshot): void {
+    const failed: ExportJobSnapshot = {
+      ...job,
+      status: "failed",
+      cancelled: false,
+      error: { message: "Export interrupted by app restart" },
+      updatedAt: this.clock(),
+    };
+    this.saveAndEmit(failed, ["status", "error"]);
   }
 }

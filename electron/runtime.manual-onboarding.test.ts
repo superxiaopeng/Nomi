@@ -18,9 +18,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   commitManualOpenAiCompatibleModels,
   deriveVendorKeyFromBaseUrl,
+  ensureBuiltinModelSeeds,
   extractVendorExtraHeaders,
+  listModelCatalogMappings,
   listModelCatalogModels,
   listModelCatalogVendors,
+  normalizeProviderKind,
   resolveOnboardingAgentFromCatalog,
 } from "./runtime";
 
@@ -54,6 +57,29 @@ afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+describe("ensureBuiltinModelSeeds — 内置模型种子（启动时调一次）", () => {
+  it("写入 kie vendor + Seedance 模型(meta.archetypeId) + 首帧 mapping，且幂等不重复", () => {
+    // 干净安装：seed 前目录为空（readCatalog 不自动 seed，避免污染）
+    expect(listModelCatalogVendors()).toHaveLength(0);
+    expect(listModelCatalogModels()).toHaveLength(0);
+
+    ensureBuiltinModelSeeds();
+
+    expect(listModelCatalogVendors().map((v) => v.key)).toContain("kie");
+    const seedance = listModelCatalogModels().find((m) => m.modelKey === "bytedance/seedance-2");
+    expect(seedance).toMatchObject({ vendorKey: "kie", kind: "video", enabled: true });
+    expect((seedance?.meta as { archetypeId?: string } | undefined)?.archetypeId).toBe("seedance-2");
+    expect(
+      listModelCatalogMappings().some((mp) => mp.vendorKey === "kie" && mp.taskKind === "image_to_video"),
+    ).toBe(true);
+
+    // 幂等：再调一次不重复
+    ensureBuiltinModelSeeds();
+    expect(listModelCatalogVendors().filter((v) => v.key === "kie")).toHaveLength(1);
+    expect(listModelCatalogModels().filter((m) => m.modelKey === "bytedance/seedance-2")).toHaveLength(1);
+  });
 });
 
 describe("manual model entry — user journey", () => {
@@ -109,9 +135,9 @@ describe("manual model entry — user journey", () => {
       "gpt-4o",
       "gpt-4o-mini",
     ]);
-    // Display name defaults to the id when omitted.
+    // 显示名缺省时人话化排版，不再落裸 id（审计 A13，humanizeModelKey）。
     const gpt4o = listModelCatalogModels().find((m) => m.modelKey === "gpt-4o");
-    expect(gpt4o?.labelZh).toBe("gpt-4o");
+    expect(gpt4o?.labelZh).toBe("Gpt 4o");
   });
 
   it("records provenance as manual and writes NO http mapping (text runs via direct AI SDK path)", () => {
@@ -175,6 +201,38 @@ describe("manual model entry — user journey", () => {
     });
   });
 
+  it("supports OpenAI Responses relays (foxcode codex shape): persists openai-responses + bearer, survives round-trip", () => {
+    // 这正是 2026-06-06 接不进来的那类供应商：wire_api=responses。改前 main.ts 的 2 值
+    // clamp 会把它降级成 openai-compatible；改后全链路走 normalizeProviderKind，存活到底。
+    const result = commitManualOpenAiCompatibleModels({
+      vendorName: "foxcode codex",
+      baseUrl: "https://api.fox-code.com/v1",
+      apiKey: "sk-fox-xxx",
+      providerKind: "openai-responses",
+      models: [{ id: "gpt-5-codex" }],
+    });
+    expect(result.vendorKey).toBe("api-fox-code-com");
+
+    const vendor = listModelCatalogVendors()[0] as {
+      providerKind?: string;
+      baseUrlHint?: string | null;
+      authType?: string;
+    };
+    // 第 3 协议存盘不被吞，认证仍是 bearer（非 anthropic 的 x-api-key）。
+    expect(vendor.providerKind).toBe("openai-responses");
+    expect(vendor.baseUrlHint).toBe("https://api.fox-code.com/v1");
+    expect(vendor.authType).toBe("bearer");
+
+    // 文档阅读 agent 也按 openai-responses 解析回来（runtime 读 catalog 时归一化）。
+    const agent = resolveOnboardingAgentFromCatalog();
+    expect(agent).toMatchObject({
+      providerKind: "openai-responses",
+      baseUrl: "https://api.fox-code.com/v1",
+      modelId: "gpt-5-codex",
+      apiKey: "sk-fox-xxx",
+    });
+  });
+
   it("persists custom request headers on the vendor and surfaces them to the agent", () => {
     commitManualOpenAiCompatibleModels({
       vendorName: "中转站",
@@ -214,6 +272,76 @@ describe("manual model entry — user journey", () => {
     });
     expect(listModelCatalogVendors()).toHaveLength(1);
     expect(listModelCatalogModels().map((m) => m.modelKey).sort()).toEqual(["first", "second"]);
+  });
+});
+
+describe("normalizeProviderKind — 唯一归一化器（替代 main.ts 旧的 2 值 clamp）", () => {
+  it("放行三个合法值原样返回", () => {
+    expect(normalizeProviderKind("openai-compatible")).toBe("openai-compatible");
+    expect(normalizeProviderKind("anthropic")).toBe("anthropic");
+    expect(normalizeProviderKind("openai-responses")).toBe("openai-responses");
+  });
+
+  it("对脏输入回落到 openai-compatible（新信任边界：任意脏值不得抵达工厂）", () => {
+    // CTO 评审要求的对抗输入：null/undefined/带空格/大小写/对象/数字。
+    for (const bad of [null, undefined, "", "  openai-responses  ", "OpenAI-Responses", "responses", "gpt", 42, {}, []]) {
+      expect(normalizeProviderKind(bad as unknown)).toBe("openai-compatible");
+    }
+  });
+
+  it("尊重显式 fallback 参数", () => {
+    expect(normalizeProviderKind("nonsense", "anthropic")).toBe("anthropic");
+  });
+});
+
+describe("manual entry — per-model kind（Issue #8 中转图片/视频接入）", () => {
+  it("图片模型：建 image 模型 + 标准参数 + /v1/images/generations 同步 mapping（无 query）", () => {
+    commitManualOpenAiCompatibleModels({
+      vendorName: "我的中转",
+      baseUrl: "https://relay.example.com",
+      apiKey: "sk-x",
+      models: [{ id: "dall-e-3", kind: "image" }],
+    });
+    const model = listModelCatalogModels().find((m) => m.modelKey === "dall-e-3");
+    expect(model).toMatchObject({ kind: "image", enabled: true });
+    const params = (model?.meta as { parameters?: Array<{ key: string }> } | undefined)?.parameters || [];
+    expect(params.map((p) => p.key)).toEqual(expect.arrayContaining(["size", "quality"]));
+    const vk = deriveVendorKeyFromBaseUrl("https://relay.example.com");
+    const mp = listModelCatalogMappings().find((x) => x.vendorKey === vk && x.taskKind === "text_to_image");
+    expect(mp?.create.path).toBe("/v1/images/generations");
+    expect(mp?.query).toBeUndefined();
+  });
+
+  it("视频模型：建 video 模型 + /v1/video/generations 异步 create + 轮询 query", () => {
+    commitManualOpenAiCompatibleModels({
+      vendorName: "我的中转",
+      baseUrl: "https://relay.example.com",
+      apiKey: "sk-x",
+      models: [{ id: "kling-v1", kind: "video" }],
+    });
+    expect(listModelCatalogModels().find((m) => m.modelKey === "kling-v1")).toMatchObject({ kind: "video", enabled: true });
+    const mp = listModelCatalogMappings().find((x) => x.taskKind === "text_to_video" && x.create.path === "/v1/video/generations");
+    expect(mp).toBeTruthy();
+    expect(mp?.query?.path).toBe("/v1/video/generations/{{providerMeta.task_id}}");
+  });
+
+  it("混合一把加：图片+视频+文本各落对类型", () => {
+    const res = commitManualOpenAiCompatibleModels({
+      vendorName: "我的中转",
+      baseUrl: "https://relay.example.com",
+      apiKey: "sk-x",
+      models: [{ id: "flux-1", kind: "image" }, { id: "cogvideox", kind: "video" }, { id: "gpt-4o", kind: "text" }],
+    });
+    expect(res.committed).toHaveLength(3);
+    const byKey = Object.fromEntries(listModelCatalogModels().map((m) => [m.modelKey, m.kind]));
+    expect(byKey["flux-1"]).toBe("image");
+    expect(byKey["cogvideox"]).toBe("video");
+    expect(byKey["gpt-4o"]).toBe("text");
+  });
+
+  it("缺省 kind 仍按 text（向后兼容旧调用）", () => {
+    commitManualOpenAiCompatibleModels({ vendorName: "本地", baseUrl: "http://localhost:11434/v1", apiKey: "x", models: [{ id: "llama3.1" }] });
+    expect(listModelCatalogModels().find((m) => m.modelKey === "llama3.1")?.kind).toBe("text");
   });
 });
 

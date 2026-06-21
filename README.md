@@ -7,132 +7,107 @@
 <p align="center">
   <strong>写一段剧本，自动生成图片、视频、剪辑成片。</strong><br />
   开源、本地优先、双击即用的 AI 视频创作工作台。<br />
-  <sub>Open-source, local-first desktop app for AI video creation — script → images &amp; video → timeline → export. Bring your own model &amp; key.</sub>
-</p>
-
-<p align="center">
-  <a href="docs/quickstart.md">快速启动</a>
-  ·
-  <a href="docs/user-guide.md">使用指南</a>
-  ·
-  <a href="https://github.com/aqm857886159/Nomi/issues/new/choose">反馈问题</a>
+  <sub>Open-source, local-first desktop app for AI video creation — script → images &amp; video → timeline → export.</sub>
 </p>
 
 <p align="center">
   <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ 下载最新版</strong></a>
   ·
-  <a href="https://github.com/aqm857886159/Nomi/stargazers">⭐ Star 支持一下</a>
+  <a href="https://nomiaqm.com">官网</a>
   ·
-  <a href="LICENSE">Apache-2.0 License</a>
+  <a href="docs/user-guide.md">使用指南</a>
+  ·
+  <a href="https://github.com/aqm857886159/Nomi/issues/new/choose">反馈</a>
+  ·
+  <a href="LICENSE">Apache-2.0</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/aqm857886159/Nomi/stargazers"><img src="https://img.shields.io/badge/GitHub-%E2%AD%90%20Star-2563eb?logo=github&logoColor=2563eb&labelColor=f1f5f9" alt="Star on GitHub" /></a>
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.10.13-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2563eb?labelColor=f1f5f9" alt="Platform" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?labelColor=f1f5f9" alt="License" /></a>
 </p>
 
 ---
 
-## ⬇️ 下载（双击即用）
-
-不需要懂代码，下载安装包就能用。
+## ⬇️ 下载（双击即用，不用懂代码）
 
 | 系统 | 适用机型 | 下载 |
 |------|---------|------|
-| 🍎 **macOS** | Apple Silicon（M1/M2/M3/M4） | [Nomi-mac-arm64.dmg](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-mac-arm64.dmg) |
+| 🍎 **macOS** | Apple Silicon（M 系列） | [Nomi-mac-arm64.dmg](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-mac-arm64.dmg) |
 | 🍎 **macOS** | Intel 芯片 | [Nomi-mac-intel.dmg](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-mac-intel.dmg) |
 | 🪟 **Windows** | Win 10 / 11 | [Nomi-windows-setup.exe](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-windows-setup.exe) |
 
-> **不知道自己是哪种 Mac？** 点左上角苹果图标 → 关于本机 → 看「芯片」一栏。写 M1/M2/M3/M4 → 选 Apple Silicon；写 Intel → 选 Intel。
-
-### ⚠️ 第一次打开有警告？这是正常的
-
-Nomi 还没买代码签名证书（每年要花钱），所以系统会提醒「未知开发者」。一次性绕过方法：
+> 不知道自己哪种 Mac？左上角苹果图标 → 关于本机 → 看「芯片」。
 
 <details>
-<summary><b>macOS：提示「无法打开」或「已损坏」</b></summary>
+<summary><b>第一次打开提示「未知开发者 / 已损坏」？</b>（还没买签名证书，正常现象，点开看绕过方法）</summary>
 
-1. 把 `Nomi.app` 拖进「应用程序」文件夹
-2. 打开「终端」（在「应用程序 → 实用工具」里），粘贴这一行回车：
-   ```bash
-   xattr -cr /Applications/Nomi.app
-   ```
-3. 再双击 Nomi 就能打开了
-</details>
-
-<details>
-<summary><b>Windows：SmartScreen 拦截</b></summary>
-
-1. 点击警告窗口里的「更多信息」
-2. 出现「仍要运行」按钮，点它
-3. 以后再打开就不会拦截了
+- **macOS**：把 `Nomi.app` 拖进「应用程序」，终端运行 `xattr -cr /Applications/Nomi.app`，再双击打开。
+- **Windows**：SmartScreen 弹窗点「更多信息」→「仍要运行」。
 </details>
 
 ---
 
 ## 🎬 它能做什么
 
-一句话：**写剧本的环节、生图的环节、生视频的环节、剪辑的环节，全部连成一条流水线，AI 帮你跑完。**
+把**写剧本 → 生图 → 生视频 → 剪辑**连成一条流水线，AI 帮你跑完，不用在多个工具之间来回搬素材。
 
 ```
-   剧本     →     画布生成     →     时间轴     →     成片导出
-   ↓               ↓                  ↓               ↓
- 写一段       自动拆镜头        吸附剪辑/多选       导出 MP4
- 故事         并行生成图/视频    可拖播放头预览     本地保存
+  剧本    →    画布生成    →    时间轴    →    成片
+ 写故事      自动拆镜头       吸附剪辑      导出 MP4
+            并行生成图/视频    拖播放头预览
 ```
 
-**核心差异**
-
-- 🔗 **全流程打通**：不用在 ChatGPT、即梦、剪映之间来回切，素材自动流转。
-- 🗂️ **Mura 分层画布**：按镜头、角色、场景、素材分类管理节点；支持分组、拖拽归类、跨分类派生和回溯源节点。
-- 🏠 **本地优先**：项目、素材、剪辑全在你电脑上，不上传任何素材到我们服务器。
-- 🤖 **Agent 驱动**：在终端说一句"把这段剧本拆 6 个镜头并生成"，画布会自己动起来。
+- 🤖 **AI 帮你拆镜头、排轨迹** — 写完故事点一下，AI 拆成一份**可改的分镜方案**（镜头 / 角色 / 提示词逐项可编辑），你确认后自动铺到画布、规划「角色定妆 → 关键帧 → 视频」的生成顺序，还能按镜序排上时间轴；跨次打开它也记得这个项目聊过什么。
+- 🔗 **全流程打通** — 剧本、生图、生视频、剪辑一条线，素材自动流转，不用在 ChatGPT / 即梦 / 剪映之间切。
+- 🔑 **一个 key、十几个模型全通** — 「模型接入」填一个 key（APIMart / kie），视频 **Sora 2 / Veo 3.1 / 可灵 / Seedance / Wan / Hailuo**、图像 **Seedream / Nano Banana / GPT Image / Qwen / Imagen** 等预置模型立即可用，**文生 / 图生 / 首尾帧补间 / 多图参考**模式齐全，同款模型的**标准 / 快速 / Pro 变体**一处切换；也可自定义接入任意中转站。
+- 🎭 **项目级资产锁一致性** — 角色（多视角参考图）、分镜、风格沉淀成可复用资产，减少多片段里的「脸漂移、风格跑偏」。
+- 🎬 **3D 导演台 + 全景图** — 在 3D 场景里摆角色姿势、架机位、设画幅，或生成 360° 全景，截取机位画面当生成参考——文字说不清的构图，直接「搭」出来。
+- 🏠 **本地优先** — 项目、素材、剪辑全在你电脑上，不上传任何素材到服务器。
 
 ---
 
-## 🚀 打开后 3 步出第一条视频
+## 📸 看一眼
 
-**第 1 步：配一个 AI 大脑（用来写脚本、拆镜头）**
+**创作区** — 写故事 / 文案，右侧 AI 助手帮你拆镜头、立角色卡
 
-顶部工具栏 → **模型接入** → 填以下信息：
+<img src="marketing/assets/screen-script.png" alt="创作区" width="100%" />
 
-```
-API Base URL : https://api.deepseek.com/v1
-API Key      : 在 https://platform.deepseek.com 注册领，10 块钱够用一周
-Model        : deepseek-chat
-```
+**Mura 画布** — 角色 / 场景 / 镜头 / 素材分层，并行生成、跨节点复用
 
-> 💡 也支持 OpenAI、通义、Ollama 本地模型。任何 OpenAI 兼容接口都能接。
-
-**第 2 步：配一个画图 / 做视频的模型**
-
-同一个「模型接入」弹窗 → 添加供应商。推荐起步组合：
-
-- **即梦**（图片，文生图便宜）：[官网](https://www.volcengine.com/product/jimeng)
-- **可灵 / Runway**（视频，按生成秒数计费）
-
-详细接入步骤：[docs/provider-integration.md](docs/provider-integration.md)
-
-**第 3 步：写一段故事，让 Agent 跑**
-
-进入「创作区」，写下你想拍的故事，点「让 Agent 帮我拆镜头」。
-去倒杯水回来，画布上的图片和视频就生成好了，拖到时间轴 → 导出。
-
-完整使用指南：[docs/user-guide.md](docs/user-guide.md)
+<img src="marketing/assets/screen-canvas.png" alt="Mura 画布" width="100%" />
 
 ---
 
-## 💬 用着用着发现问题？
+## 🚀 三步出第一条视频
 
-**这是一个验证阶段的项目，我非常需要你的反馈。**
+**1. 接一个模型** — 顶部「模型接入」：
 
-- 🐛 [报告 Bug](https://github.com/aqm857886159/Nomi/issues/new?template=bug_report.yml)
-- ✨ [提需求/吐槽](https://github.com/aqm857886159/Nomi/issues/new?template=feedback.yml)
-- 💭 [使用感受闲聊](https://github.com/aqm857886159/Nomi/discussions)
+- **最快**：选预置供应商（APIMart / kie），填一个 key → 该家全部模型一键解锁。
+- **自定义**：填 BaseURL + Key，点「测试连接」自动识别协议（OpenAI / Responses / Anthropic），不用懂术语。OpenAI / Claude / DeepSeek / 国内中转站都能接。
+
+**2. 写一段故事** — 进「创作区」写下你想拍的内容，点「拆镜头」让 Agent 跑。
+
+**3. 生成 → 导出** — 画布上的图片 / 视频生成好后，拖到时间轴，导出 MP4。
+
+> 完整指南：[docs/user-guide.md](docs/user-guide.md) · 模型接入细节：[docs/provider-integration.md](docs/provider-integration.md)
 
 ---
 
-## 👨‍💻 开发者：用源码启动
+## 💬 反馈
+
+验证阶段的项目，很需要你的反馈：[报 Bug](https://github.com/aqm857886159/Nomi/issues/new?template=bug_report.yml) · [提需求](https://github.com/aqm857886159/Nomi/issues/new?template=feedback.yml) · [闲聊](https://github.com/aqm857886159/Nomi/discussions)
+
+---
+
+## 👨‍💻 开发者
 
 <details>
-<summary>展开查看完整开发者指南</summary>
+<summary>用源码启动</summary>
 
-需要 **Node.js 20+**，无需 Docker，无需数据库。
+需要 **Node.js 20+**，无需 Docker / 数据库。
 
 ```bash
 git clone https://github.com/aqm857886159/Nomi.git
@@ -140,24 +115,18 @@ cd Nomi
 corepack enable && pnpm install && pnpm dev
 ```
 
-### 项目结构
-
 ```
-electron/    Electron 主进程 + 本地运行时（Agent、文件存储、模型调用）
+electron/    主进程 + 本地运行时（Agent、文件存储、模型调用）
 src/         前端工作台（React + Vite + Tailwind）
-skills/      Skill Pack v2 (SKILL.md + skill.json) — 见 docs/skill-pack-format.md
+skills/      Skill Pack v2（见 docs/skill-pack-format.md）
 ```
-
-
 </details>
 
 ---
 
 ## 关于作者
 
-**青阳** — AI 产品经理 / 创作者
-
-如果你愿意成为第一批种子用户，加我微信 **TZ857886159** 进试用群（我会发版本通知和收集深度反馈）。
+**青阳** — AI 产品经理 / 创作者。愿意当种子用户的话，加微信 **TZ857886159** 进试用群。
 
 <img src="docs/media/qingyang-wechat.jpg" alt="微信二维码" width="140" />
 

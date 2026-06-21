@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { createDefaultTimeline } from '../timeline/timelineMath'
 import type { TimelineState } from '../timeline/timelineTypes'
 import { createDefaultWorkbenchDocument, type WorkbenchDocument } from '../workbenchTypes'
-import { createDefaultGenerationCanvasSnapshot } from '../generationCanvasV2/store/generationCanvasDefaults'
-import type { GenerationCanvasSnapshot } from '../generationCanvasV2/model/generationCanvasTypes'
+import { createDefaultGenerationCanvasSnapshot } from '../generationCanvas/store/generationCanvasDefaults'
+import type { GenerationCanvasSnapshot } from '../generationCanvas/model/generationCanvasTypes'
+import { storyboardPlanSchema, type StoryboardPlan } from '../generationCanvas/agent/storyboardPlan'
 import { cloneBuiltinCategories, projectCategorySchema, type ProjectCategory } from './projectCategories'
 
 // Persisted records come in two shapes that carry an identical `payload`:
@@ -33,6 +34,8 @@ export const workbenchProjectSummarySchema = z.object({
   thumbStyle: z.string().optional(),
   thumbnail: z.string().optional(),
   thumbnailUrls: z.array(z.string()).optional(),
+  seedKey: z.string().min(1).optional(),
+  draft: z.boolean().optional(),
 })
 
 export const workbenchProjectPayloadSchema = z.object({
@@ -53,17 +56,42 @@ export const workbenchProjectPayloadSchema = z.object({
       label: z.string(),
       clips: z.array(z.unknown().refine((value) => value !== undefined, 'clip is required')),
     })),
+    // 文字轨（字幕/标题卡）。可选 + 缺省 [] 让旧项目向后兼容。
+    textClips: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+      style: z.enum(['caption', 'title']),
+      startFrame: z.number().finite(),
+      endFrame: z.number().finite(),
+      // 通用变换（可选）：归一化中心 + 缩放 + 旋转(预留)。
+      position: z.object({ x: z.number().finite(), y: z.number().finite() }).optional(),
+      scale: z.number().finite().optional(),
+      rotation: z.number().finite().optional(),
+      fontFamily: z.string().optional(),
+    })).optional().default([]),
   }),
   // Keep project loading tolerant of legacy v0.5 category ids so the
   // v5→v6 migration can run before the stricter canvas schema is enforced.
   generationCanvas: workbenchProjectGenerationCanvasPayloadSchema,
   categories: z.array(projectCategorySchema).optional(),
+  /** S5-b-1:快照覆盖到事件日志的哪个 seq——hydrate 时重放其后的尾巴(崩溃恢复)。可选,老项目无。 */
+  generationCanvasLastSeq: z.number().optional(),
+  /**
+   * P0-6:创作区分镜方案(用户手改过锚/镜序的结构化产物)。此前是纯内存态,切项目/重载即蒸发。
+   * 可选 + nullable 让老项目向后兼容(无此字段即无方案)。
+   */
+  storyboardPlan: storyboardPlanSchema.nullable().optional(),
+  /** 方案落画布状态(草稿/已落画布)。老项目无字段 → 归一化为 false(当草稿)。 */
+  storyboardPlanCommitted: z.boolean().optional(),
 })
 
 export const workbenchProjectRecordSchema = workbenchProjectSummarySchema.extend({
   version: workbenchProjectRecordVersionSchema,
   payload: workbenchProjectPayloadSchema,
 })
+
+/** 项目来源：原生（默认根新建）/ 外部文件夹（「打开文件夹」绑定）。桌面端由后端按目录位置派生。 */
+export type WorkbenchProjectSource = 'native' | 'folder'
 
 export type WorkbenchProjectSummary = {
   id: string
@@ -75,6 +103,24 @@ export type WorkbenchProjectSummary = {
   thumbStyle?: string
   thumbnail?: string
   thumbnailUrls?: string[]
+  /**
+   * 播种来源的幂等键（如 `example:product-demo`）。「一键示例」等程序化创建入口
+   * 用它识别「这个种子已经播过」——名字不是身份，靠名字去重必堆重复项目（审计 A8）。
+   * 用户手动新建的项目无此字段。
+   */
+  seedKey?: string
+  /**
+   * 草稿态：新建空白零编辑项目的标记。首次真实保存即清除（promote 为持久态）。
+   * 启动 GC 只回收带此标记且 revision===0 的 native 空壳 → 库不再堆「未命名」垃圾（审计 P0-3）。
+   * example（有 seedKey）/打开文件夹（有 rootPath）/老项目都无此字段，GC 永不碰。
+   */
+  draft?: boolean
+  /** 仅桌面端有；Web 端无文件夹概念，缺省按 native 处理。 */
+  source?: WorkbenchProjectSource
+  /** 仅桌面端有；项目真实根目录，用于打开 assets / exports 所在文件夹。 */
+  rootPath?: string
+  /** 仅桌面端有；最近项目指向的文件夹已不存在。 */
+  missing?: boolean
 }
 
 export type WorkbenchProjectPayload = {
@@ -82,6 +128,12 @@ export type WorkbenchProjectPayload = {
   timeline: TimelineState
   generationCanvas: GenerationCanvasSnapshot
   categories?: ProjectCategory[]
+  /** S5-b-1:快照覆盖到日志的 seq(尾部重放游标);老项目无此字段则跳过重放。 */
+  generationCanvasLastSeq?: number
+  /** P0-6:创作分镜方案(per-project 工作产物);无则 null/缺省。 */
+  storyboardPlan?: StoryboardPlan | null
+  /** 方案落画布状态(草稿/已落画布);无则 false。 */
+  storyboardPlanCommitted?: boolean
 }
 
 export type WorkbenchProjectRecordV1 = WorkbenchProjectSummary & {

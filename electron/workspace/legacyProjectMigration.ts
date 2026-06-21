@@ -136,3 +136,26 @@ export function discoverLegacyProjects(defaultProjectsRoot: string): WorkspacePr
   }
   return projects;
 }
+
+// 列举热路径解耦（P1 性能根因）：`discoverLegacyProjects` 会对默认根的每个目录读
+// project.json 并把带顶层清单的 legacy 项目迁/重注册回 registry——这是一次性的「发现」
+// 语义，不该挂在 listProjects 每次调用上（库越大越慢，且会让已走 workspace 删除分支
+// 的项目被反复重发现）。这里用「按根记一次」的内存 guard：同一进程内每个 defaultProjectsRoot
+// 只在首次（启动后第一次列举）真正扫盘，之后返回空数组——调用方据此跳过 registry 重写。
+// 需要在新建/打开文件夹等可能改变磁盘项目集合时显式重新发现，调用 resetLegacyDiscoveryGuard()。
+const discoveredRoots = new Set<string>();
+
+/** 一次性发现：每个默认根每进程只真正扫盘一次；后续调用返回空（不重复 O(N) fs 读+重注册）。 */
+export function discoverLegacyProjectsOnce(defaultProjectsRoot: string): WorkspaceProjectRecordV2[] {
+  const root = path.resolve(defaultProjectsRoot);
+  if (discoveredRoots.has(root)) {
+    return [];
+  }
+  discoveredRoots.add(root);
+  return discoverLegacyProjects(root);
+}
+
+/** 显式同步入口：清掉一次性 guard，让下一次 discoverLegacyProjectsOnce 重新扫盘（首次启动/显式刷新/新建后）。 */
+export function resetLegacyDiscoveryGuard(): void {
+  discoveredRoots.clear();
+}

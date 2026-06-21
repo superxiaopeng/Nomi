@@ -12,6 +12,11 @@ export type WorkbenchAssetDto = {
   projectId?: string | null
 }
 
+/** 从落盘资产 DTO 取可持久化 URL（nomi-local://）；无则空串。单一实现，别在各 adapter 各抄一份（P1）。 */
+export function hostedAssetUrl(asset: WorkbenchAssetDto | null | undefined): string {
+  return typeof asset?.data?.url === 'string' ? asset.data.url.trim() : ''
+}
+
 export type UploadWorkbenchAssetMeta = {
   prompt?: string | null
   vendor?: string | null
@@ -74,6 +79,6 @@ export async function importWorkbenchLocalAssetFile(
   }) as Promise<WorkbenchAssetDto>
 }
 
-export async function recoverImportedWorkbenchLocalAssetFile(): Promise<WorkbenchAssetDto | null> {
+export async function recoverImportedWorkbenchLocalAssetFile(_file: File): Promise<WorkbenchAssetDto | null> {
   return null
 }

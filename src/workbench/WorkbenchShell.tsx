@@ -1,4 +1,7 @@
 import React from "react";
+import "./workbench.css";
+import "./workbench-ai.css";
+import { NomiLoadingMark } from "../design";
 import NomiAppBar from "../ui/app-shell/NomiAppBar";
 import {
     isWorkspaceMode,
@@ -7,19 +10,18 @@ import {
 } from "./workbenchStore";
 import { cn } from "../utils/cn";
 import ProjectExplorerSidebar from "./explorer/ProjectExplorerSidebar";
-import { markStartup, markStartupProbe, timeStartupStepAsync } from "../utils/startupDiagnostics";
+import { lazyWithChunkBoundary } from "../ui/chunkBoundary";
 
-const CreationWorkspace = React.lazy(
-    () => timeStartupStepAsync("load CreationWorkspace chunk", () => import("./creation/CreationWorkspace"), 250),
+// 工作区懒加载走容错域（审计 A5）：单个工作区 chunk 失败不拖死其余工作区。
+const CreationWorkspace = lazyWithChunkBoundary(
+    "创作区",
+    () => import("./creation/CreationWorkspace"),
 );
-const GenerationWorkspace = React.lazy(
-    () => timeStartupStepAsync("load GenerationWorkspace chunk", () => import("./generation/GenerationWorkspace"), 250),
+const GenerationWorkspace = lazyWithChunkBoundary(
+    "生成区",
+    () => import("./generation/GenerationWorkspace"),
 );
-const PreviewWorkspace = React.lazy(() =>
-    timeStartupStepAsync("load PreviewWorkspace chunk", () => import("./preview/PreviewWorkspace"), 250),
-);
-
-const WORKBENCH_READY_FALLBACK_MS = 160;
+const PreviewWorkspace = lazyWithChunkBoundary("预览区", () => import("./preview/PreviewWorkspace"));
 
 type WorkbenchShellProps = {
     generation: React.ReactNode;
@@ -57,10 +59,13 @@ function WorkspaceLoading({ label }: { label: string }): JSX.Element {
         <div
             className={cn(
                 "workbench-shell__loading",
-                "w-full h-full bg-workbench-bg",
+                "w-full h-full bg-workbench-bg grid place-items-center",
             )}
             aria-label={`${label}加载中`}
-        />
+        >
+            {/* pending 规范 #1:懒加载占位不再是空白色块,给可见品牌 spinner */}
+            <NomiLoadingMark size={28} label={`${label}加载中`} />
+        </div>
     );
 }
 
@@ -96,6 +101,7 @@ function readWorkspaceModeFromUrl(): WorkspaceMode {
     }
 }
 
+
 function writeWorkspaceModeToUrl(mode: WorkspaceMode): void {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -119,40 +125,17 @@ export default function WorkbenchShell({
     const setWorkspaceMode = useWorkbenchStore(
         (state) => state.setWorkspaceMode,
     );
+    const categories = useWorkbenchStore((state) => state.categories);
     const [mountedWorkspaceModes, setMountedWorkspaceModes] = React.useState<
         WorkspaceMode[]
     >(() => [workspaceMode]);
 
     React.useEffect(() => {
-        markStartup("WorkbenchShell mounted");
-        markStartupProbe("workbench-shell-mounted", { workspaceMode });
-        let readyMarked = false;
-        let firstFrame = 0;
-        let secondFrame = 0;
-        const markReady = (source: "raf" | "timeout") => {
-            if (readyMarked) return;
-            readyMarked = true;
-            window.clearTimeout(fallbackTimer);
-            if (firstFrame) window.cancelAnimationFrame(firstFrame);
-            if (secondFrame) window.cancelAnimationFrame(secondFrame);
-            markStartupProbe("workbench-shell-ready", { workspaceMode, source });
-        };
-        const fallbackTimer = window.setTimeout(() => markReady("timeout"), WORKBENCH_READY_FALLBACK_MS);
-        firstFrame = window.requestAnimationFrame(() => {
-            secondFrame = window.requestAnimationFrame(() => markReady("raf"));
-        });
-        return () => {
-            window.clearTimeout(fallbackTimer);
-            if (firstFrame) window.cancelAnimationFrame(firstFrame);
-            if (secondFrame) window.cancelAnimationFrame(secondFrame);
-        };
-        // Startup marker only: avoid remount-mode updates canceling the queued ready signal.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    React.useEffect(() => {
-        const initialMode = readWorkspaceModeFromUrl();
-        setWorkspaceMode(initialMode);
+        // store 是 workspaceMode 的唯一真相源：打开项目时各入口已显式设好模式
+        // （openProject 常规→generation、newProject 新建→creation）。挂载时直接沿用 store，并把 URL
+        // 同步成它——不回读 URL 的 ?step（hash 路由下它在 search 段、跨导航会残留，曾导致
+        // 打开项目落错 tab）。?step 仅作为浏览器前进/后退（popstate）的载体。
+        const initialMode = useWorkbenchStore.getState().workspaceMode;
         writeWorkspaceModeToUrl(initialMode);
 
         const onPopState = () => {
@@ -205,8 +188,9 @@ export default function WorkbenchShell({
                     "workbench-shell__body",
                     "relative min-w-0 min-h-0 overflow-hidden flex",
                 )}>
-                {workspaceMode !== "creation" ? (
-                    <ProjectExplorerSidebar projectId={projectId ?? null} />
+                {/* 文件树只在生成区显示：创作是纯文稿、预览/剪辑是回看时间轴，都不需要左侧资源树。 */}
+                {workspaceMode === "generation" ? (
+                    <ProjectExplorerSidebar projectId={projectId ?? null} categories={categories} />
                 ) : null}
                 <div className='flex-1 min-w-0 min-h-0 relative'>
                     {mountedWorkspaceModes.includes("creation") ? (

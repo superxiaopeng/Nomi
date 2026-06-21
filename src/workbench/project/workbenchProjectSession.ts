@@ -1,5 +1,7 @@
-import { useGenerationCanvasStore } from '../generationCanvasV2/store/generationCanvasStore'
+import { useGenerationCanvasStore } from '../generationCanvas/store/generationCanvasStore'
 import { useWorkbenchStore } from '../workbenchStore'
+import { emitCanvasGesture, getCanvasEventLastSeq, seedCanvasEventLastSeq } from '../generationCanvas/events/canvasEventEmitter'
+import { getDesktopBridge } from '../../desktop/bridge'
 import type { WorkbenchProjectPayload, WorkbenchProjectRecordV1 } from './projectRecordSchema'
 
 export function readCurrentWorkbenchProjectPayload(): WorkbenchProjectPayload {
@@ -8,30 +10,58 @@ export function readCurrentWorkbenchProjectPayload(): WorkbenchProjectPayload {
   return {
     workbenchDocument: workbench.workbenchDocument,
     timeline: workbench.timeline,
-    generationCanvas: generation.readSnapshot(),
+    // S5-b-0:持久化走 document 视图(选区是会话态不进项目文件)
+    generationCanvas: generation.readDocumentSnapshot(),
+    categories: workbench.categories,
+    // S5-b-1:尾部重放游标(append 回执维护;回执延迟导致略旧也安全——reducer 幂等)
+    generationCanvasLastSeq: getCanvasEventLastSeq(),
+    // P0-6:分镜方案随项目落盘(此前纯内存→切项目/重载蒸发)。
+    storyboardPlan: workbench.storyboardPlan,
+    // 卡片回看:落画布状态随项目落盘(草稿/已落画布),否则重开项目分不清卡片该显哪态。
+    storyboardPlanCommitted: workbench.storyboardPlanCommitted,
   }
 }
 
-export function readCurrentWorkbenchPersistMarker(): string {
-  const workbench = useWorkbenchStore.getState()
-  const generation = useGenerationCanvasStore.getState()
-  return `${workbench.persistRevision}:${generation.persistRevision}`
-}
-
-export function restoreWorkbenchProjectState(payload: Pick<WorkbenchProjectPayload, 'workbenchDocument' | 'timeline'>): void {
-  useWorkbenchStore.getState().restoreProjectWorkbenchState({
-    workbenchDocument: payload.workbenchDocument,
-    timeline: payload.timeline,
-  })
-}
-
-export function restoreGenerationCanvasState(payload: Pick<WorkbenchProjectPayload, 'generationCanvas'>): void {
+export function restoreWorkbenchProjectPayload(payload: WorkbenchProjectPayload): void {
+  useWorkbenchStore.getState().setWorkbenchDocument(payload.workbenchDocument)
+  useWorkbenchStore.getState().setTimeline(payload.timeline)
+  useWorkbenchStore.getState().setCategories(payload.categories)
+  // P0-6:分镜方案随项目恢复。restore 在 hydrate 里先于 swapCreationAiProject 跑,故由它负责
+  // 载入本项目方案(swap 不再清,见 workbenchStore),老项目无字段则置 null。
+  // 用 hydrateStoryboardPlan(非 setStoryboardPlan):载入不自动展开编辑器、不标脏。
+  useWorkbenchStore.getState().hydrateStoryboardPlan(payload.storyboardPlan ?? null, payload.storyboardPlanCommitted ?? false)
   useGenerationCanvasStore.getState().restoreSnapshot(payload.generationCanvas)
 }
 
-export function restoreWorkbenchProjectPayload(payload: WorkbenchProjectPayload): void {
-  restoreWorkbenchProjectState(payload)
-  restoreGenerationCanvasState(payload)
+/**
+ * S5-b-1 崩溃恢复:restore 之后调——重放快照没盖到的事件尾巴,再以"含尾巴的后态"
+ * 发 genesis(顺序铁律:genesis 在尾部重放之后,否则磁盘日志最终态丢尾巴)。
+ * 老项目(payload 无 lastSeq 字段)跳过重放只发 genesis——不拿整本日志去覆盖快照。
+ */
+export async function replayCanvasEventTailAndSealGenesis(
+  projectId: string,
+  payload: WorkbenchProjectPayload,
+): Promise<void> {
+  const lastSeq = Number(payload.generationCanvasLastSeq) || 0
+  seedCanvasEventLastSeq(lastSeq)
+  const api = getDesktopBridge()?.events
+  if (api && projectId && payload.generationCanvasLastSeq != null && lastSeq > 0) {
+    try {
+      const { events } = await api.read(projectId, lastSeq)
+      const canvasTail = (events as { type?: string; payload?: Record<string, unknown>; seq?: number }[])
+        .filter((event) => typeof event?.type === 'string' && event.type.startsWith('canvas.') && event.payload)
+      if (canvasTail.length) {
+        useGenerationCanvasStore.getState().applyEventTail(canvasTail as { type: string; payload: Record<string, unknown> }[])
+        seedCanvasEventLastSeq(Math.max(lastSeq, ...canvasTail.map((event) => Number(event.seq) || 0)))
+      }
+    } catch {
+      /* 旁路:读尾巴失败退回纯快照,不影响打开项目 */
+    }
+  }
+  const post = useGenerationCanvasStore.getState()
+  emitCanvasGesture([
+    { type: 'canvas.snapshot.restored', payload: { snapshot: { nodes: post.nodes, edges: post.edges, groups: post.groups } } },
+  ])
 }
 
 export type WorkbenchProjectSaveFn = (
@@ -60,11 +90,19 @@ let activeWorkbenchProjectSaveTarget: ActiveWorkbenchProjectSaveTarget | null = 
 
 export function setActiveWorkbenchProjectSaveTarget(target: ActiveWorkbenchProjectSaveTarget | null): void {
   activeWorkbenchProjectSaveTarget = target
+  // 能力核 A/B 守卫：把「当前窗口打开的项目」上报主进程——外部 CLI/MCP 据此拒绝直写正在编辑的工程
+  // （防内存 store 防抖回盘覆盖外部改动）。可选口（老 preload 无 capability 即 no-op）。
+  getDesktopBridge()?.capability?.setActiveProject(target?.projectId ?? '')
 }
 
 export function clearActiveWorkbenchProjectSaveTarget(projectId?: string): void {
   if (projectId && activeWorkbenchProjectSaveTarget?.projectId !== projectId) return
   activeWorkbenchProjectSaveTarget = null
+}
+
+/** 当前活动 workbench 项目 id（单一真相源）—— 抽帧落素材需要它，runner 作用域本身拿不到。 */
+export function getActiveWorkbenchProjectId(): string | null {
+  return activeWorkbenchProjectSaveTarget?.projectId ?? null
 }
 
 export async function persistActiveWorkbenchProjectNow(): Promise<WorkbenchProjectRecordV1 | null> {

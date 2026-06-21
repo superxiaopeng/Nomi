@@ -1,17 +1,25 @@
 import React from 'react'
-import { IconDownload, IconPlayerPause, IconPlayerPlay, IconRefresh, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
-import { NomiLoadingMark } from '../../design/identity'
-import { WorkbenchButton, WorkbenchIconButton } from '../../design/workbenchActions'
+import { IconChevronDown, IconDownload, IconLetterCase, IconMaximize, IconMinimize, IconPlayerPause, IconPlayerPlay, IconPlayerSkipBack, IconPlayerSkipForward, IconRefresh, IconVolume, IconVolumeOff, IconX, IconZoomIn, IconZoomOut } from '@tabler/icons-react'
+import { NomiLoadingMark, NomiSelect, WorkbenchButton, WorkbenchIconButton } from '../../design'
 import { cn } from '../../utils/cn'
 import { useWorkbenchStore } from '../workbenchStore'
 import type { TimelineClip, TimelineState } from '../timeline/timelineTypes'
+import { resolveActiveTextClipsAtFrame } from '../timeline/timelineMath'
+import { resolveTextBox, resolveOverlayTransform } from '../timeline/textLayout'
+import { resolveClipFraming, clampFramingScale, type ClipFit } from '../timeline/clipFraming'
+import { TextClipStyleControls } from './TextClipStyleControls'
+import { CONTROL_ICON_BUTTON_CLASS } from './previewControlTokens'
+import { framingToMediaStyle, mediaFitClass, framingOffsetFromDrag } from './previewMediaFraming'
+import { fitPreviewStageSize } from './previewStageLayout'
+import OverlaySelectionBox from './OverlaySelectionBox'
 import type { PreviewAspectRatio } from '../workbenchTypes'
 import { resolveVideoClipMediaTimeSeconds } from '../player/timelinePlayback'
 import { exportTimelineToMp4, type ExportTimelineToMp4Options } from '../export/exportApi'
+import { markChecklistStep } from '../onboarding/onboardingState'
 import { buildMp4ExportButtonTitle } from '../export/exportCopy'
 import { toast } from '../../ui/toast'
 import { buildVideoPlaybackUrl } from '../../media/videoPlaybackUrl'
-import { diagnoseVideoPlaybackFailure, logVideoPlaybackFailure } from '../../media/videoPlaybackDiagnostics'
+import { describeVideoPlaybackFailure, diagnoseVideoPlaybackFailure, logVideoPlaybackFailure } from '../../media/videoPlaybackDiagnostics'
 import { computeTimelineDuration } from '../timeline/timelineMath'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { getDesktopActiveProjectId } from '../../desktop/activeProject'
@@ -30,10 +38,6 @@ function findClip(activeClips: TimelineClip[], type: TimelineClip['type']): Time
   return activeClips.find((clip) => clip.type === type) || null
 }
 
-const PREVIEW_MAX_STAGE_WIDTH = 1040
-
-type PreviewFitMode = 'contain' | 'cover'
-
 const PREVIEW_RATIOS: Array<{ value: PreviewAspectRatio; label: string; title: string; css: string; width: number; height: number }> = [
   { value: '16:9', label: '16:9', title: '横屏 / YouTube / B站', css: '16 / 9', width: 16, height: 9 },
   { value: '9:16', label: '9:16', title: '竖屏 / 短视频', css: '9 / 16', width: 9, height: 16 },
@@ -44,60 +48,44 @@ const PREVIEW_RATIOS: Array<{ value: PreviewAspectRatio; label: string; title: s
   { value: '21:9', label: '21:9', title: '电影宽屏', css: '21 / 9', width: 21, height: 9 },
 ]
 
-export function fitPreviewStageSize(params: {
-  containerWidth: number
-  containerHeight: number
-  ratioWidth: number
-  ratioHeight: number
-  maxWidth?: number
-}): { width: number; height: number } {
-  const containerWidth = Math.max(0, Number(params.containerWidth) || 0)
-  const containerHeight = Math.max(0, Number(params.containerHeight) || 0)
-  const ratioWidth = Math.max(1, Number(params.ratioWidth) || 1)
-  const ratioHeight = Math.max(1, Number(params.ratioHeight) || 1)
-  const maxWidth = Math.max(1, Number(params.maxWidth) || PREVIEW_MAX_STAGE_WIDTH)
-  if (containerWidth <= 0 || containerHeight <= 0) {
-    return { width: 0, height: 0 }
-  }
-
-  const ratio = ratioWidth / ratioHeight
-  let width = Math.min(containerWidth, maxWidth, containerHeight * ratio)
-  let height = width / ratio
-  if (height > containerHeight) {
-    height = containerHeight
-    width = height * ratio
-  }
-  return {
-    width: Math.max(1, Math.floor(width)),
-    height: Math.max(1, Math.floor(height)),
-  }
-}
-
-function clampPreviewScale(value: number): number {
-  if (!Number.isFinite(value)) return 1
-  return Math.max(0.25, Math.min(4, value))
-}
-
 export default function TimelinePreview({ activeClips, aspectRatio, fps, playheadFrame, timeline }: TimelinePreviewProps): JSX.Element {
-  const playerRef = React.useRef<HTMLElement | null>(null)
+  const playerRef = React.useRef<HTMLDivElement | null>(null)
   const stageRef = React.useRef<HTMLDivElement | null>(null)
   const videoRef = React.useRef<HTMLVideoElement | null>(null)
   const dragRef = React.useRef<{
     pointerId: number
+    clipId: string
     startX: number
     startY: number
-    originX: number
-    originY: number
+    // 拖动起点时的取景偏移（归一化分数），moveDrag 据此 + 像素位移/stage 尺寸算新偏移
+    originOffsetX: number
+    originOffsetY: number
   } | null>(null)
+  // 当前在跑导出的 jobId（供进度区「取消」按钮调 exports.cancel）。exportApi 内部生成 jobId
+  // 不直接回传 UI，故这里订阅导出事件、按当前项目相关性捕获（per-project 单 active 锁 →
+  // 同一项目同时至多一个在跑 job，相关性可靠）。
+  const cancelJobIdRef = React.useRef('')
+  const [canCancelExport, setCanCancelExport] = React.useState(false)
   const [stageSize, setStageSize] = React.useState<{ width: number; height: number } | null>(null)
-  const [mediaScale, setMediaScale] = React.useState(1)
-  const [mediaOffset, setMediaOffset] = React.useState({ x: 0, y: 0 })
-  const [fitMode, setFitMode] = React.useState<PreviewFitMode>('contain')
-  const [safeAreaVisible, setSafeAreaVisible] = React.useState(false)
   const [exportStatus, setExportStatus] = React.useState<PreviewExportStatus>('idle')
   const [exportRatio, setExportRatio] = React.useState(0)
   const [playbackError, setPlaybackError] = React.useState('')
+  const [editingTextId, setEditingTextId] = React.useState('')
+  const [editingDraft, setEditingDraft] = React.useState('')
+  const [textMenuOpen, setTextMenuOpen] = React.useState(false)
+  const textMenuRef = React.useRef<HTMLDivElement | null>(null)
+  const [textSnapGuides, setTextSnapGuides] = React.useState<{ x: number | null; y: number | null }>({ x: null, y: null })
+  // P2 播放器手感：音量/静音（clip 本就带音频，之前播放器读不到）+ 全屏（看成片整体）。
+  const [volume, setVolume] = React.useState(1)
+  const [muted, setMuted] = React.useState(false)
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
+  const addTimelineTextClip = useWorkbenchStore((state) => state.addTimelineTextClip)
+  const updateTimelineTextClip = useWorkbenchStore((state) => state.updateTimelineTextClip)
+  const updateTimelineTextClipTransform = useWorkbenchStore((state) => state.updateTimelineTextClipTransform)
+  const selectTimelineTextClip = useWorkbenchStore((state) => state.selectTimelineTextClip)
+  const selectedTextClipId = useWorkbenchStore((state) => state.selectedTextClipId)
   const setPreviewAspectRatio = useWorkbenchStore((state) => state.setPreviewAspectRatio)
+  const setTimelineClipFraming = useWorkbenchStore((state) => state.setTimelineClipFraming)
   const playing = useWorkbenchStore((state) => state.timelinePlaying)
   const setTimelinePlaying = useWorkbenchStore((state) => state.setTimelinePlaying)
   const setTimelinePlayhead = useWorkbenchStore((state) => state.setTimelinePlayhead)
@@ -108,7 +96,12 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
   const activeRatio = PREVIEW_RATIOS.find((ratio) => ratio.value === aspectRatio) || PREVIEW_RATIOS[0]
   const activeMediaKey = videoClip?.url || imageClip?.url || ''
   const hasMedia = Boolean(activeMediaKey)
-  const isEmpty = timeline.tracks.every(t => t.clips.length === 0)
+  // 取景 per-clip（P0-5）：控件作用于主媒体 clip（视频优先，z-2 在上）；渲染时各媒体用自己的 framing。
+  const framingClipId = (videoClip ?? imageClip)?.id ?? ''
+  const imageFraming = resolveClipFraming(imageClip ?? undefined)
+  const videoFraming = resolveClipFraming(videoClip ?? undefined)
+  const framing = videoClip ? videoFraming : imageFraming
+  const isEmpty = timeline.tracks.every(t => t.clips.length === 0) && (timeline.textClips ?? []).length === 0
   const totalFrames = computeTimelineDuration(timeline)
   const currentSeconds = (playheadFrame / (timeline.fps || 30)).toFixed(1)
   const totalSeconds = (totalFrames / (timeline.fps || 30)).toFixed(1)
@@ -130,6 +123,32 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     if (Math.abs(video.currentTime - nextTime) < 0.08) return
     video.currentTime = nextTime
   }, [fps, playheadFrame, videoClip, playing])
+
+  // 音量/静音应用到 <video>（video 每个 clip 重挂，故 videoUrl 变也要重设）。
+  React.useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.volume = volume
+    video.muted = muted
+  }, [videoUrl, volume, muted])
+
+  // 全屏态跟随：用 fullscreenchange 同步图标，避免 document.fullscreenElement 在渲染期不反应。
+  React.useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === stageRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  const stepFrame = React.useCallback((delta: number) => {
+    setTimelinePlayhead(Math.max(0, Math.min(totalFrames, playheadFrame + delta)))
+  }, [playheadFrame, setTimelinePlayhead, totalFrames])
+
+  const toggleFullscreen = React.useCallback(() => {
+    const el = stageRef.current
+    if (!el) return
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void el.requestFullscreen?.()
+  }, [])
 
   React.useEffect(() => {
     const video = videoRef.current
@@ -187,19 +206,44 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
     return () => window.removeEventListener('resize', measure)
   }, [activeRatio.height, activeRatio.width])
 
-  React.useEffect(() => {
-    setMediaScale(1)
-    setMediaOffset({ x: 0, y: 0 })
-  }, [activeMediaKey, aspectRatio])
-
   const updateMediaScale = React.useCallback((delta: number) => {
-    setMediaScale((prev) => clampPreviewScale(prev + delta))
-  }, [])
+    if (!framingClipId) return
+    setTimelineClipFraming(framingClipId, { scale: clampFramingScale(framing.scale + delta) }, { commit: true })
+  }, [framingClipId, framing.scale, setTimelineClipFraming])
 
   const resetMediaTransform = React.useCallback(() => {
-    setMediaScale(1)
-    setMediaOffset({ x: 0, y: 0 })
-  }, [])
+    if (!framingClipId) return
+    setTimelineClipFraming(framingClipId, { scale: 1, offsetX: 0, offsetY: 0 }, { commit: true })
+  }, [framingClipId, setTimelineClipFraming])
+
+  const addText = React.useCallback((style: 'caption' | 'title') => {
+    const id = addTimelineTextClip(style, playheadFrame)
+    setEditingTextId(id)
+    setEditingDraft('')
+    setTextMenuOpen(false)
+  }, [addTimelineTextClip, playheadFrame])
+
+  // 文字预设菜单：点外部关闭
+  React.useEffect(() => {
+    if (!textMenuOpen) return
+    const onDown = (event: PointerEvent) => {
+      if (textMenuRef.current && !textMenuRef.current.contains(event.target as globalThis.Node | null)) setTextMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [textMenuOpen])
+
+  const beginEditText = React.useCallback((id: string, text: string) => {
+    selectTimelineTextClip(id)
+    setEditingTextId(id)
+    setEditingDraft(text)
+  }, [selectTimelineTextClip])
+
+  const commitEditText = React.useCallback((id: string) => {
+    const text = editingDraft.trim()
+    if (text) updateTimelineTextClip(id, text)
+    setEditingTextId('')
+  }, [editingDraft, updateTimelineTextClip])
 
   const handleExport = React.useCallback(async () => {
     if (exportBusy) return
@@ -219,70 +263,123 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
         },
       })
       toast(`已导出到项目 exports 文件夹：${result.relativePath}`, 'success')
+      // 上手清单第 4 步「导出成片」打勾（导出 fire-and-forget 无持久历史，靠这里标记）。
+      markChecklistStep('exported')
       void getDesktopBridge()?.exports.showInFolder({ projectId, relativePath: result.relativePath }).catch(() => undefined)
       setExportStatus('idle')
     } catch (error) {
       setExportStatus('idle')
       const message = error instanceof Error ? error.message : '导出失败'
       toast(message, 'error')
+    } finally {
+      cancelJobIdRef.current = ''
+      setCanCancelExport(false)
     }
   }, [aspectRatio, exportBusy, timeline])
 
+  // 导出进行中订阅导出事件，捕获当前项目在跑 job 的 id（供「取消」按钮）。
+  // exportApi 内部生成 jobId 不回传 UI；per-project 单 active 锁保证相关性可靠。
+  React.useEffect(() => {
+    if (!exportBusy) return
+    const bridge = getDesktopBridge()
+    const projectId = getDesktopActiveProjectId().trim()
+    if (!bridge?.exports?.onEvent || !bridge.exports.cancel || !projectId) return
+    const unsubscribe = bridge.exports.onEvent((event) => {
+      if (event.projectId !== projectId) return
+      const stage = event.snapshot.progress.stage
+      const active = stage !== 'succeeded' && stage !== 'failed' && stage !== 'cancelled'
+      if (active && event.jobId) {
+        cancelJobIdRef.current = event.jobId
+        setCanCancelExport(true)
+      }
+    })
+    return () => unsubscribe?.()
+  }, [exportBusy])
+
+  const handleCancelExport = React.useCallback(() => {
+    const jobId = cancelJobIdRef.current
+    if (!jobId) return
+    setCanCancelExport(false)
+    // 后端 cancelExportJob abort 在跑的 ffmpeg → finishTempInput 抛 Cancelled，
+    // handleExport 的 catch 收口（复位状态 + toast），这里不重复弹错。
+    void getDesktopBridge()?.exports.cancel(jobId).catch((error: unknown) => {
+      console.warn('Failed to cancel export job', error)
+    })
+  }, [])
+
+  // 右上角「导出」在预览页时派发本事件 → 直接触发导出（handleExport 已自带 busy/空 守卫）。
+  React.useEffect(() => {
+    const onRequest = () => { void handleExport() }
+    window.addEventListener('nomi-request-export', onRequest as EventListener)
+    return () => window.removeEventListener('nomi-request-export', onRequest as EventListener)
+  }, [handleExport])
+
   const togglePlayback = React.useCallback(() => {
-    const durationFrame = timeline.tracks.reduce((maxFrame, track) => {
-      const trackEndFrame = track.clips.reduce((trackMax, clip) => Math.max(trackMax, clip.endFrame), 0)
-      return Math.max(maxFrame, trackEndFrame)
-    }, 0)
+    const durationFrame = computeTimelineDuration(timeline)
     if (durationFrame <= 0) return
     if (playheadFrame >= durationFrame) {
       setTimelinePlayhead(0)
     }
     setTimelinePlaying(!playing)
-  }, [playheadFrame, playing, setTimelinePlayhead, setTimelinePlaying, timeline.tracks])
+    // computeTimelineDuration 同时计入 tracks 与 textClips（片尾标题卡也撑时长），
+    // 故依赖整个 timeline，否则改完文字轨后这个回调仍用旧时长判定空/越界。
+  }, [playheadFrame, playing, setTimelinePlayhead, setTimelinePlaying, timeline])
 
   const beginDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!hasMedia) return
+    if (!framingClipId) return
     if ((event.target as HTMLElement).closest('button')) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = {
       pointerId: event.pointerId,
+      clipId: framingClipId,
       startX: event.clientX,
       startY: event.clientY,
-      originX: mediaOffset.x,
-      originY: mediaOffset.y,
+      originOffsetX: framing.offsetX,
+      originOffsetY: framing.offsetY,
     }
-  }, [hasMedia, mediaOffset.x, mediaOffset.y])
+  }, [framingClipId, framing.offsetX, framing.offsetY])
+
+  // 拖动中 commit:false，松手 commit:true 落盘一次。
+  const applyDragOffset = React.useCallback((drag: NonNullable<typeof dragRef.current>, event: React.PointerEvent<HTMLDivElement>, commit: boolean) => {
+    if (!stageSize) return
+    const next = framingOffsetFromDrag(drag, { x: event.clientX - drag.startX, y: event.clientY - drag.startY }, stageSize)
+    setTimelineClipFraming(drag.clipId, next, { commit })
+  }, [stageSize, setTimelineClipFraming])
 
   const moveDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
-    setMediaOffset({
-      x: drag.originX + event.clientX - drag.startX,
-      y: drag.originY + event.clientY - drag.startY,
-    })
-  }, [])
+    applyDragOffset(drag, event, false)
+  }, [applyDragOffset])
 
   const endDrag = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
+    applyDragOffset(drag, event, true)
     dragRef.current = null
     try {
       event.currentTarget.releasePointerCapture(event.pointerId)
     } catch {
       // ignore
     }
-  }, [])
+  }, [applyDragOffset])
 
-  const mediaStyle = {
-    transform: `translate(${mediaOffset.x}px, ${mediaOffset.y}px) scale(${mediaScale})`,
-  }
+  const imageStyle = framingToMediaStyle(imageFraming, stageSize)
+  const videoStyle = framingToMediaStyle(videoFraming, stageSize)
+  const imageFitClass = mediaFitClass(imageFraming)
+  const videoFitClass = mediaFitClass(videoFraming)
 
+  // 文字叠加层（字幕/标题卡）：当前帧 active 的文字 clip，按 stage 像素几何摆放。
+  const activeTextClips = resolveActiveTextClipsAtFrame(timeline, playheadFrame)
+  // 选中的文字 clip → 控制条出字号/字体精确控件
   return (
-    <section ref={playerRef} className={cn(
+    <section className={cn(
       'workbench-preview-player',
-      'min-w-0 min-h-0 grid place-items-center p-8 bg-[var(--workbench-bg)]',
+      'relative min-w-0 min-h-0 flex flex-col items-center p-8 gap-3 bg-[var(--workbench-bg)]',
     )} aria-label="预览播放器">
+      {/* 测量区：stage 居中于此（控制条之上的可用高度），控制条作为下方独立一行不再压住画面。 */}
+      <div ref={playerRef} className="workbench-preview-player__stage-area flex-1 min-h-0 w-full grid place-items-center">
       <div
         ref={stageRef}
         className={cn(
@@ -294,7 +391,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
           hasMedia && 'cursor-grab active:cursor-grabbing',
         )}
         data-aspect-ratio={activeRatio.value}
-        data-fit-mode={fitMode}
+        data-fit-mode={framing.fit}
         data-has-media={hasMedia ? 'true' : 'false'}
         style={{
           aspectRatio: activeRatio.css,
@@ -319,7 +416,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             )}>
               <span className={cn(
                 'workbench-preview-player__placeholder-title',
-                'font-[var(--nomi-font-display)] text-lg tracking-tight text-[var(--workbench-muted)]',
+                'font-nomi-display text-lg tracking-tight text-[var(--workbench-muted)]',
               )}>画面预览</span>
               <span className={cn(
                 'workbench-preview-player__placeholder-sub',
@@ -328,174 +425,6 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             </div>
           ) : null}
         </div>
-        <div className={cn(
-          'workbench-preview-player__control-bar',
-          'absolute z-[3] left-1/2 bottom-[14px] -translate-x-1/2',
-          'max-w-[calc(100%-24px)] inline-flex items-center gap-1.5 p-[5px]',
-          'border border-[var(--workbench-border)] rounded-full',
-          'bg-[color-mix(in_oklch,var(--nomi-paper)_88%,transparent)]',
-          'shadow-[var(--workbench-shadow-sm)] backdrop-blur-[12px] backdrop-saturate-[1.2]',
-          'overflow-x-auto scrollbar-none',
-        )} role="toolbar" aria-label="预览控制">
-          <WorkbenchIconButton
-            className={cn(
-              'workbench-preview-player__play',
-              'w-[30px] h-[30px] grid place-items-center border-0 rounded-full',
-              'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
-              'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
-            )}
-            label={playing ? '暂停' : '播放'}
-            icon={playing ? <IconPlayerPause size={16} stroke={2} /> : <IconPlayerPlay size={16} stroke={2} />}
-            onClick={togglePlayback}
-            disabled={isEmpty}
-            title={isEmpty ? '时间轴为空' : undefined}
-          />
-          <span className="text-[11px] opacity-60 tabular-nums min-w-[60px]">
-            {currentSeconds}s / {totalSeconds}s
-          </span>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>画幅</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="预览画幅"
-              value={aspectRatio}
-              onChange={(event) => setPreviewAspectRatio(event.currentTarget.value as PreviewAspectRatio)}
-            >
-              {PREVIEW_RATIOS.map((ratio) => (
-                <option key={ratio.value} value={ratio.value}>
-                  {ratio.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__select-control',
-            'flex-none inline-flex items-center gap-1 h-6 px-2.5 rounded-full bg-transparent hover:bg-[var(--workbench-hover)]',
-          )}>
-            <span className={cn(
-              'workbench-preview-player__control-label',
-              'text-[var(--workbench-muted)] text-[11px] font-bold whitespace-nowrap',
-            )}>显示</span>
-            <select
-              className={cn(
-                'workbench-preview-player__select',
-                'min-w-[56px] h-[22px] border-0 rounded-[5px] bg-transparent',
-                'text-[var(--workbench-ink)] text-[11px] font-bold outline-none cursor-pointer',
-              )}
-              aria-label="画面适配"
-              value={fitMode}
-              onChange={(event) => setFitMode(event.currentTarget.value as PreviewFitMode)}
-            >
-              <option value="contain">适应</option>
-              <option value="cover">填充</option>
-            </select>
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          <div className={cn(
-            'workbench-preview-player__control-group',
-            'flex-none inline-flex items-center gap-[3px]',
-          )} aria-label="预览构图">
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
-            <span className={cn(
-              'workbench-preview-player__zoom-label',
-              'min-w-[38px] text-[var(--workbench-muted)] text-[11px] font-bold tabular-nums text-center',
-            )} aria-label="当前缩放">{Math.round(mediaScale * 100)}%</span>
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
-            <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', 'w-6 h-6 inline-grid place-items-center p-0 border border-transparent rounded-full bg-transparent text-[var(--workbench-muted)] cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
-          </div>
-          <div className={cn(
-            'workbench-preview-player__control-separator',
-            'w-px h-5 bg-[var(--workbench-border-soft)]',
-          )} aria-hidden="true" />
-          {(exportStatus === 'preparing' || exportStatus === 'recording' || exportStatus === 'converting') ? (
-            <div className={cn(
-              'workbench-preview-player__export-progress',
-              'flex items-center gap-2 px-2',
-            )}>
-              <div className={cn(
-                'workbench-preview-player__export-progress-bar-track',
-                'w-20 h-1 bg-white/15 rounded-sm overflow-hidden',
-              )}>
-                <div
-                  className={cn(
-                    'workbench-preview-player__export-progress-bar',
-                    'h-1 bg-[var(--mantine-color-blue-5,#339af0)] rounded-sm transition-[width] duration-200 ease-in-out min-w-1',
-                  )}
-                  style={{ width: `${Math.round(exportRatio * 100)}%` }}
-                />
-              </div>
-              <span className={cn(
-                'workbench-preview-player__export-progress-label',
-                'text-xs text-white/70 whitespace-nowrap',
-              )}>
-                {exportStatus === 'preparing' ? '准备中…' : exportStatus === 'converting' ? '转码 MP4…' : `导出中 ${Math.round(exportRatio * 100)}%`}
-              </span>
-            </div>
-          ) : null}
-          <WorkbenchButton
-            className={cn(
-              'workbench-preview-player__export-button',
-              'h-7 min-w-[92px] px-3 border border-transparent rounded-full',
-              'inline-flex items-center justify-center gap-1.5',
-              'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-[11.5px] font-bold cursor-pointer',
-              'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
-              'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--nomi-ink)]',
-            )}
-            aria-label="导出 MP4"
-            onClick={handleExport}
-            disabled={exportBusy || isEmpty}
-            title={exportTitle}
-          >
-            {exportBusy ? <NomiLoadingMark size={15} className={cn('workbench-preview-player__spinner', 'animate-spin')} /> : <IconDownload size={15} />}
-            导出 MP4
-          </WorkbenchButton>
-          <WorkbenchButton
-            className={cn(
-              'workbench-preview-player__mode',
-              'h-6 min-w-[48px] px-2.5 border border-transparent rounded-full',
-              'bg-transparent text-[var(--workbench-muted)] text-[11.5px] font-semibold cursor-pointer',
-              safeAreaVisible && 'bg-[var(--workbench-accent)] text-[var(--nomi-paper)]',
-              !safeAreaVisible && 'hover:border-[var(--workbench-border-soft)] hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]',
-            )}
-            aria-label="切换安全框"
-            aria-pressed={safeAreaVisible}
-            data-active={safeAreaVisible ? 'true' : 'false'}
-            onClick={() => setSafeAreaVisible((value) => !value)}
-          >
-            安全框
-          </WorkbenchButton>
-        </div>
-        {safeAreaVisible ? (
-          <div className={cn(
-            'workbench-preview-player__safe-area',
-            'absolute inset-[8%] z-[2] border border-white/70',
-            'shadow-[0_0_0_1px_rgba(29,29,31,0.18),inset_0_0_0_1px_rgba(29,29,31,0.18)]',
-            'pointer-events-none',
-            'after:content-[""] after:absolute after:inset-[8%] after:border after:border-dashed after:border-white/70',
-            'after:shadow-[0_0_0_1px_rgba(29,29,31,0.14)]',
-          )} aria-hidden="true" />
-        ) : null}
         {playbackError ? (
           <div className={cn(
             'workbench-preview-player__media-error',
@@ -509,31 +438,353 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
         {imageClip?.url ? (
           <img className={cn(
             'workbench-preview-player__image',
-            'absolute inset-0 z-[1] w-full h-full object-contain bg-transparent select-none will-change-transform',
-          )} src={imageClip.url} alt={imageClip.label || ''} style={mediaStyle} />
+            'absolute inset-0 z-[1] w-full h-full bg-transparent select-none will-change-transform',
+            imageFitClass,
+          )} src={imageClip.url} alt={imageClip.label || ''} style={imageStyle} />
         ) : null}
         {videoUrl ? (
           <video
             ref={videoRef}
             className={cn(
               'workbench-preview-player__video',
-              'absolute inset-0 z-[2] w-full h-full object-contain bg-transparent select-none will-change-transform',
+              'absolute inset-0 z-[2] w-full h-full bg-transparent select-none will-change-transform',
+              videoFitClass,
             )}
             src={videoPlaybackUrl}
             crossOrigin="use-credentials"
-            muted
             playsInline
-            style={mediaStyle}
+            style={videoStyle}
             onError={() => {
               void diagnoseVideoPlaybackFailure(videoUrl, videoRef.current?.error || null).then((diagnostics) => {
                 logVideoPlaybackFailure(diagnostics)
-                const message = diagnostics.probeMessage
-                setPlaybackError(message ? `视频加载失败：${message}` : '视频加载失败：代理无法读取该视频地址')
+                setPlaybackError(`视频加载失败：${describeVideoPlaybackFailure(diagnostics)}`)
               })
               setTimelinePlaying(false)
             }}
           />
         ) : null}
+        {/* 文字叠加层（字幕/标题卡）：z 在媒体之上；容器不拦事件，仅文本框可点选/编辑。 */}
+        {stageSize && activeTextClips.length > 0 ? (
+          <div className="workbench-preview-player__text-layer absolute inset-0 z-[3] pointer-events-none" aria-hidden="false">
+            {/* 中线吸附引导线（拖动中临时） */}
+            {textSnapGuides.x !== null ? (
+              <div className="absolute top-0 bottom-0 w-px bg-[var(--nomi-accent)] opacity-70 pointer-events-none" style={{ left: `${textSnapGuides.x * stageSize.width}px` }} aria-hidden="true" />
+            ) : null}
+            {textSnapGuides.y !== null ? (
+              <div className="absolute left-0 right-0 h-px bg-[var(--nomi-accent)] opacity-70 pointer-events-none" style={{ top: `${textSnapGuides.y * stageSize.height}px` }} aria-hidden="true" />
+            ) : null}
+            {activeTextClips.map((clip) => {
+              const box = resolveTextBox(clip, stageSize.width, stageSize.height)
+              const transform = resolveOverlayTransform(clip)
+              const editing = editingTextId === clip.id
+              const selected = selectedTextClipId === clip.id
+              const contentStyle: React.CSSProperties = {
+                maxWidth: `${box.maxWidthPx}px`,
+                fontSize: `${box.fontSizePx}px`,
+                fontFamily: box.fontFamily,
+                fontWeight: box.fontWeight,
+                lineHeight: String(box.lineHeight),
+                textAlign: 'center',
+                color: 'var(--nomi-ink)',
+                padding: box.hasBackdrop ? '0.32em 0.7em' : 0,
+                background: box.hasBackdrop ? 'color-mix(in oklch, var(--nomi-paper) 86%, transparent)' : 'transparent',
+                border: box.hasBackdrop ? '1px solid var(--nomi-line-soft)' : 'none',
+                borderRadius: 'var(--nomi-radius-md)',
+                // 折行契约：预览用 CSS 原生折行，导出 canvas 用 textLayout.wrapTextToWidth 复刻同一语义
+                // （white-space:pre-wrap + word-break:break-word ⇔ 显式换行 + 优先整词断 + 超长词逐字断）。
+                // 两端共用 box 几何（resolveTextBox）与内边距（0.32em/0.7em ↔ 导出 fontSize*1.4 budget），断行一致。
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }
+              const centerStyle: React.CSSProperties = {
+                left: `${box.centerX}px`,
+                top: `${box.centerY}px`,
+                transform: 'translate(-50%, -50%)',
+              }
+              if (editing) {
+                return (
+                  <textarea
+                    key={clip.id}
+                    className="workbench-preview-player__text-edit absolute pointer-events-auto resize-none outline-none overflow-hidden"
+                    style={{ ...centerStyle, ...contentStyle, boxShadow: '0 0 0 2px var(--nomi-accent)' }}
+                    value={editingDraft}
+                    placeholder={clip.text}
+                    autoFocus
+                    rows={1}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setEditingDraft(event.target.value)}
+                    onBlur={() => commitEditText(clip.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        setEditingTextId('')
+                      }
+                    }}
+                  />
+                )
+              }
+              if (selected) {
+                return (
+                  <OverlaySelectionBox
+                    key={clip.id}
+                    centerNorm={transform.position}
+                    scale={transform.scale}
+                    stageWidth={stageSize.width}
+                    stageHeight={stageSize.height}
+                    onTransform={(patch, commit) => updateTimelineTextClipTransform(clip.id, patch, { commit })}
+                    onSnapGuides={setTextSnapGuides}
+                  >
+                    <div style={contentStyle} onDoubleClick={(event) => { event.stopPropagation(); beginEditText(clip.id, clip.text) }} title="拖动移动 · 四角缩放 · 双击改字">
+                      {clip.text}
+                    </div>
+                  </OverlaySelectionBox>
+                )
+              }
+              return (
+                <div
+                  key={clip.id}
+                  className="workbench-preview-player__text-box absolute pointer-events-auto cursor-pointer select-none"
+                  style={{ ...centerStyle, ...contentStyle }}
+                  onPointerDown={(event) => { event.stopPropagation(); selectTimelineTextClip(clip.id) }}
+                  onDoubleClick={(event) => { event.stopPropagation(); beginEditText(clip.id, clip.text) }}
+                  title="点选 · 双击改字"
+                >
+                  {clip.text}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+      </div>
+      </div>
+      {/* 控制条：stage 下方独立一行（不再 absolute 浮在画面上遮挡底部字幕）。
+          section 不裁剪 → 下拉/安全框可正常溢出；居中、不被 flex 挤压。 */}
+      <div className={cn(
+        'workbench-preview-player__control-bar',
+        // 窄窗口时换行而非把「导出 MP4」挤出/截断：flex-wrap + 居中；圆角改 lg（换行后不再是单行 pill）。
+        'relative z-[3] shrink-0 max-w-full flex flex-wrap justify-center items-center gap-1.5 p-[5px]',
+        'border border-[var(--workbench-border)] rounded-[var(--nomi-radius-lg)]',
+        'bg-[color-mix(in_oklch,var(--nomi-paper)_88%,transparent)]',
+        'shadow-[var(--workbench-shadow-sm)] backdrop-blur-[12px] backdrop-saturate-[1.2]',
+        // 子项一律不被 flex 挤压：避免画幅/显示下拉被截成「1…」「适.」；满了整组换到下一行。
+        '[&>*]:shrink-0',
+      )} role="toolbar" aria-label="预览控制">
+        <WorkbenchIconButton
+          className={cn(
+            'workbench-preview-player__play',
+            'w-[30px] h-[30px] grid place-items-center border-0 rounded-full',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
+            // 禁用态（时间轴为空）不再 hover 高亮成「假可点」：enabled: 门控自身 accent hover，
+            // 并用 disabled:hover: 把基类那条无条件 hover:bg-workbench-hover 钉回静息 ink/paper。
+            'enabled:hover:bg-[var(--nomi-accent)] enabled:hover:text-[var(--nomi-paper)]',
+            'disabled:hover:bg-[var(--nomi-ink)] disabled:hover:text-[var(--nomi-paper)]',
+          )}
+          label={playing ? '暂停' : '播放'}
+          icon={playing ? <IconPlayerPause size={16} stroke={1.6} /> : <IconPlayerPlay size={16} stroke={1.6} />}
+          onClick={togglePlayback}
+          disabled={isEmpty}
+          title={isEmpty ? '时间轴为空' : undefined}
+        />
+        <WorkbenchIconButton
+          className={cn('w-[28px] h-[28px] grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] enabled:hover:bg-[var(--workbench-hover)] disabled:opacity-40')}
+          label="上一帧"
+          title="上一帧（←）"
+          icon={<IconPlayerSkipBack size={15} stroke={1.6} />}
+          onClick={() => stepFrame(-1)}
+          disabled={isEmpty}
+        />
+        <WorkbenchIconButton
+          className={cn('w-[28px] h-[28px] grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] enabled:hover:bg-[var(--workbench-hover)] disabled:opacity-40')}
+          label="下一帧"
+          title="下一帧（→）"
+          icon={<IconPlayerSkipForward size={15} stroke={1.6} />}
+          onClick={() => stepFrame(1)}
+          disabled={isEmpty}
+        />
+        <span className="text-micro opacity-60 tabular-nums min-w-[60px]">
+          {currentSeconds}s / {totalSeconds}s
+        </span>
+        <div className={cn('workbench-preview-player__volume', 'inline-flex items-center gap-1')}>
+          <WorkbenchIconButton
+            className={cn('w-[28px] h-[28px] grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] enabled:hover:bg-[var(--workbench-hover)]')}
+            label={muted ? '取消静音' : '静音'}
+            title={muted ? '取消静音' : '静音'}
+            icon={muted ? <IconVolumeOff size={15} stroke={1.6} /> : <IconVolume size={15} stroke={1.6} />}
+            onClick={() => setMuted((m) => !m)}
+          />
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={muted ? 0 : volume}
+            aria-label="音量"
+            className="w-[54px] h-1 cursor-pointer"
+            style={{ accentColor: 'var(--nomi-accent)' }}
+            onChange={(event) => {
+              const next = Number(event.target.value)
+              setVolume(next)
+              setMuted(next === 0)
+            }}
+          />
+        </div>
+        <WorkbenchIconButton
+          className={cn('w-[28px] h-[28px] grid place-items-center border-0 rounded-[var(--workbench-control-radius)] bg-transparent text-[var(--workbench-muted)] enabled:hover:bg-[var(--workbench-hover)]')}
+          label={isFullscreen ? '退出全屏' : '全屏'}
+          title={isFullscreen ? '退出全屏' : '全屏预览'}
+          icon={isFullscreen ? <IconMinimize size={15} stroke={1.6} /> : <IconMaximize size={15} stroke={1.6} />}
+          onClick={toggleFullscreen}
+        />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <NomiSelect
+          ariaLabel="预览画幅"
+          leadingLabel="画幅"
+          size="xs"
+          value={aspectRatio}
+          options={PREVIEW_RATIOS.map((ratio) => ({ value: ratio.value, label: ratio.label }))}
+          onChange={(value) => setPreviewAspectRatio(value as PreviewAspectRatio)}
+        />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <NomiSelect
+          ariaLabel="画面适配"
+          leadingLabel="显示"
+          size="xs"
+          value={framing.fit}
+          options={[
+            { value: 'contain', label: '适应' },
+            { value: 'cover', label: '填充' },
+          ]}
+          onChange={(value) => { if (framingClipId) setTimelineClipFraming(framingClipId, { fit: value as ClipFit }, { commit: true }) }}
+        />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <div className={cn(
+          'workbench-preview-player__control-group',
+          'flex-none inline-flex items-center gap-[3px]',
+        )} aria-label="预览构图">
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="缩小画面" icon={<IconZoomOut size={16} />} onClick={() => updateMediaScale(-0.1)} disabled={!hasMedia} />
+          <span className={cn(
+            'workbench-preview-player__zoom-label',
+            'min-w-[38px] text-[var(--workbench-muted)] text-micro font-bold tabular-nums text-center',
+          )} aria-label="当前缩放">{Math.round(framing.scale * 100)}%</span>
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="重置画面" icon={<IconRefresh size={16} />} onClick={resetMediaTransform} disabled={!hasMedia} />
+          <WorkbenchIconButton className={cn('workbench-preview-player__icon-button', CONTROL_ICON_BUTTON_CLASS)} label="放大画面" icon={<IconZoomIn size={16} />} onClick={() => updateMediaScale(0.1)} disabled={!hasMedia} />
+        </div>
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        <div ref={textMenuRef} className={cn(
+          'workbench-preview-player__text-tools',
+          'relative flex-none inline-flex items-center',
+        )} aria-label="添加文字">
+          <WorkbenchButton
+            className={cn('h-7 px-2.5 inline-flex items-center gap-1 border border-[var(--workbench-border)] rounded-full whitespace-nowrap bg-transparent text-[var(--workbench-muted)] text-micro font-bold cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')}
+            aria-label="添加文字"
+            aria-expanded={textMenuOpen}
+            title="加字幕 / 标题（都是文字，可自由拖动缩放）"
+            onClick={() => setTextMenuOpen((open) => !open)}
+          >
+            <IconLetterCase size={14} />文字<IconChevronDown size={12} className="opacity-60" />
+          </WorkbenchButton>
+          {textMenuOpen ? (
+            <div className={cn(
+              'workbench-preview-player__text-menu',
+              'absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-[5]',
+              'min-w-[148px] p-1 flex flex-col gap-0.5',
+              'rounded-[var(--nomi-radius-md)] border border-[var(--workbench-border)]',
+              'bg-[var(--nomi-paper)] shadow-[var(--workbench-shadow-pop)]',
+            )} role="menu">
+              <button type="button" role="menuitem"
+                className={cn('flex items-center gap-2 px-2 py-1.5 rounded-[var(--nomi-radius-sm)] text-left text-caption text-[var(--workbench-ink)] hover:bg-[var(--workbench-hover)]')}
+                onClick={() => addText('caption')}>
+                <IconLetterCase size={14} className="flex-none text-[var(--workbench-text)]" />
+                <span className="flex-1">字幕</span>
+                <span className="text-[var(--workbench-muted-soft)] text-micro">底部 · 小</span>
+              </button>
+              <button type="button" role="menuitem"
+                className={cn('flex items-center gap-2 px-2 py-1.5 rounded-[var(--nomi-radius-sm)] text-left text-caption text-[var(--workbench-ink)] hover:bg-[var(--workbench-hover)]')}
+                onClick={() => addText('title')}>
+                <IconLetterCase size={14} className="flex-none text-[var(--workbench-text)]" />
+                <span className="flex-1">标题</span>
+                <span className="text-[var(--workbench-muted-soft)] text-micro">居中 · 大</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <TextClipStyleControls timeline={timeline} selectedTextClipId={selectedTextClipId} />
+        <div className={cn(
+          'workbench-preview-player__control-separator',
+          'w-px h-5 bg-[var(--workbench-border-soft)]',
+        )} aria-hidden="true" />
+        {(exportStatus === 'preparing' || exportStatus === 'recording' || exportStatus === 'converting') ? (
+          <div className={cn(
+            'workbench-preview-player__export-progress',
+            'flex items-center gap-2 px-2',
+          )}>
+            <div className={cn(
+              'workbench-preview-player__export-progress-bar-track',
+              'w-20 h-1 bg-white/15 rounded-sm overflow-hidden',
+            )}>
+              <div
+                className={cn(
+                  'workbench-preview-player__export-progress-bar',
+                  'h-1 bg-nomi-accent rounded-sm transition-[width] duration-200 ease-in-out min-w-1',
+                )}
+                style={{ width: `${Math.round(exportRatio * 100)}%` }}
+              />
+            </div>
+            <span className={cn(
+              'workbench-preview-player__export-progress-label',
+              'text-xs text-white/70 whitespace-nowrap',
+            )}>
+              {exportStatus === 'preparing' ? '准备中…' : exportStatus === 'converting' ? '转码 MP4…' : `导出中 ${Math.round(exportRatio * 100)}%`}
+            </span>
+            <WorkbenchIconButton
+              className={cn(
+                'workbench-preview-player__export-cancel',
+                'w-6 h-6 inline-grid place-items-center p-0 rounded-full border-0 bg-transparent text-[var(--workbench-muted)]',
+                'enabled:cursor-pointer enabled:hover:bg-[var(--workbench-hover)] enabled:hover:text-[var(--workbench-danger)]',
+                // 同 CONTROL_ICON_BUTTON_CLASS：钉死基类无条件 hover，禁用态（准备中）不假高亮。
+                'disabled:hover:bg-transparent disabled:hover:text-[var(--workbench-muted)]',
+              )}
+              label="取消导出"
+              title={canCancelExport ? '取消导出' : '准备中，暂不可取消'}
+              icon={<IconX size={14} />}
+              onClick={handleCancelExport}
+              disabled={!canCancelExport}
+            />
+          </div>
+        ) : null}
+        <WorkbenchButton
+          className={cn(
+            'workbench-preview-player__export-button',
+            'h-7 px-3 border border-transparent rounded-full whitespace-nowrap',
+            'inline-flex items-center justify-center gap-1.5',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] text-micro font-bold cursor-pointer',
+            'hover:bg-[var(--nomi-accent)] hover:text-[var(--nomi-paper)]',
+            'disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[var(--nomi-ink)]',
+          )}
+          aria-label="导出 MP4"
+          onClick={handleExport}
+          disabled={exportBusy || isEmpty}
+          title={exportTitle}
+        >
+          {exportBusy ? <NomiLoadingMark size={15} className={cn('workbench-preview-player__spinner', 'animate-spin')} /> : <IconDownload size={15} />}
+          导出 MP4
+        </WorkbenchButton>
       </div>
     </section>
   )

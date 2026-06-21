@@ -1,16 +1,10 @@
 import React from 'react'
 import { create } from 'zustand'
+import { notifications } from '@mantine/notifications'
 import { cn } from '../utils/cn'
 
 type ToastType = 'info' | 'success' | 'error' | 'warning'
-type Toast = {
-  id: string
-  message: string
-  type?: ToastType
-  ttl?: number
-  actionLabel?: string
-  onAction?: () => void
-}
+type Toast = { id: string; message: string; type?: ToastType; ttl?: number }
 
 type ToastState = {
   items: Toast[]
@@ -31,7 +25,13 @@ export const useToastStore = create<ToastState>((set, get) => ({
 }))
 
 export function toast(message: string, type?: ToastType) {
-  useToastStore.getState().push({ message, type })
+  const color = type === 'error' ? 'red' : type === 'success' ? 'teal' : type === 'warning' ? 'yellow' : 'gray'
+  try {
+    notifications.show({ message, color })
+  } catch {
+    // fallback to local store host
+    useToastStore.getState().push({ message, type })
+  }
 }
 
 export function ToastHost({ className }: { className?: string } = {}): JSX.Element {
@@ -41,27 +41,13 @@ export function ToastHost({ className }: { className?: string } = {}): JSX.Eleme
       {items.map(i => (
         <div
           className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-lg border border-black/[.15] shadow-sm',
-            i.type === 'error' && 'bg-red-500/[.12]',
-            i.type === 'success' && 'bg-emerald-500/[.12]',
-            i.type !== 'error' && i.type !== 'success' && 'bg-blue-500/[.12]',
+            'px-3 py-2 rounded-lg border border-black/[.15] shadow-sm',
+            i.type === 'error' && 'bg-workbench-danger-soft',
+            i.type === 'success' && 'bg-workbench-success-soft',
+            i.type !== 'error' && i.type !== 'success' && 'bg-nomi-accent-soft',
           )}
           key={i.id}
-        >
-          <span>{i.message}</span>
-          {i.actionLabel && i.onAction ? (
-            <button
-              type="button"
-              className="shrink-0 rounded-md border border-black/10 bg-white/70 px-2 py-1 text-[12px] font-medium hover:bg-white"
-              onClick={() => {
-                i.onAction?.()
-                useToastStore.getState().remove(i.id)
-              }}
-            >
-              {i.actionLabel}
-            </button>
-          ) : null}
-        </div>
+        >{i.message}</div>
       ))}
     </div>
   )

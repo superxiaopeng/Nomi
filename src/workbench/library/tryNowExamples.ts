@@ -67,6 +67,13 @@ export const TRY_NOW_EXAMPLES: TryNowExample[] = [
 ]
 
 /**
+ * 空库首启 hero「30 秒体验」用的默认示例（v3 拍板：单 CTA 不再三选一，
+ * 选择权对首启用户无行动价值）。产品 demo 故事节奏最快、镜头感最强。
+ */
+export const DEFAULT_TRY_NOW_EXAMPLE: TryNowExample =
+  TRY_NOW_EXAMPLES.find((example) => example.id === 'product-demo') ?? TRY_NOW_EXAMPLES[0]
+
+/**
  * Convert a plain story (paragraphs separated by blank lines) into a
  * tiptap-compatible workbench document. Each paragraph becomes a
  * `paragraph` node with a single `text` child, which is the shape the

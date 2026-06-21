@@ -1,10 +1,10 @@
 import {
-  workbenchAgentsChat,
   workbenchAgentsChatStream,
+  type AgentAttachmentPayload,
   type AgentChatV2Session,
   type AgentsChatResponseDto,
   type AgentsChatStreamEvent,
-} from '../../api/server'
+} from '../../api/desktopClient'
 
 export type WorkbenchAiRequest = {
   prompt: string
@@ -16,6 +16,11 @@ export type WorkbenchAiRequest = {
   skillKey: string
   skillName: string
   mode?: 'chat' | 'auto'
+  /** 助手模型偏好（用户选的）：透传给后端 chooseTextModel 优先用。 */
+  agentModelKey?: string
+  agentVendorKey?: string
+  /** 待发附件（图片走原生多模态；文件 S4 抽文本）。 */
+  attachments?: AgentAttachmentPayload[]
 }
 
 export type WorkbenchAiStreamHandlers = {
@@ -41,24 +46,22 @@ function buildWorkbenchAiPayload(input: WorkbenchAiRequest) {
     },
     mode: input.mode || 'auto',
     temperature: 0.7,
+    ...(input.agentModelKey ? { agentModelKey: input.agentModelKey, agentVendorKey: input.agentVendorKey } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   }
 }
 
 export async function sendWorkbenchAiMessage(
   input: WorkbenchAiRequest,
-  handlers?: WorkbenchAiStreamHandlers,
+  handlers: WorkbenchAiStreamHandlers,
 ): Promise<AgentsChatResponseDto> {
   const payload = buildWorkbenchAiPayload(input)
-  if (!handlers) {
-    return workbenchAgentsChat(payload)
-  }
 
   let streamedText = ''
   let finalResponse: AgentsChatResponseDto | null = null
   let streamError: Error | null = null
-  let terminalReason: 'finished' | 'error' | '' = ''
 
-  await new Promise<void>((resolve, reject) => {
+  const terminalReason = await new Promise<'finished' | 'error'>((resolve, reject) => {
     void workbenchAgentsChatStream(payload, {
       onSession: handlers.onSession,
       onEvent: (event) => {
@@ -81,8 +84,7 @@ export async function sendWorkbenchAiMessage(
           return
         }
         if (event.event === 'done') {
-          terminalReason = event.data.reason
-          resolve()
+          resolve(event.data.reason)
         }
       },
       onError: reject,

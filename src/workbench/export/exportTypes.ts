@@ -36,6 +36,14 @@ export type RendererRenderAsset = {
   hasAudio?: boolean
 }
 
+/** 取景：填充/适应 + 缩放 + 平移（offset 为帧尺寸的归一化分数）。导出据此复现预览构图。 */
+export type RendererClipTransform = {
+  fit: 'contain' | 'cover'
+  scale: number
+  offsetX: number
+  offsetY: number
+}
+
 export type RendererRenderClip = {
   id: string
   assetId: string
@@ -43,6 +51,8 @@ export type RendererRenderClip = {
   endFrame: number
   sourceStartFrame: number
   sourceEndFrame: number
+  /** 取景。缺省 = 默认 contain/1/0/0（仅非默认时携带，省体积）。 */
+  transform?: RendererClipTransform
 }
 
 export type RendererRenderTrack = {
@@ -50,6 +60,14 @@ export type RendererRenderTrack = {
   kind: string
   type: string
   clips: RendererRenderClip[]
+}
+
+export type RendererTextOverlay = {
+  id: string
+  startFrame: number
+  endFrame: number
+  /** 全画幅透明 PNG（已含文字几何）的 base64（不含 data: 前缀）。 */
+  pngBase64: string
 }
 
 export type RendererRenderManifestRequest = {
@@ -64,6 +82,8 @@ export type RendererRenderManifestRequest = {
   }
   profile: ExportProfile
   assets: Record<string, RendererRenderAsset>
+  /** 字幕/标题卡叠加层（导出主路 filtergraph overlay 用）。无文字时为空/缺省。 */
+  textOverlays?: RendererTextOverlay[]
   diagnostics: { warnings: string[] }
 }
 

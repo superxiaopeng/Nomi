@@ -72,3 +72,29 @@ export async function diagnoseVideoPlaybackFailure(
 export function logVideoPlaybackFailure(diagnostics: VideoPlaybackFailureDiagnostics): void {
   console.error('[nomi-video-playback-failure]', diagnostics)
 }
+
+// MediaError.code → 人话。地址已被探针证实可读时，失败一定出在「媒体本身」（解码/格式/传输），
+// 不是代理；这些文案绝不甩锅给代理（修旧 fallback「代理无法读取该视频地址」的误导）。
+const MEDIA_ERROR_HINTS: Record<number, string> = {
+  1: '视频加载被取消',
+  2: '视频传输中断（地址可达，但数据没读完）',
+  3: '视频解码失败（文件可能损坏，或编码不受支持）',
+  4: '视频格式不受支持，或该地址没有返回视频内容',
+}
+
+/**
+ * 把一次播放失败诊断翻成给用户看的一句话——唯一真相源（UI 各处共用，别再各自手搓 fallback）。
+ *
+ * 判定顺序遵循诊断本身的因果：
+ *  1) 探针报错（probeMessage 非空）= 地址根本读不到（网络/HTTP/代理）→ 探针消息最具体，直接用。
+ *  2) 探针成功但 <video> 仍失败 = 地址可读、问题在媒体本身 → 按 MediaError.code 说人话，
+ *     绝不再说「代理无法读取该视频地址」（探针刚证明读得到，那句是自相矛盾的谎）。
+ */
+export function describeVideoPlaybackFailure(diagnostics: VideoPlaybackFailureDiagnostics): string {
+  if (diagnostics.probeMessage) return diagnostics.probeMessage
+  if (diagnostics.mediaErrorCode && MEDIA_ERROR_HINTS[diagnostics.mediaErrorCode]) {
+    return MEDIA_ERROR_HINTS[diagnostics.mediaErrorCode]
+  }
+  if (diagnostics.mediaErrorMessage) return diagnostics.mediaErrorMessage
+  return '视频无法播放（原因未知）'
+}

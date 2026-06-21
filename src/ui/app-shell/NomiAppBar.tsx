@@ -1,9 +1,21 @@
 import React from 'react'
-import { IconDownload, IconPhoto, IconPlugConnected } from '@tabler/icons-react'
+import { IconDownload, IconPhoto, IconPlugConnected, IconBulb } from '@tabler/icons-react'
 import type { WorkspaceMode } from '../../workbench/workbenchStore'
-import { NomiBrand, NomiStepper } from '../../design/identity'
-import { WorkbenchButton } from '../../design/workbenchActions'
+import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
+import { OnboardingChecklist } from '../../workbench/onboarding/OnboardingChecklist'
+import { AboutNomiPopover } from './AboutNomiPopover'
 import { cn } from '../../utils/cn'
+
+// 「素材库」点击 → 打开真实素材库面板（不再直接弹文件对话框）。
+// 上传已移进面板内部，AppBar 只负责发开面板事件（仿 nomi-open-model-catalog）。
+function openAssetLibrary(): void {
+  window.dispatchEvent(new CustomEvent('nomi-open-asset-library'))
+}
+
+// 「提示词库」点击 → 打开提示词库面板（仿素材库的事件驱动开法）。
+function openPromptLibrary(): void {
+  window.dispatchEvent(new CustomEvent('nomi-open-prompt-library'))
+}
 
 type NomiAppBarProps = {
   workspaceMode: WorkspaceMode
@@ -15,9 +27,10 @@ type NomiAppBarProps = {
 }
 
 export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, projectName, onBackToLibrary, onOpenModelCatalog, onRenameProject }: NomiAppBarProps): JSX.Element {
-  const assetInputRef = React.useRef<HTMLInputElement>(null)
   const [editingProjectName, setEditingProjectName] = React.useState(false)
   const [projectTitle, setProjectTitle] = React.useState(projectName || '未命名 Nomi 项目')
+  const [aboutOpen, setAboutOpen] = React.useState(false)
+  const brandRef = React.useRef<HTMLButtonElement | null>(null)
 
   React.useEffect(() => {
     if (!editingProjectName && projectName) setProjectTitle(projectName)
@@ -31,22 +44,6 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
     })
     setEditingProjectName(false)
   }, [onRenameProject])
-
-  const handleAssetFilesSelected = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files || []).filter((file) => file.type.startsWith('image/'))
-    event.currentTarget.value = ''
-    if (!files.length) return
-    onWorkspaceModeChange('generation')
-    void import('../../workbench/generationCanvasV2/adapters/assetImportAdapter')
-      .then(({ importImageFilesToGenerationCanvas }) => {
-        void importImageFilesToGenerationCanvas(files, {
-          basePosition: { x: 120, y: 90 },
-        })
-      })
-      .catch((error) => {
-        console.error('image import failed', error)
-      })
-  }, [onWorkspaceModeChange])
 
   const handleOpenModelCatalog = React.useCallback(() => {
     onOpenModelCatalog?.()
@@ -68,7 +65,24 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
         'inline-flex items-center gap-3 min-w-0',
         'max-[700px]:gap-0',
       )}>
-        <NomiBrand />
+        <button
+          ref={brandRef}
+          type="button"
+          className={cn(
+            'nomi-appbar__brand-btn',
+            'inline-flex items-center border-0 bg-transparent p-0 cursor-pointer rounded-[var(--nomi-radius-sm)]',
+            'transition-[opacity] duration-[var(--nomi-transition-fast)] hover:opacity-80',
+          )}
+          aria-label="关于 Nomi · 检查更新"
+          aria-haspopup="dialog"
+          aria-expanded={aboutOpen}
+          onClick={() => setAboutOpen((open) => !open)}
+        >
+          <NomiBrand />
+        </button>
+        {aboutOpen ? (
+          <AboutNomiPopover anchorEl={brandRef.current} onClose={() => setAboutOpen(false)} />
+        ) : null}
         <span
           className={cn(
             'nomi-appbar__divider',
@@ -95,7 +109,7 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
                 className={cn(
                   'nomi-appbar__breadcrumb-seg nomi-appbar__breadcrumb-seg--lib',
                   'inline-flex items-center h-full px-2.5',
-                  'border-none bg-transparent font-inherit text-[13px]',
+                  'border-none bg-transparent font-inherit text-body-sm',
                   'cursor-pointer whitespace-nowrap',
                   'text-[var(--nomi-ink-50)]',
                   'transition-[background,color] duration-[var(--nomi-transition-fast)]',
@@ -123,7 +137,7 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
                 'nomi-appbar__breadcrumb-input',
                 'h-full px-2.5 border-none',
                 'bg-[color-mix(in_oklch,var(--nomi-accent)_6%,var(--nomi-bg))]',
-                'text-[var(--nomi-ink)] font-inherit text-[13px]',
+                'text-[var(--nomi-ink)] font-inherit text-body-sm',
                 'outline-none min-w-[80px] max-w-[240px]',
               )}
               value={projectTitle}
@@ -141,7 +155,7 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
               className={cn(
                 'nomi-appbar__breadcrumb-seg nomi-appbar__breadcrumb-seg--name',
                 'inline-flex items-center h-full px-2.5',
-                'border-none bg-transparent font-inherit text-[13px]',
+                'border-none bg-transparent font-inherit text-body-sm',
                 'cursor-pointer whitespace-nowrap',
                 'text-[var(--nomi-ink-80)] max-w-[200px] overflow-hidden text-ellipsis',
                 'transition-[background,color] duration-[var(--nomi-transition-fast)]',
@@ -167,31 +181,38 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
         role="toolbar"
         aria-label="全局操作"
       >
-        <input
-          ref={assetInputRef}
-          className={cn(
-            'nomi-appbar__asset-input',
-            'absolute w-px h-px overflow-hidden opacity-0 pointer-events-none',
-          )}
-          type="file"
-          accept="image/*"
-          multiple
-          aria-label="图片素材文件选择器"
-          onChange={handleAssetFilesSelected}
-        />
+        {/* 上手 4 步引导入口：停靠顶栏(始终高/不遮画布)，4/4 自动消失。 */}
+        <OnboardingChecklist />
         <WorkbenchButton
           className={cn(
             'nomi-appbar__ghost',
             'inline-flex items-center gap-1.5 h-[30px] px-2.5',
             'border border-transparent rounded-[var(--nomi-radius-sm)]',
-            'bg-transparent text-[var(--nomi-ink-80)] font-inherit text-[13px]',
+            'bg-transparent text-[var(--nomi-ink-80)] font-inherit text-body-sm',
             'transition-[background,color] duration-[var(--nomi-transition-fast)]',
             'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
             'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
           )}
-          aria-label="打开图片素材导入"
+          aria-label="打开提示词库"
+          title="提示词库"
+          onClick={openPromptLibrary}
+        >
+          <IconBulb size={15} stroke={1.7} />
+          <span className={cn('nomi-appbar__action-text', 'max-[700px]:hidden')}>提示词库</span>
+        </WorkbenchButton>
+        <WorkbenchButton
+          className={cn(
+            'nomi-appbar__ghost',
+            'inline-flex items-center gap-1.5 h-[30px] px-2.5',
+            'border border-transparent rounded-[var(--nomi-radius-sm)]',
+            'bg-transparent text-[var(--nomi-ink-80)] font-inherit text-body-sm',
+            'transition-[background,color] duration-[var(--nomi-transition-fast)]',
+            'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
+            'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
+          )}
+          aria-label="打开素材库"
           title="素材库"
-          onClick={() => assetInputRef.current?.click()}
+          onClick={openAssetLibrary}
         >
           <IconPhoto size={15} stroke={1.7} />
           <span className={cn('nomi-appbar__action-text', 'max-[700px]:hidden')}>素材库</span>
@@ -201,7 +222,7 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
             'nomi-appbar__ghost',
             'inline-flex items-center gap-1.5 h-[30px] px-2.5',
             'border border-transparent rounded-[var(--nomi-radius-sm)]',
-            'bg-transparent text-[var(--nomi-ink-80)] font-inherit text-[13px]',
+            'bg-transparent text-[var(--nomi-ink-80)] font-inherit text-body-sm',
             'transition-[background,color] duration-[var(--nomi-transition-fast)]',
             'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
             'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
@@ -218,14 +239,18 @@ export default function NomiAppBar({ workspaceMode, onWorkspaceModeChange, proje
             'nomi-appbar__primary',
             'inline-flex items-center gap-1.5 h-[30px] px-2.5',
             'border border-transparent rounded-[var(--nomi-radius-sm)]',
-            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] font-inherit text-[13px]',
+            'bg-[var(--nomi-ink)] text-[var(--nomi-paper)] font-inherit text-body-sm',
             'transition-[background,color] duration-[var(--nomi-transition-fast)]',
             'hover:bg-[var(--nomi-ink-80)]',
             'max-[700px]:w-[30px] max-[700px]:h-[30px] max-[700px]:justify-center max-[700px]:p-0',
           )}
-          aria-label="前往预览导出"
-          title="导出"
-          onClick={() => onWorkspaceModeChange('preview')}
+          aria-label={workspaceMode === 'preview' ? '导出 MP4' : '前往预览导出'}
+          title={workspaceMode === 'preview' ? '导出 MP4' : '前往预览导出'}
+          onClick={() => {
+            // 已在预览页 → 直接触发导出（TimelinePreview 监听此事件）；否则先跳到预览页。
+            if (workspaceMode === 'preview') window.dispatchEvent(new CustomEvent('nomi-request-export'))
+            else onWorkspaceModeChange('preview')
+          }}
         >
           <IconDownload size={15} stroke={1.7} />
           <span className={cn('nomi-appbar__action-text', 'max-[700px]:hidden')}>导出</span>
