@@ -44,3 +44,13 @@
 - 每增量：`tsc` 双项目 + scene3d 单测绿。
 - 末尾：五门全过 + **真机走查 3D 编辑器**（开 3D 节点 → 加物体/人偶/人群 → 取景编辑相机 → 预览 → 截图人眼判断渲染正确）。
 - 白名单移除 Scene3DFullscreen 条目（巨壳债清一个）。
+
+## 交付状态（已完成）
+
+**3822 行最大巨壳 → 771 行壳 + 7 子模块，全部 < 800，已移出白名单**（巨壳白名单 3→2）：
+Scene3DFullscreen(壳 771) + inspector(685)/sceneView(630)/objects(601)/viewControllers(465)/toolbar(362)/cameraPreview(235)/sceneContent(193)。
+共享纯符号下沉：mannequinRoleLabel/cameraAimSpherical→scene3dMath、CaptureApi→scene3dTypes。逻辑逐字未改（纯机械抽取）。五门全过。
+
+**真机走查（R13）已做 + 抓到并修复一个真 bug**：
+- Playwright `_electron` 启动构建产物 → 加 3D 场景节点 → 打开全屏编辑器，人眼判断：红色人偶（GLTF）站网格地面、场景节点列表 + 属性面板 + 添加工具栏 + 人偶标签全部正确渲染，与拆分前**像素级一致**；0 CSP 违规 / 0 页面错误 / 0 控制台错误。
+- **走查抓到 #7 CSP 真 bug**：prod `script-src 'self'` 拦了 3D 编辑器的 `WebAssembly.instantiate`（Three.js GLTF/meshopt 解码）+ blob worker，人偶模型加载失败（CompileError）。已在 cto-audit 分支修订 CSP（加 `'wasm-unsafe-eval'`+`blob:`），本分支 rebase 取得。之前非 3D 走查没开编辑器故漏掉——正是 R13 兜住单测兜不住的一类。
