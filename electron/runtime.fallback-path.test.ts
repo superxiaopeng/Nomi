@@ -79,9 +79,10 @@ describe("runTask fallback 路径 — 结构化错误 + extraHeaders", () => {
       new Response(JSON.stringify({ data: [{ url: "https://cdn.example.com/out.png" }] }), { status: 200 }),
     );
     const { runTask } = await import("./runtime");
+    const { mintSpendGrant } = await import("./spendGrant");
     const result = await runTask({
       vendor: "relay",
-      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model" } },
+      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model", grantId: mintSpendGrant({ nodeIds: [] }) } },
     });
     expect(result.status).toBe("succeeded");
 
@@ -97,10 +98,11 @@ describe("runTask fallback 路径 — 结构化错误 + extraHeaders", () => {
     stubFetch(() => new Response(JSON.stringify({ message: "invalid api key" }), { status: 401 }));
     const { runTask } = await import("./runtime");
     const { VendorRequestError } = await import("./vendor/vendorHttp");
+    const { mintSpendGrant } = await import("./spendGrant");
 
     const error = await runTask({
       vendor: "relay",
-      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model" } },
+      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model", grantId: mintSpendGrant({ nodeIds: [] }) } },
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(VendorRequestError);
@@ -112,10 +114,11 @@ describe("runTask fallback 路径 — 结构化错误 + extraHeaders", () => {
     stubFetch(() => new Response(JSON.stringify({ message: "insufficient balance" }), { status: 402 }));
     const { runTask } = await import("./runtime");
     const { VendorRequestError } = await import("./vendor/vendorHttp");
+    const { mintSpendGrant } = await import("./spendGrant");
 
     const error = await runTask({
       vendor: "relay",
-      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model" } },
+      request: { kind: "text_to_image", prompt: "a cat", extras: { modelKey: "some-image-model", grantId: mintSpendGrant({ nodeIds: [] }) } },
     }).catch((e) => e);
 
     expect(error).toBeInstanceOf(VendorRequestError);
@@ -150,9 +153,10 @@ describe("fetchTaskResult — taskCache miss 区分（受理账本 → 集成验
     // create：返回 taskId，无 asset → queued → 进 pending cache + 受理账本。
     stubFetch(() => new Response(JSON.stringify({ code: 200, data: { taskId: "kie-xyz" } }), { status: 200 }));
     const { runTask, fetchTaskResult } = await import("./runtime");
+    const { mintSpendGrant } = await import("./spendGrant");
     const created = await runTask({
       vendor: "asyncv",
-      request: { kind: "text_to_video", prompt: "a dog", extras: { modelKey: "vid-model" } },
+      request: { kind: "text_to_video", prompt: "a dog", extras: { modelKey: "vid-model", grantId: mintSpendGrant({ nodeIds: [] }) } },
     });
     expect(created.status).toBe("queued");
     expect(created.id).toBe("kie-xyz");

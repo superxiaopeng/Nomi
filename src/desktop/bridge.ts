@@ -144,6 +144,7 @@ export type DesktopBridge = {
   tasks: {
     run: (payload: unknown) => Promise<unknown>
     result: (payload: unknown) => Promise<unknown>
+    grantSpend: (payload: { nodeIds: string[]; maxAttemptsPerNode?: number }) => Promise<{ grantId: string }>
     runTextStream: (payload: unknown) => Promise<{ streamId: string }>
     cancelTextStream: (streamId: string) => Promise<unknown>
     onTextEvent: (streamId: string, callback: (event: unknown) => void) => () => void
@@ -173,6 +174,12 @@ export type DesktopBridge = {
     get: (projectId: string) => Promise<{ ok: boolean; facts: unknown[] }>
     update: (projectId: string, factId: string, patch: { text?: string; pinned?: boolean }) => Promise<{ ok: boolean; facts: unknown[] }>
     remove: (projectId: string, factId: string) => Promise<{ ok: boolean; facts: unknown[] }>
+  }
+  /** 提示词库:主进程聚合公开仓库提示词(图/视频)+1h 缓存,renderer 取全量后本地过滤。
+   *  textBrain=节点提示词优化用的文本大脑键(不含 apiKey,渲染层据此走现成文本流式)。 */
+  promptLibrary?: {
+    list: () => Promise<{ ok: boolean; prompts: unknown[]; error?: string }>
+    textBrain: () => Promise<{ ok: boolean; brain: { vendor: string; modelKey: string } | null }>
   }
   /** S4-2b 技术自检结果广播(主进程异步旁路 → 节点 ⚠ 投影)。 */
   review?: {
@@ -259,6 +266,10 @@ export type DesktopBridge = {
     list: () => unknown[]
     exportPackage: (dirName: string) => unknown
     importPackage: (payload: unknown) => unknown
+  }
+  /** 能力核：上报当前打开项目，供外部调用的 A/B 守卫（可选——老 preload 无此口）。 */
+  capability?: {
+    setActiveProject: (projectId: string) => void
   }
 }
 
