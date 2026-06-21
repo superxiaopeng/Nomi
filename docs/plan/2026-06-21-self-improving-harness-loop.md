@@ -40,7 +40,9 @@
 
 **LLM 查/修已在用户模型上跑通(2026-06-21,不再是门控)**：`llmViaApp.mjs` 复用 Nomi app **已配置的文本模型**(自动挑 enabled,免用户手填 key)——照 `r1-upload-verify.mjs` 自解密范式:启真app→主进程 safeStorage 解密→主进程内 fetch(明文key不出主进程)。`NOMI_LOOP_USE_APP_LLM=1 tsx loop.ts` 实跑(modelscope/Qwen3-Next-80B):**查诊断对 + 修产正确 patch(含 image_ref→composition_ref)→ 0.500→1.000 固化、坏patch回滚 exit 0**。⚠️约束:启真app须 Nomi 关着(单实例锁)。默认路径仍走规则版(快、不启app)。调试教训:查须被告知可用杠杆才在行动空间内诊断、修须被告知语义映射方向。
 
-**仍卡在用户独有资源(诚实标 · D4)**：① 半客观/真画质 = 需额度跑真生成 + VLM key(`NOMI_LOOP_VLM_*`)+ 人工校准 P/R≥80%;② 主观美感 = 创始人抽查,不自动化。**迁移收尾**：与真 capability-core headless host 全链路接通(现用其纯领域层 + 已能复用 app 身份)+ 删旧 `scripts/eval-run/score/diff.mjs`，待额度门后随真生成跑通一起收。
+**半客观 VLM 层已在用户视觉模型上跑通(2026-06-21,提交 3b28334)**：`appBridge.mjs`(收敛 `llmViaApp`,P1)统一复用 app 已配的文本/视觉模型——`chatVision` 走 `moonshot-v1-128k-vision-preview` 实跑:Q"有文字吗"→`{pass:true,1}`、"有动物吗"→`{pass:false,0}` 全对。坑(已修):视觉模型不抓外部URL要 base64、不支持 `response_format`、Node 抓图过不了代理 → **全挪主进程抓图转 base64**(主进程有代理/session)。`semiObjective.mjs` 复用之、稳健解析 JSON。
+
+**仍卡在用户独有资源(诚实标 · D4)**：① **真生成喂真图** = `appBridge.genImage` 到达 vendor 但返**异步 task_id**,正确取图须走 Nomi `runTask` 的 archetype 轮询——**不重写轮询(并行版 P1)**,这是 headless 全链路收尾(memory「真实生成 E2E 未跑」)。② **人工校准** = VLM judge 正式采信前须几条人工标注验 P/R≥80%(`CALIBRATION_THRESHOLD`)。③ **主观美感** = 创始人抽查,不自动化。**迁移收尾**：接 `runTask` 全链路(现用纯领域层 + 已能复用 app 身份发文本/视觉/到达图像 vendor)+ 删旧 `scripts/eval-run/score/diff.mjs`。
 
 ---
 
