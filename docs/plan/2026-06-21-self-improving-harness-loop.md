@@ -42,7 +42,13 @@
 
 **半客观 VLM 层已在用户视觉模型上跑通(2026-06-21,提交 3b28334)**：`appBridge.mjs`(收敛 `llmViaApp`,P1)统一复用 app 已配的文本/视觉模型——`chatVision` 走 `moonshot-v1-128k-vision-preview` 实跑:Q"有文字吗"→`{pass:true,1}`、"有动物吗"→`{pass:false,0}` 全对。坑(已修):视觉模型不抓外部URL要 base64、不支持 `response_format`、Node 抓图过不了代理 → **全挪主进程抓图转 base64**(主进程有代理/session)。`semiObjective.mjs` 复用之、稳健解析 JSON。
 
-**仍卡在用户独有资源(诚实标 · D4)**：① **真生成喂真图** = `appBridge.genImage` 到达 vendor 但返**异步 task_id**,正确取图须走 Nomi `runTask` 的 archetype 轮询——**不重写轮询(并行版 P1)**,这是 headless 全链路收尾(memory「真实生成 E2E 未跑」)。② **人工校准** = VLM judge 正式采信前须几条人工标注验 P/R≥80%(`CALIBRATION_THRESHOLD`)。③ **主观美感** = 创始人抽查,不自动化。**迁移收尾**：接 `runTask` 全链路(现用纯领域层 + 已能复用 app 身份发文本/视觉/到达图像 vendor)+ 删旧 `scripts/eval-run/score/diff.mjs`。
+**真生成 → 半客观 整条链已打通(2026-06-21,提交 d15db0d)**：经 Nomi 真 `runTask` 出图(**不重写轮询,P1**),为此修了 headless 真生成的**三个真缺口**(此前「E2E 未跑」):
+- `core.ts` **付费逃生口**:env `NOMI_LOOP_SPEND_OK=1` 才铸 spend grant 过付费守卫。⚠️**红队不变量不动**——默认不开则 AI/程序化路径仍铸不了令牌、被硬拦;开了=评测脚本本进程显式授权,等价 GUI 点确认。
+- `host.ts` 补 `applySystemProxy`(headless host 此前无代理 → 代理后机器 vendor fetch 全失败)。
+- `core.ts` 图像异步轮询 120s→240s(gpt-image-2 异步实测 120–240s 才出图)。
+- **实证**:apimart/gpt-image-2 `status:succeeded` 出真图 → moonshot 视觉 VLM 判定全对(蛋糕✓蜡烛✓无车✓)。**每层都在用户自己的模型上跑通**。
+
+**仍卡的(诚实标 · D4)**：① **人工校准** = VLM judge 正式采信前须几条人工标注验 P/R≥80%(`CALIBRATION_THRESHOLD`);② **主观美感** = 创始人抽查,不自动化;③ **loop driver 接真生成** = 现 `driver.ts` 用 canvasGraph 纯领域层(离线);把每场景的真生成+VLM 编进 driver 是工程接线(每跑全人格真生成烧额度,按需开)。**迁移收尾**:删旧 `scripts/eval-run/score/diff.mjs`。
 
 ---
 
