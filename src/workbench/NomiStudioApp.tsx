@@ -17,6 +17,7 @@ import { swapGenerationAiProject } from "./generationCanvas/store/generationAiCo
 import { flushConversationsNow, initConversationPersistence, loadProjectConversations } from "./ai/conversationPersistence";
 import { initReviewEventBridge } from "./generationCanvas/reviewEventBridge";
 import { setCanvasEventProjectIdProvider } from "./generationCanvas/events/canvasEventEmitter";
+import { registerCapabilityApplyHandler } from "./capability/capabilityApplyHandler";
 import { cn } from "../utils/cn";
 import { toast } from "../ui/toast";
 import { setDesktopActiveProjectId } from "../desktop/activeProject";
@@ -212,6 +213,8 @@ export default function NomiStudioApp(): JSX.Element {
     React.useEffect(() => initReviewEventBridge(), []);
     // S5-a:画布影子事件的 projectId(flush 时刻取值,防切换期错绑)。
     React.useEffect(() => setCanvasEventProjectIdProvider(() => activeProjectIdRef.current ?? null), []);
+    // 能力核 A 模式实时桥:注册处理器,接主进程转发来的外部 MCP 画布读/写/付费确认(所见即所得)。
+    React.useEffect(() => registerCapabilityApplyHandler(), []);
 
     const hydrateProject = React.useCallback(
         async (projectId: string, options: { replaceUrl?: boolean } = {}) => {

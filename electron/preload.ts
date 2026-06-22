@@ -200,12 +200,32 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     exportPackage: (dirName: string) => invokeSync("nomi:skill:export", dirName),
     importPackage: (payload: unknown) => invokeSync("nomi:skill:import", payload),
   },
-  // 能力核：上报当前窗口打开的项目，供外部调用的 A/B 守卫（防外部直写正在编辑的工程）。
+  // 能力核：上报当前窗口打开的项目，供外部调用的 A/B 路由（决定走渲染层网关还是磁盘网关）。
   capability: {
     setActiveProject: (projectId: string) => ipcRenderer.send("nomi:capability:active-project", projectId),
     // 「接入 AI 编程助手」卡：读状态/配置 + 一键写入/撤销 ~/.claude.json。
     mcpInfo: () => invokeSync("nomi:capability:mcp-info"),
     installMcp: () => invokeSync("nomi:capability:mcp-install"),
     uninstallMcp: () => invokeSync("nomi:capability:mcp-uninstall"),
+    // A 模式实时桥：主进程把外部 MCP 的画布读/写/付费确认转发到这里，渲染层处理后回结果（按 id 配对）。
+    onApply: (handler: (op: string, payload: unknown) => unknown | Promise<unknown>) => {
+      const listener = (_event: unknown, message: { id?: number; op?: string; payload?: unknown }) => {
+        const id = message?.id;
+        void (async () => {
+          try {
+            const result = await handler(String(message?.op || ""), message?.payload);
+            ipcRenderer.send("nomi:capability:apply-reply", { id, ok: true, result });
+          } catch (error) {
+            ipcRenderer.send("nomi:capability:apply-reply", {
+              id,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        })();
+      };
+      ipcRenderer.on("nomi:capability:apply", listener);
+      return () => ipcRenderer.removeListener("nomi:capability:apply", listener);
+    },
   },
 });

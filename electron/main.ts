@@ -56,6 +56,7 @@ import { traceVendorCompleted } from "./events/vendorCallTrace";
 import { registerOnboardingIpc } from "./ai/onboarding/onboardingIpc";
 import { registerUpdaterIpc } from "./update/autoUpdater";
 import { startCapabilityCore, stopCapabilityCore, setOpenProjectId, getCapabilityPort } from "./capabilityCore/appIntegration";
+import { setRendererTarget } from "./capabilityCore/rendererBridge";
 import { readMcpInfo, installMcp, uninstallMcp } from "./capabilityCore/mcpConfig";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
@@ -192,6 +193,11 @@ async function createWindow(): Promise<void> {
     event.preventDefault();
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
   });
+
+  // 能力核 A 模式实时桥：登记当前窗口 webContents，让主进程把外部 MCP 的画布改动/付费确认
+  // 转发进运行中的渲染层（所见即所得）。窗口销毁即清除，避免向死窗口发送。
+  setRendererTarget(mainWindow.webContents);
+  mainWindow.webContents.on("destroyed", () => setRendererTarget(null));
 
   registerDevDiagnostics(mainWindow, rendererUrl);
   await loadRendererWithRetry(mainWindow, rendererUrl);

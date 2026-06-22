@@ -295,6 +295,8 @@ export type DesktopBridge = {
     installMcp: () => { ok: boolean; configPath: string; backupPath: string | null }
     /** 撤销接入：删 mcpServers.nomi。 */
     uninstallMcp: () => { ok: boolean }
+    /** A 模式实时桥：注册处理器，接主进程转发来的外部 MCP 画布读/写/付费确认。返回反注册函数。 */
+    onApply?: (handler: (op: string, payload: unknown) => unknown | Promise<unknown>) => () => void
   }
 }
 
