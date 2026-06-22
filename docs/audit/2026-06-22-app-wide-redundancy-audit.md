@@ -43,6 +43,13 @@
 | D3 | **无设置页 + 「关于」实为更新器占品牌位**：全仓无 Settings/Preferences；`AboutNomiPopover` 是 7-phase 更新器状态机 | `AboutNomiPopover:92` |
 | D4 | **画布「添加节点」三处同源入口**(左栏/右键/空态,共享数据源=良性) + 单/批量生成两套编排路径 | `CanvasToolbar:17` `NodeGenerationComposer:114` vs `GenerationCanvas:292` |
 
+## 进度（2026-06-22）
+- ✅ A1 toast 三合一删死码（3c041a8）｜✅ A4/A5 删死 intent/死函数（3c041a8）
+- ✅ A3 抽 DesignEmptyState + 3 库面板空态收口（7734f51）｜✅ A2 抽 DesignSearchInput + 3 搜索框收口（7734f51）
+- ⏸️ A2 筛选 tab：刻意不抽（计数/tablist/pill 三语境差异大，共享=过度抽象）
+- ⬜ A6 overlay 外壳统一（最难，overlay 生命周期，需走查）｜⬜ A7 文案统一（低价值文本）
+- ⚠️ A2/A3 真机走查欠：本会话 Playwright electron.launch 连续 EPERM（并行会话 Electron 占资源），低风险 token 收敛，待环境恢复补截图。
+
 ## 攻坚顺序（建议）
 1. **先做 A 卫生清理**（低风险、纯收敛、立竿见影一致性）——可直接做不必逐张样张，五门+走查。
 2. **再逐项 B 产品取舍**（每项出多方案样张→你拍→实现→走查），按 B1(双分镜,最严重)→B2(导出)→B3(字幕)→B6(onboarding)→B4/B5。
