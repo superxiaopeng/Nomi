@@ -1,7 +1,7 @@
 import React from 'react'
 import { IconArrowRight, IconCircleCheck, IconMovie } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
-import { StatusBadge, WorkbenchButton, confirmDialog } from '../../../design'
+import { WorkbenchButton, confirmDialog } from '../../../design'
 import { useWorkbenchStore } from '../../workbenchStore'
 
 /**
@@ -36,11 +36,13 @@ export default function StoryboardPlanCard(): JSX.Element | null {
     if (ok) discardStoryboardPlan()
   }
 
+  // 状态徽标用 Nomi 品牌色(草稿/编辑=暖 accent、已落=success)。StatusBadge 是 Mantine
+  // gray/blue/green，非品牌色 → 这里保留手写品牌 chip(2026-06-22 回归核对:别让品牌色被压成通用灰蓝)。
   const badge = editorOpen
-    ? { label: '编辑中', tone: 'info' as const }
+    ? { label: '编辑中', cls: 'bg-nomi-accent-soft text-nomi-accent' }
     : committed
-      ? { label: '已落画布', tone: 'success' as const }
-      : { label: '草稿', tone: 'neutral' as const }
+      ? { label: '已落画布', cls: 'bg-workbench-success-soft text-workbench-success' }
+      : { label: '草稿', cls: 'bg-nomi-accent-soft text-nomi-accent' }
 
   return (
     <div
@@ -55,7 +57,7 @@ export default function StoryboardPlanCard(): JSX.Element | null {
           ? <IconCircleCheck size={15} stroke={1.6} className="shrink-0 text-workbench-success" />
           : <IconMovie size={15} stroke={1.6} className="shrink-0 text-nomi-ink-60" />}
         <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-nomi-ink">{title}</span>
-        <StatusBadge tone={badge.tone} className="shrink-0">{badge.label}</StatusBadge>
+        <span className={cn('shrink-0 text-micro px-2 py-0.5 rounded-full leading-relaxed', badge.cls)}>{badge.label}</span>
       </div>
 
       {editorOpen ? (
