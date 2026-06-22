@@ -583,7 +583,7 @@ function TimelineBindingBar({
     <div
       ref={barRef}
       className={cn(
-        'absolute inset-y-0 rounded-nomi-sm border-nomi-line shadow-nomi-sm',
+        'absolute inset-y-0 rounded-nomi-sm border border-nomi-paper/70 shadow-nomi-sm',
         readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
       )}
       style={{
@@ -616,7 +616,7 @@ function TimelineBindingBar({
           <button
             key={point.id}
             className={cn(
-              'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-nomi-line bg-nomi-paper shadow-nomi-sm',
+              'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-nomi-paper bg-nomi-paper shadow-nomi-sm',
               locked || readOnly ? 'cursor-default opacity-90' : 'cursor-ew-resize hover:scale-110',
             )}
             style={{ left: `${ratio * 100}%` }}
