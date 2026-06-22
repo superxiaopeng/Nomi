@@ -2,7 +2,6 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ConfirmDialogHost, confirmDialog, NomiLoadingMark } from "../design";
 import ProjectLibraryPage from "./library/ProjectLibraryPage";
-import { ToastHost } from "../ui/toast";
 import { FilePreviewPanel } from "./explorer/FilePreviewPanel";
 import {
     createLocalProject,
@@ -551,7 +550,6 @@ export default function NomiStudioApp(): JSX.Element {
                         onClose={closeModelCatalog}
                     />
                 </React.Suspense>
-                <ToastHost />
                 <ConfirmDialogHost />
             </>
         );
@@ -612,7 +610,6 @@ export default function NomiStudioApp(): JSX.Element {
 
             <FilePreviewPanel />
 
-            <ToastHost />
             <ConfirmDialogHost />
         </div>
     );
