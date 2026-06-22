@@ -3,6 +3,10 @@ export type { ActionCardProps, DesignButtonProps, IconActionButtonProps, Workben
 export { DesignBadge, StatusBadge } from './status'
 export type { DesignAlertProps, DesignBadgeProps, DesignProgressProps, StatusBadgeProps, NomiSkeletonProps } from './status'
 export { DesignAlert, DesignProgress, NomiSkeleton } from './status'
+export { DesignEmptyState } from './emptyState'
+export type { DesignEmptyStateProps } from './emptyState'
+export { DesignSearchInput } from './searchInput'
+export type { DesignSearchInputProps } from './searchInput'
 export {
   DesignCheckbox,
   DesignFileInput,

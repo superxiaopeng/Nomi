@@ -6,9 +6,9 @@
 import React from 'react'
 import { Portal } from '@mantine/core'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { IconSearch, IconX, IconBulb, IconRefresh } from '@tabler/icons-react'
+import { IconX, IconBulb, IconRefresh } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { NomiLoadingMark, NomiWordmark } from '../../design'
+import { NomiLoadingMark, NomiWordmark, DesignEmptyState, DesignSearchInput } from '../../design'
 import { showUndoToast } from '../../utils/showUndoToast'
 import { useGenerationCanvasStore } from '../generationCanvas/store/generationCanvasStore'
 import { filterPrompts, type LibraryPrompt, type PromptCategory } from '../api/promptLibraryApi'
@@ -152,17 +152,7 @@ export function PromptLibraryPanel({ opened, onClose }: Props): JSX.Element | nu
                 )
               })}
             </div>
-            <div className={cn('flex-1 inline-flex items-center gap-1.5 h-[30px] px-2.5', 'border border-nomi-line rounded-full text-nomi-ink-40 focus-within:border-nomi-accent')}>
-              <IconSearch size={13} stroke={1.8} />
-              <input
-                className={cn('flex-1 min-w-0 bg-transparent border-0 outline-none text-caption text-nomi-ink placeholder:text-nomi-ink-40')}
-                type="text"
-                value={query}
-                placeholder="搜提示词…"
-                aria-label="搜索提示词"
-                onChange={(event) => setQuery(event.currentTarget.value)}
-              />
-            </div>
+            <DesignSearchInput className="flex-1" placeholder="搜提示词…" ariaLabel="搜索提示词" value={query} onChange={setQuery} />
           </div>
 
           {/* 网格 / 状态 */}
@@ -173,18 +163,17 @@ export function PromptLibraryPanel({ opened, onClose }: Props): JSX.Element | nu
                 <span className={cn('text-caption')}>正在从公开库拉取提示词…</span>
               </div>
             ) : error && !items.length ? (
-              <div className={cn('flex flex-col items-center justify-center gap-3 py-20 text-center')}>
-                <div className={cn('text-body font-semibold text-nomi-ink')}>没拉到提示词</div>
-                <div className={cn('text-caption text-nomi-ink-40 max-w-[320px]')}>{error}</div>
-                <button type="button" onClick={reload} className={cn('inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full cursor-pointer', 'border border-nomi-line bg-transparent text-nomi-ink-80 text-caption hover:bg-nomi-ink-05')}>
-                  <IconRefresh size={14} stroke={1.8} />重试
-                </button>
-              </div>
+              <DesignEmptyState
+                title="没拉到提示词"
+                description={error}
+                action={
+                  <button type="button" onClick={reload} className={cn('inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full cursor-pointer', 'border border-nomi-line bg-transparent text-nomi-ink-80 text-caption hover:bg-nomi-ink-05')}>
+                    <IconRefresh size={14} stroke={1.8} />重试
+                  </button>
+                }
+              />
             ) : !visible.length ? (
-              <div className={cn('flex flex-col items-center justify-center gap-2 py-20 text-center')}>
-                <div className={cn('text-body font-semibold text-nomi-ink')}>没有匹配的提示词</div>
-                <div className={cn('text-caption text-nomi-ink-40')}>换个筛选或搜索词试试。</div>
-              </div>
+              <DesignEmptyState title="没有匹配的提示词" description="换个筛选或搜索词试试。" />
             ) : (
               <div style={{ height: rowVirtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {

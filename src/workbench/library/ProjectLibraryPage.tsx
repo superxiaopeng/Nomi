@@ -1,7 +1,7 @@
 import React from 'react'
-import { IconFolderOpen, IconFolderShare, IconMovie, IconPlugConnected, IconPlus, IconSearch, IconSparkles, IconTrash } from '@tabler/icons-react'
+import { IconFolderOpen, IconFolderShare, IconMovie, IconPlugConnected, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { ActionCard, NomiLogoMark, NomiWordmark } from '../../design'
+import { ActionCard, NomiLogoMark, NomiWordmark, DesignEmptyState, DesignSearchInput } from '../../design'
 import { NomiImage } from '../../design/media'
 import type { LocalProjectSummary } from './localProjectStore'
 import type { ProjectTemplateId } from './projectTemplates'
@@ -190,42 +190,32 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                   ))}
                 </div>
               </div>
-              <div className={cn(
-                'flex items-center gap-2 h-9 w-[280px] px-3',
-                'border border-nomi-line rounded-nomi-sm bg-nomi-paper',
-                'transition-[border-color,box-shadow] duration-150',
-                'focus-within:border-[color-mix(in_oklch,var(--nomi-accent)_50%,transparent)]',
-                'focus-within:shadow-[0_0_0_3px_color-mix(in_oklch,var(--nomi-accent)_10%,transparent)]',
-              )}>
-                <IconSearch size={14} stroke={1.6} className="shrink-0 text-nomi-ink-30" aria-hidden />
-                <input
-                  className="flex-1 border-none bg-transparent font-inherit text-body-sm text-nomi-ink outline-none placeholder:text-nomi-ink-30 [&::-webkit-search-cancel-button]:hidden"
-                  type="search"
-                  placeholder="搜索项目"
-                  aria-label="搜索项目"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
+              <DesignSearchInput
+                size="md"
+                className="w-[280px]"
+                placeholder="搜索项目"
+                value={query}
+                onChange={setQuery}
+              />
             </div>
 
             {filteredProjects.length === 0 ? (
-              // 审计 A10：库非空但「搜索 × 来源 tab」过滤后为空——给空态与出路，
-              // 不再渲染纯空白 grid（唯一的旧空态只判整库空）。
-              <div className="flex flex-col items-center gap-2 py-12 text-center" data-library-filter-empty="true">
-                <span className="text-caption text-nomi-ink-60">
-                  {normalizedQuery ? `没有匹配「${query.trim()}」的项目` : '这个分类下还没有项目'}
-                </span>
-                {normalizedQuery ? (
-                  <button
-                    type="button"
-                    className="inline-flex h-7 items-center px-3 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-80 cursor-pointer hover:bg-nomi-ink-05"
-                    onClick={() => setQuery('')}
-                  >
-                    清除搜索
-                  </button>
-                ) : null}
-              </div>
+              // 审计 A10：库非空但「搜索 × 来源 tab」过滤后为空——给空态与出路（统一空态组件）。
+              <DesignEmptyState
+                density="inline"
+                title={normalizedQuery ? `没有匹配「${query.trim()}」的项目` : '这个分类下还没有项目'}
+                action={
+                  normalizedQuery ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-7 items-center px-3 rounded-nomi-sm border border-nomi-line bg-nomi-paper text-caption text-nomi-ink-80 cursor-pointer hover:bg-nomi-ink-05"
+                      onClick={() => setQuery('')}
+                    >
+                      清除搜索
+                    </button>
+                  ) : undefined
+                }
+              />
             ) : null}
             <div className="shrink-0 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               {filteredProjects.map((project) => {
