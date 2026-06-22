@@ -9,6 +9,7 @@ import {
   IconMinimize,
   IconPlane,
   IconPlus,
+  IconRoute,
   IconSphere,
   IconUser,
 } from '@tabler/icons-react'
@@ -105,12 +106,14 @@ export function SceneAddToolbar({
   onAddObject,
   onAddCrowd,
   onAddCamera,
+  onAddTrajectory,
   canvasFocusMode,
   onToggleCanvasFocusMode,
 }: {
   onAddObject: (kind: Scene3DGeometry | 'mannequin' | 'light') => void
   onAddCrowd: (options: CrowdAddOptions) => void
   onAddCamera: () => void
+  onAddTrajectory: () => void
   canvasFocusMode: boolean
   onToggleCanvasFocusMode: () => void
 }): JSX.Element {
@@ -342,6 +345,12 @@ export function SceneAddToolbar({
           setCrowdPopoverOpen(false)
           onAddCamera()
         }}><IconCamera size={15} /><span>相机</span></SceneAddButton>
+        <SceneAddButton title="添加运镜轨迹" onClick={() => {
+          setGeometryOpen(false)
+          setCharacterOpen(false)
+          setCrowdPopoverOpen(false)
+          onAddTrajectory()
+        }}><IconRoute size={15} /><span>轨迹</span></SceneAddButton>
         <span className="h-5 w-px shrink-0 bg-[var(--workbench-border)]" />
         <SceneAddButton
           active={canvasFocusMode}

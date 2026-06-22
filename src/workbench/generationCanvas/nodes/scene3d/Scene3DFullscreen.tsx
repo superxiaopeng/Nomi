@@ -4,7 +4,6 @@ import { Canvas } from '@react-three/fiber'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   IconArrowsMove,
-  IconCamera,
   IconCube,
   IconListTree,
   IconPhoto,
@@ -49,10 +48,19 @@ import {
   makePastedObject,
   makePastedCamera,
 } from './scene3dMath'
-import { SceneObjectList, PropertyPanel } from './scene3dInspector'
+import { SceneObjectList } from './scene3dInspector'
 import { nextAvailableObjectPosition } from './scene3dObjects'
 import { SceneContent } from './scene3dSceneContent'
 import { CameraPreview } from './scene3dCameraPreview'
+import { useScene3DTrajectoryEditing } from './useScene3DTrajectoryEditing'
+import {
+  Scene3DTrajectoryLayer,
+  Scene3DTrajectoryEditBanner,
+  Scene3DCameraViewBanner,
+  Scene3DRightPanelBody,
+  Scene3DTrajectoryTimelineBar,
+  type Scene3DRightPanelTab,
+} from './scene3dTrajectorySurfaces'
 
 type Scene3DFullscreenProps = {
   initialState: Scene3DState
@@ -101,18 +109,22 @@ export default function Scene3DFullscreen({
   const suppressCanvasMissedSelectionRef = React.useRef(false)
   const suppressCanvasMissedReleaseRef = React.useRef<number | null>(null)
   const onStateChangeRef = React.useRef(onStateChange)
-  const canvasCamera = React.useMemo(() => ({
-    fov: 55,
-    near: 0.1,
-    far: 500,
-    position: initialEditorCameraRef.current.position,
-  }), [])
+  const canvasCamera = React.useMemo(
+    () => ({ fov: 55, near: 0.1, far: 500, position: initialEditorCameraRef.current.position }),
+    [],
+  )
   const selectedCamera = selection?.type === 'camera'
     ? state.cameras.find((camera) => camera.id === selection.id)
     : undefined
   const cameraViewEditCamera = cameraViewEditId
     ? state.cameras.find((camera) => camera.id === cameraViewEditId)
     : undefined
+  const [rightPanelTab, setRightPanelTab] = React.useState<Scene3DRightPanelTab>('properties')
+  const trajectory = useScene3DTrajectoryEditing({ state, setState, readOnly })
+  const enterTrajectoryPanel = React.useCallback(() => {
+    setRightPanelOpen(true)
+    setRightPanelTab('trajectory')
+  }, [])
 
   React.useEffect(() => {
     stateRef.current = state
@@ -253,6 +265,14 @@ export default function Scene3DFullscreen({
     setSelection({ type: 'object', id: crowd.id })
     setViewLocked(false)
   }, [readOnly, state.objects.length])
+
+  const addTrajectory = React.useCallback(() => {
+    if (readOnly) return
+    setSelection(null)
+    enterTrajectoryPanel()
+    trajectory.setTimelineOpen(true)
+    trajectory.createTrajectory()
+  }, [enterTrajectoryPanel, readOnly, trajectory])
 
   const startKeyboardNavigation = React.useCallback(() => {
     const currentSelection = selectionRef.current
@@ -681,6 +701,17 @@ export default function Scene3DFullscreen({
                 captureApiRef.current = api
               }}
             />
+            <Scene3DTrajectoryLayer
+              state={state}
+              trajectory={trajectory}
+              readOnly={readOnly}
+              activeTrajectoryIds={trajectory.activeTrajectoryIds}
+              onEditTrajectory={(trajectoryId) => {
+                trajectory.selectTrajectory(trajectoryId)
+                trajectory.setTrajectoryEditMode(true)
+                enterTrajectoryPanel()
+              }}
+            />
           </Canvas>
           {!leftPanelOpen ? (
             <CanvasPanelRestoreButton side="left" title="显示场景节点" onClick={() => setLeftPanelOpen(true)}>
@@ -706,18 +737,11 @@ export default function Scene3DFullscreen({
               onScreenshot={captureSelectedCamera}
             />
           ) : null}
+          {!readOnly && state.trajectories.length > 0 && !cameraViewEditCamera ? (
+            <Scene3DTrajectoryEditBanner trajectory={trajectory} onEnterEdit={enterTrajectoryPanel} />
+          ) : null}
           {cameraViewEditCamera ? (
-            <div className="pointer-events-auto absolute left-1/2 top-4 z-[3] flex -translate-x-1/2 items-center gap-2 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] px-3 py-2 text-caption text-[var(--nomi-ink)] shadow-[var(--nomi-shadow-md)]">
-              <IconCamera size={15} className="text-[var(--nomi-ink-60)]" />
-              <span className="max-w-[220px] truncate">取景调整 · {cameraViewEditCamera.name}</span>
-              <button
-                className="rounded-nomi-sm bg-[var(--nomi-ink-05)] px-2 py-1 text-micro text-[var(--nomi-ink-60)] hover:bg-[var(--nomi-ink-10)] hover:text-[var(--nomi-ink)]"
-                type="button"
-                onClick={exitCameraViewEdit}
-              >
-                退出
-              </button>
-            </div>
+            <Scene3DCameraViewBanner cameraName={cameraViewEditCamera.name} onExit={exitCameraViewEdit} />
           ) : null}
           <div className="pointer-events-none absolute bottom-4 left-4 grid size-20 place-items-center rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] text-micro text-[var(--nomi-ink-60)] shadow-[var(--nomi-shadow-md)]">
             <div className="grid gap-1">
@@ -731,10 +755,12 @@ export default function Scene3DFullscreen({
               onAddObject={addObject}
               onAddCrowd={addCrowd}
               onAddCamera={addCamera}
+              onAddTrajectory={addTrajectory}
               canvasFocusMode={canvasFocusMode}
               onToggleCanvasFocusMode={toggleCanvasFocusMode}
             />
           ) : null}
+          <Scene3DTrajectoryTimelineBar trajectory={trajectory} readOnly={readOnly} />
         </div>
 
         <AnimatePresence initial={false}>
@@ -748,10 +774,13 @@ export default function Scene3DFullscreen({
               style={{ transformOrigin: 'top right' }}
               transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             >
-              <PropertyPanel
+              <Scene3DRightPanelBody
                 state={state}
+                trajectory={trajectory}
                 selection={selection}
                 readOnly={readOnly}
+                tab={rightPanelTab}
+                onTabChange={setRightPanelTab}
                 onObjectPatch={patchObject}
                 onCameraPatch={patchCamera}
                 onEnvironmentPatch={(patch) => setState((current) => ({
@@ -763,7 +792,6 @@ export default function Scene3DFullscreen({
           ) : null}
         </AnimatePresence>
       </main>
-
     </div>
   )
 
