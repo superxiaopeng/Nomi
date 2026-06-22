@@ -166,6 +166,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     check: () => ipcRenderer.invoke("nomi:update:check"),
     download: () => ipcRenderer.invoke("nomi:update:download"),
     install: () => ipcRenderer.invoke("nomi:update:install"),
+    openRelease: () => ipcRenderer.invoke("nomi:update:open-release"),
     onEvent: (callback: (event: unknown) => void) => {
       const listener = (_event: unknown, payload: unknown) => callback(payload);
       ipcRenderer.on("nomi:update:event", listener as never);

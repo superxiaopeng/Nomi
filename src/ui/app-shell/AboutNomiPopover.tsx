@@ -119,9 +119,18 @@ function UpdateBody({ updater }: { updater: ReturnType<typeof useUpdater> }): JS
           </span>
           <div className="flex items-center gap-2 shrink-0">
             <WorkbenchButton variant="default" onClick={updater.reset}>稍后</WorkbenchButton>
-            <WorkbenchButton variant="primary" onClick={updater.download}>下载更新</WorkbenchButton>
+            {updater.canAutoInstall ? (
+              <WorkbenchButton variant="primary" onClick={updater.download}>下载更新</WorkbenchButton>
+            ) : (
+              <WorkbenchButton variant="primary" onClick={updater.openRelease}>前往下载</WorkbenchButton>
+            )}
           </div>
         </div>
+        {!updater.canAutoInstall ? (
+          <p className="mt-2 text-micro text-[var(--nomi-ink-40)]">
+            macOS 需手动下载安装包替换旧版（应用未签名，暂不支持就地自动更新）
+          </p>
+        ) : null}
         {updater.notes ? (
           <div className="mt-2.5 p-3 rounded-[var(--nomi-radius-sm)] bg-[var(--nomi-ink-05)] text-micro text-[var(--nomi-ink-60)] leading-relaxed whitespace-pre-line max-h-[120px] overflow-auto">
             {updater.notes}

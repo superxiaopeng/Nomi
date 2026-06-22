@@ -69,8 +69,8 @@ export type DesktopExportTempInputWriteResult = {
 
 export type { ExportJobEvent, ExportJobSnapshot }
 
-/** 应用信息（功能需求1 查看版本号）。 */
-export type DesktopAppInfo = { version: string; platform: string; arch: string }
+/** 应用信息（功能需求1 查看版本号）。canAutoInstall：未签名 mac 无法就地装，走手动下载兜底（真相源在主进程）。 */
+export type DesktopAppInfo = { version: string; platform: string; arch: string; canAutoInstall: boolean }
 
 /** 主进程更新状态广播（功能需求2/3）。renderer 状态机纯 derive 自此事件。 */
 export type DesktopUpdateEvent =
@@ -254,6 +254,8 @@ export type DesktopBridge = {
     check: () => Promise<{ ok: boolean; reason?: string }>
     download: () => Promise<{ ok: boolean }>
     install: () => Promise<{ ok: boolean }>
+    /** 手动更新兜底：开浏览器到 GitHub 最新 release（未签名 mac 无法就地装时用）。 */
+    openRelease: () => Promise<{ ok: boolean }>
     onEvent: (callback: (event: DesktopUpdateEvent) => void) => () => void
   }
   modelCatalog: {
