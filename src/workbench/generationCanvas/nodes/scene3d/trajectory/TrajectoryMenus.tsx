@@ -47,7 +47,7 @@ export function TrajectoryContextMenu({
       zIndexRange={[24, 0]}
     >
       <div
-        className="min-w-[116px] overflow-hidden rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 text-caption text-[var(--nomi-ink)] shadow-[0_14px_34px_rgba(18,24,38,0.2)]"
+        className="min-w-[116px] overflow-hidden rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 text-caption text-[var(--nomi-ink)] shadow-workbench-pop"
         data-trajectory-context-menu="true"
         onContextMenu={(event) => {
           event.preventDefault()
@@ -148,7 +148,7 @@ export function TrajectoryPointBindMenu({
       zIndexRange={[26, 0]}
     >
       <div
-        className="relative min-w-[126px] rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 text-caption text-[var(--nomi-ink)] shadow-[0_14px_34px_rgba(18,24,38,0.22)]"
+        className="relative min-w-[126px] rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 text-caption text-[var(--nomi-ink)] shadow-workbench-pop"
         data-trajectory-point-bind-menu="true"
         onContextMenu={(event) => {
           event.preventDefault()
@@ -170,7 +170,7 @@ export function TrajectoryPointBindMenu({
             <IconChevronRight size={13} stroke={1.9} />
           </button>
         ))}
-        <div className="absolute left-[calc(100%+6px)] top-1 min-w-[148px] rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 shadow-[0_14px_34px_rgba(18,24,38,0.2)]">
+        <div className="absolute left-[calc(100%+6px)] top-1 min-w-[148px] rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-1 shadow-workbench-pop">
           {hoveredItems.length === 0 ? (
             <div className="px-2 py-2 text-micro text-[var(--nomi-ink-40)]">暂无可绑定节点</div>
           ) : hoveredItems.map((target) => (

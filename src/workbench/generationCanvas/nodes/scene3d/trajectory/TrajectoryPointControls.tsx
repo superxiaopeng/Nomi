@@ -421,7 +421,7 @@ export function TrajectoryEndpointAddButton({
           type="button"
           aria-label="连接新轨迹点"
           title="连接新轨迹点"
-          className="grid size-8 place-items-center rounded-full border border-white/85 bg-[var(--nomi-ink)] text-[var(--nomi-paper)] shadow-[0_8px_20px_rgba(18,24,38,0.24)] transition hover:scale-105"
+          className="grid size-8 place-items-center rounded-full border-nomi-line bg-[var(--nomi-ink)] text-[var(--nomi-paper)] shadow-nomi-md transition hover:scale-105"
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -445,7 +445,7 @@ export function TrajectoryEndpointAddButton({
             event.stopPropagation()
           }}
         >
-          <IconPlus size={16} stroke={2.4} />
+          <IconPlus size={16} stroke={1.6} />
         </button>
       </Html>
     </>

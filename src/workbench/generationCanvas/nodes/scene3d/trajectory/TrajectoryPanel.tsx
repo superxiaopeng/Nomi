@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { cn } from '../../../../../utils/cn'
+import { NomiSelect } from '../../../../../design'
 import type {
   Scene3DState,
   Scene3DTrajectory,
@@ -192,15 +193,16 @@ function TrajectoryBindingCard({
           </div>
           <label className="grid gap-1">
             <span className="text-micro text-[var(--nomi-ink-60)]">方向</span>
-            <select
-              className="h-8 rounded-nomi-sm border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink)] outline-none"
+            <NomiSelect
+              ariaLabel="方向"
               disabled={readOnly}
               value={binding.direction}
-              onChange={(event) => onPatchBinding(binding.id, { direction: event.currentTarget.value as Scene3DTrajectoryBinding['direction'] })}
-            >
-              <option value="forward">Forward</option>
-              <option value="reverse">Reverse</option>
-            </select>
+              options={[
+                { value: 'forward', label: 'Forward' },
+                { value: 'reverse', label: 'Reverse' },
+              ]}
+              onChange={(value) => onPatchBinding(binding.id, { direction: value as Scene3DTrajectoryBinding['direction'] })}
+            />
           </label>
           {binding.objects.map((boundObject) => (
             <div key={boundObject.objectId} className="grid grid-cols-[minmax(0,1fr)_72px_28px] items-end gap-1">
@@ -233,18 +235,16 @@ function TrajectoryBindingCard({
               </button>
             </div>
           ))}
-          <select
-            className="h-8 rounded-nomi-sm border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink)] outline-none disabled:opacity-50"
+          <NomiSelect
+            ariaLabel="添加绑定节点"
+            placeholder="添加绑定节点"
             disabled={readOnly || availableNodes.length === 0}
             value=""
-            onChange={(event) => {
-              const objectId = event.currentTarget.value
+            options={availableNodes.map((node) => ({ value: node.id, label: node.name }))}
+            onChange={(objectId) => {
               if (objectId) onBindObject(trajectory.id, objectId)
             }}
-          >
-            <option value="">添加绑定节点</option>
-            {availableNodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}
-          </select>
+          />
           <button
             className="h-7 rounded-nomi-sm bg-[var(--nomi-ink-05)] text-micro text-[var(--nomi-ink-60)] hover:bg-[var(--nomi-ink-10)] hover:text-[var(--workbench-danger)] disabled:opacity-40"
             disabled={readOnly}
@@ -255,18 +255,16 @@ function TrajectoryBindingCard({
           </button>
         </>
       ) : (
-        <select
-          className="h-8 rounded-nomi-sm border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink)] outline-none disabled:opacity-50"
+        <NomiSelect
+          ariaLabel="选择节点创建绑定"
+          placeholder="选择节点创建绑定"
           disabled={readOnly || availableNodes.length === 0}
           value=""
-          onChange={(event) => {
-            const objectId = event.currentTarget.value
+          options={availableNodes.map((node) => ({ value: node.id, label: node.name }))}
+          onChange={(objectId) => {
             if (objectId) onBindObject(trajectory.id, objectId)
           }}
-        >
-          <option value="">选择节点创建绑定</option>
-          {availableNodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}
-        </select>
+        />
       )}
     </div>
   )

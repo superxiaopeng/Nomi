@@ -81,7 +81,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
 
         {/* ── Header：品牌 + 右上弱入口（模型接入） ── */}
         <section className="shrink-0 flex items-start justify-between gap-6 mb-1">
-          <h1 className="flex items-center gap-[11px] font-nomi-display text-display font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
+          <h1 className="flex items-center gap-3 font-nomi-display text-display font-normal tracking-[-0.022em] text-nomi-ink leading-none m-0">
             <NomiLogoMark size={28} />
             <span><NomiWordmark /> 项目库</span>
           </h1>
@@ -197,9 +197,9 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                 'focus-within:border-[color-mix(in_oklch,var(--nomi-accent)_50%,transparent)]',
                 'focus-within:shadow-[0_0_0_3px_color-mix(in_oklch,var(--nomi-accent)_10%,transparent)]',
               )}>
-                <IconSearch size={14} stroke={1.6} className="shrink-0 text-[var(--nomi-ink-30)]" aria-hidden />
+                <IconSearch size={14} stroke={1.6} className="shrink-0 text-nomi-ink-30" aria-hidden />
                 <input
-                  className="flex-1 border-none bg-transparent font-inherit text-body-sm text-nomi-ink outline-none placeholder:text-[var(--nomi-ink-30)] [&::-webkit-search-cancel-button]:hidden"
+                  className="flex-1 border-none bg-transparent font-inherit text-body-sm text-nomi-ink outline-none placeholder:text-nomi-ink-30 [&::-webkit-search-cancel-button]:hidden"
                   type="search"
                   placeholder="搜索项目"
                   aria-label="搜索项目"
@@ -227,7 +227,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                 ) : null}
               </div>
             ) : null}
-            <div className="shrink-0 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-[14px]">
+            <div className="shrink-0 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               {filteredProjects.map((project) => {
                 const urls = project.thumbnailUrls || (project.thumbnail ? [project.thumbnail] : [])
                 return (
@@ -239,7 +239,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                       'transition-[box-shadow,transform,border-color] duration-150',
                       project.missing
                         ? 'opacity-50 cursor-not-allowed'
-                        : 'cursor-pointer hover:shadow-nomi-md hover:border-[var(--nomi-ink-20)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none',
+                        : 'cursor-pointer hover:shadow-nomi-md hover:border-nomi-ink-20 hover:-translate-y-0.5 active:translate-y-0 active:shadow-none',
                     )}
                     role={project.missing ? undefined : 'button'}
                     tabIndex={project.missing ? undefined : 0}
@@ -252,16 +252,16 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                     >
                       <ThumbnailMosaic urls={urls} />
                       <div className={cn(
-                        'absolute inset-0 bg-[oklch(0.12_0.01_80/0.3)] opacity-0 transition-opacity duration-150',
+                        'absolute inset-0 bg-nomi-scrim opacity-0 transition-opacity duration-150',
                         'flex items-center justify-center z-[2]',
                         'group-hover:opacity-100',
                       )}>
                         <button
                           className={cn(
-                            'absolute top-[9px] right-[9px] w-[30px] h-[30px] rounded-nomi-sm border-none',
-                            'bg-white/90 text-workbench-danger grid place-items-center cursor-pointer',
+                            'absolute top-[9px] right-[9px] size-8 rounded-nomi-sm border-none',
+                            'bg-nomi-paper/90 text-workbench-danger grid place-items-center cursor-pointer',
                             'transition-[background,color] duration-150',
-                            'hover:bg-workbench-danger hover:text-white',
+                            'hover:bg-workbench-danger hover:text-nomi-paper',
                           )}
                           type="button"
                           aria-label={`删除项目 ${project.name}`}
@@ -271,15 +271,15 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                           <IconTrash size={14} stroke={1.8} />
                         </button>
                         {project.missing ? (
-                          <span className="h-[30px] px-[14px] rounded-nomi-sm text-caption font-medium text-white/80 flex items-center">
+                          <span className="h-8 px-3 rounded-nomi-sm text-caption font-medium text-nomi-paper/80 flex items-center">
                             文件夹暂不可用
                           </span>
                         ) : (
                           <button
                             className={cn(
-                              'h-[30px] px-[14px] rounded-nomi-sm border-none',
-                              'bg-white/90 text-nomi-ink font-inherit text-caption font-medium cursor-pointer',
-                              'transition-colors duration-150 hover:bg-white',
+                              'h-8 px-3 rounded-nomi-sm border-none',
+                              'bg-nomi-paper/90 text-nomi-ink font-inherit text-caption font-medium cursor-pointer',
+                              'transition-colors duration-150 hover:bg-nomi-paper',
                             )}
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onOpenProject(project.id) }}
@@ -289,7 +289,7 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                         )}
                       </div>
                     </div>
-                    <div className="px-[13px] pt-[10px] pb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                    <div className="px-3 pt-2.5 pb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                       <div className="min-w-0">
                         <div className="text-body-sm font-medium text-nomi-ink truncate mb-0.5">{project.name}</div>
                         <div className="text-micro text-nomi-ink-40">{formatUpdatedAt(project.updatedAt)}</div>

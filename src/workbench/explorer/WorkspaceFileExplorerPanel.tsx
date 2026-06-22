@@ -69,7 +69,7 @@ export default function WorkspaceFileExplorerPanel({ projectId }: Props): JSX.El
         <button
           type="button"
           onClick={refresh}
-          className="text-micro px-1.5 py-1 rounded text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
+          className="text-micro px-1.5 py-1 rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
           aria-label="刷新项目文件"
         >
           刷新
@@ -83,7 +83,7 @@ export default function WorkspaceFileExplorerPanel({ projectId }: Props): JSX.El
             onClick={handleImportClick}
             disabled={importing}
             className={cn(
-              'w-full px-2 py-1.5 text-caption rounded-md border border-dashed border-nomi-line',
+              'w-full px-2 py-1.5 text-caption rounded-nomi-sm border border-dashed border-nomi-line',
               'text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-ink-05',
               importing && 'opacity-60 cursor-wait',
             )}

@@ -96,7 +96,7 @@ export function PendingGenerationPlaceholder({
   return (
     <div className="flex w-full h-full flex-col pointer-events-none p-2.5 gap-1 overflow-hidden">
       {shotIndex != null ? (
-        <span className="self-start inline-flex items-center h-[18px] px-[7px] rounded-full bg-nomi-ink text-nomi-paper text-micro font-bold tabular-nums">
+        <span className="self-start inline-flex items-center h-[18px] px-2 rounded-full bg-nomi-ink text-nomi-paper text-micro font-bold tabular-nums">
           镜头 {shotIndex}
         </span>
       ) : null}

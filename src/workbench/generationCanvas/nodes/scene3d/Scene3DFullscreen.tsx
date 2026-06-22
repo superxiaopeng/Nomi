@@ -596,7 +596,7 @@ export default function Scene3DFullscreen({
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      <header className="relative z-[2] flex min-h-[52px] shrink-0 items-center gap-3 border-b border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] px-4 shadow-[0_1px_0_rgba(18,24,38,0.04)]">
+      <header className="relative z-[2] flex min-h-[52px] shrink-0 items-center gap-3 border-b border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] px-4 shadow-nomi-sm">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <IconCube size={18} className="shrink-0 text-[var(--workbench-muted)]" />
           <div className="min-w-0 truncate text-body-sm font-medium text-[var(--workbench-ink)]">{nodeTitle}</div>
@@ -646,7 +646,7 @@ export default function Scene3DFullscreen({
             <motion.aside
               key="scene-node-panel"
               animate={{ opacity: 1, scale: 1, width: 260, x: 0 }}
-              className="relative z-[2] flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] shadow-[8px_0_28px_rgba(18,24,38,0.05)]"
+              className="relative z-[2] flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] shadow-workbench-pop"
               exit={{ opacity: 0, scale: 0.16, width: 0, x: -26 }}
               initial={{ opacity: 0, scale: 0.16, width: 0, x: -26 }}
               style={{ transformOrigin: 'top left' }}
@@ -745,9 +745,9 @@ export default function Scene3DFullscreen({
           ) : null}
           <div className="pointer-events-none absolute bottom-4 left-4 grid size-20 place-items-center rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] text-micro text-[var(--nomi-ink-60)] shadow-[var(--nomi-shadow-md)]">
             <div className="grid gap-1">
-              <span className="text-red-300">X</span>
-              <span className="text-green-300">Y</span>
-              <span className="text-blue-300">Z</span>
+              <span className="text-[var(--nomi-axis-x)]">X</span>
+              <span className="text-[var(--nomi-axis-y)]">Y</span>
+              <span className="text-[var(--nomi-axis-z)]">Z</span>
             </div>
           </div>
           {!readOnly ? (
@@ -768,7 +768,7 @@ export default function Scene3DFullscreen({
             <motion.aside
               key="scene-property-panel"
               animate={{ opacity: 1, scale: 1, width: 300, x: 0 }}
-              className="relative z-[2] flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] shadow-[-8px_0_28px_rgba(18,24,38,0.06)]"
+              className="relative z-[2] flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] shadow-workbench-pop"
               exit={{ opacity: 0, scale: 0.16, width: 0, x: 26 }}
               initial={{ opacity: 0, scale: 0.16, width: 0, x: 26 }}
               style={{ transformOrigin: 'top right' }}

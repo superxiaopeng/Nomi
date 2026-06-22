@@ -583,7 +583,7 @@ function TimelineBindingBar({
     <div
       ref={barRef}
       className={cn(
-        'absolute inset-y-0 rounded-nomi-sm border border-white/70 shadow-sm',
+        'absolute inset-y-0 rounded-nomi-sm border-nomi-line shadow-nomi-sm',
         readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
       )}
       style={{
@@ -597,18 +597,18 @@ function TimelineBindingBar({
       {!readOnly ? (
         <>
           <span
-            className="absolute inset-y-0 left-0 z-[1] w-2 cursor-ew-resize rounded-l-[6px] bg-white/25 hover:bg-white/45"
+            className="absolute inset-y-0 left-0 z-[1] w-2 cursor-ew-resize rounded-l-nomi-sm bg-nomi-ink-20 hover:bg-nomi-ink-30"
             title="拖动开始时间"
             onPointerDown={(event) => startDrag(event, 'start')}
           />
           <span
-            className="absolute inset-y-0 right-0 z-[1] w-2 cursor-ew-resize rounded-r-[6px] bg-white/25 hover:bg-white/45"
+            className="absolute inset-y-0 right-0 z-[1] w-2 cursor-ew-resize rounded-r-nomi-sm bg-nomi-ink-20 hover:bg-nomi-ink-30"
             title="拖动结束时间"
             onPointerDown={(event) => startDrag(event, 'end')}
           />
         </>
       ) : null}
-      <span className="block truncate px-1.5 text-micro leading-7 text-white drop-shadow-sm">{objectSummary}</span>
+      <span className="block truncate px-1.5 text-micro leading-7 text-nomi-paper">{objectSummary}</span>
       {pointCount > 1 ? trajectory.points.map((point, pointIndex) => {
         const ratio = trajectoryPointTimeRatio(trajectory, pointIndex)
         const locked = pointIndex === 0 || (!trajectory.closed && pointIndex === pointCount - 1)
@@ -616,7 +616,7 @@ function TimelineBindingBar({
           <button
             key={point.id}
             className={cn(
-              'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-[var(--nomi-paper)] shadow-sm',
+              'absolute top-1/2 z-[2] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-nomi-line bg-nomi-paper shadow-nomi-sm',
               locked || readOnly ? 'cursor-default opacity-90' : 'cursor-ew-resize hover:scale-110',
             )}
             style={{ left: `${ratio * 100}%` }}

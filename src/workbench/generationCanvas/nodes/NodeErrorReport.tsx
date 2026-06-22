@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconAlertTriangle, IconChevronDown, IconChevronRight, IconRefresh } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
+import { WorkbenchButton } from '../../../design'
 import { classifyGenerationError } from '../runner/generationRunController'
 
 /**
@@ -79,18 +80,15 @@ export function NodeErrorReport({ message, onRetry }: { message: string; onRetry
 
       <div className="flex items-center gap-2">
         {onRetry ? (
-          <button
-            type="button"
+          <WorkbenchButton
+            size="sm"
             onClick={handleRetry}
             aria-label="重试生成"
-            className={cn(
-              'inline-flex h-7 items-center gap-1 rounded-nomi-sm px-3 text-caption font-medium text-nomi-paper',
-              'bg-workbench-danger hover:brightness-95',
-            )}
+            className="bg-workbench-danger text-nomi-paper border-0 hover:bg-workbench-danger-soft"
           >
-            <IconRefresh size={13} stroke={1.8} />
+            <IconRefresh size={13} stroke={1.6} />
             重试
-          </button>
+          </WorkbenchButton>
         ) : null}
         <button
           type="button"

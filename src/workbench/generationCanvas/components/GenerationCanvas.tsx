@@ -494,34 +494,34 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
           <div
             className={cn(
               'generation-canvas-v2__provider-popover',
-              'absolute top-4 right-4 z-[12] grid gap-[10px]',
+              'absolute top-4 right-4 z-[12] grid gap-2',
               'w-[min(360px,calc(100vw-40px))] p-3',
               'border border-workbench-border rounded-nomi',
-              'bg-white/[0.98] shadow-workbench-pop pointer-events-auto',
+              'bg-nomi-paper shadow-workbench-pop pointer-events-auto',
             )}
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div
               className={cn(
                 'flex items-center justify-between gap-2 pb-2',
-                'border-b border-workbench-border/[0.58] text-workbench-muted text-xs',
+                'border-b border-workbench-border/[0.58] text-workbench-muted text-caption',
               )}
               aria-label="模型目录状态"
             >
               <span>系统模型目录</span>
-              <strong className="text-workbench-ink text-xs font-[650]">{imageModelOptions.length} 图 / {videoModelOptions.length} 视频</strong>
+              <strong className="text-workbench-ink text-caption font-semibold">{imageModelOptions.length} 图 / {videoModelOptions.length} 视频</strong>
               <WorkbenchButton onClick={() => { window.dispatchEvent(new CustomEvent(OPEN_MODEL_CATALOG_EVENT)) }}>接入模型</WorkbenchButton>
             </div>
-            <p className={cn('m-0 text-workbench-muted text-xs leading-[1.45]')}>
+            <p className={cn('m-0 text-workbench-muted text-caption leading-[1.45]')}>
               {modelOptionsStatusMessage
                 ? modelOptionsStatusMessage
                 : '可选模型来自模型目录；没有模型时请打开"模型接入"，让 Agent 根据官方文档生成草案并确认写入。'}
             </p>
-            <label className="grid gap-[5px] text-workbench-muted text-xs">
+            <label className="grid gap-1 text-workbench-muted text-caption">
               <span>API Key</span>
               <input
                 className={cn(
-                  'h-[34px] min-w-0 px-[10px]',
+                  'h-8 min-w-0 px-2',
                   'border border-workbench-border rounded-workbench-control',
                   'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-body-sm',
                 )}
@@ -534,11 +534,11 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
                 }}
               />
             </label>
-            <label className="grid gap-[5px] text-workbench-muted text-xs">
+            <label className="grid gap-1 text-workbench-muted text-caption">
               <span>Base URL</span>
               <input
                 className={cn(
-                  'h-[34px] min-w-0 px-[10px]',
+                  'h-8 min-w-0 px-2',
                   'border border-workbench-border rounded-workbench-control',
                   'bg-workbench-surface-solid text-workbench-ink font-[inherit] text-body-sm',
                 )}
@@ -554,7 +554,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
               <WorkbenchButton onClick={handleSaveSettings}>保存</WorkbenchButton>
               <WorkbenchButton onClick={() => setSettingsOpen(false)}>关闭</WorkbenchButton>
             </div>
-            <p className="m-0 text-xs" data-tone={hasApiKey ? 'success' : 'error'}>
+            <p className="m-0 text-caption" data-tone={hasApiKey ? 'success' : 'error'}>
               {settingsSaved ? '已保存生成渠道配置。' : hasApiKey ? '当前已配置生成渠道 Key。' : '旧渠道 Key 未配置；新模型优先通过"模型接入"写入模型目录。'}
             </p>
           </div>

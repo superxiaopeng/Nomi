@@ -132,7 +132,7 @@ export default function CanvasEdgeLayer({
                       'generation-canvas-v2__edge-cut',
                       'inline-grid w-[30px] h-[30px] place-items-center p-0 border-0 rounded-full',
                       'bg-nomi-paper text-workbench-danger cursor-pointer',
-                      'shadow-[0_8px_24px_rgba(18,24,38,0.18),0_0_0_1px_rgba(18,24,38,0.08)]',
+                      'shadow-nomi-md',
                       'hover:bg-workbench-danger hover:text-nomi-paper',
                     )}
                     aria-label={`断开连接：${source.title} 到 ${target.title}`}
