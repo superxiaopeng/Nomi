@@ -77,3 +77,24 @@ export const DEMO_CANVAS_SPOTLIGHTS: Record<'character' | 'staging' | 'trajector
   trajectory: 'shot-8',
   generate: 'shot-1',
 }
+
+/**
+ * 预置成图：clientId → 打包图 URL。用真 Nomi(Nano Banana + 角色参考锁一致)生成的 10 张
+ * 「修好一个小机器人」成片，压成 720px JPEG 随包走（~920K，零网络零额度）。落画布后由 runner
+ * 注入对应节点的 result(status=success) → 画布即显成片，像一个做完的示例项目。
+ * 用 new URL(import.meta.url) 静态字面量 = Vite 标准资产处理，类型安全、随构建打包。
+ * rooftop(场景卡)复用屋顶日落镜 shot-8;8 镜各用自己的成图。
+ */
+export const DEMO_NODE_IMAGES: Record<string, string> = {
+  kid: new URL('./assets/robot/kid.jpg', import.meta.url).href,
+  robot: new URL('./assets/robot/robot.jpg', import.meta.url).href,
+  rooftop: new URL('./assets/robot/shot-8.jpg', import.meta.url).href,
+  'shot-1': new URL('./assets/robot/shot-1.jpg', import.meta.url).href,
+  'shot-2': new URL('./assets/robot/shot-2.jpg', import.meta.url).href,
+  'shot-3': new URL('./assets/robot/shot-3.jpg', import.meta.url).href,
+  'shot-4': new URL('./assets/robot/shot-4.jpg', import.meta.url).href,
+  'shot-5': new URL('./assets/robot/shot-5.jpg', import.meta.url).href,
+  'shot-6': new URL('./assets/robot/shot-6.jpg', import.meta.url).href,
+  'shot-7': new URL('./assets/robot/shot-7.jpg', import.meta.url).href,
+  'shot-8': new URL('./assets/robot/shot-8.jpg', import.meta.url).href,
+}

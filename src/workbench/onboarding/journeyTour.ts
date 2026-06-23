@@ -89,8 +89,8 @@ export const TOUR_BEATS: TourBeat[] = [
     id: 'generate',
     mode: 'generation',
     kind: 'spotlight',
-    title: '卡都备好了',
-    body: '点生成就出图、出片（这次演示里不真跑、不花额度）。',
+    title: '这就是出好的成片',
+    body: '示例已生成好——你自己用时，点每张卡的生成按钮出你的版本。',
     selectors: [
       '[data-tour-target="character"] [aria-label="生成素材"]',
       '.generation-canvas-v2-node [aria-label="生成素材"]',

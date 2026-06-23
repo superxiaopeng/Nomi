@@ -9,12 +9,19 @@
  */
 import { create } from 'zustand'
 import { useWorkbenchStore } from '../workbenchStore'
+import { useGenerationCanvasStore } from '../generationCanvas/store/generationCanvasStore'
 import { applyCanvasToolCall } from '../generationCanvas/agent/applyCanvasToolCall'
 import { storyboardPlanToCreateNodesArgs } from '../generationCanvas/agent/storyboardPlan'
 import { TOUR_BEATS, type TourBeat, type TourBeatId } from './journeyTour'
 import { playTypewriter } from './journeyTypewriter'
 import { markJourneyTourSeen } from './onboardingState'
-import { buildDemoStoryboardPlan, DEMO_STORY, DEMO_PROJECT_NAME, DEMO_CANVAS_SPOTLIGHTS } from './demoProject'
+import {
+  buildDemoStoryboardPlan,
+  DEMO_STORY,
+  DEMO_PROJECT_NAME,
+  DEMO_CANVAS_SPOTLIGHTS,
+  DEMO_NODE_IMAGES,
+} from './demoProject'
 
 type TourPhase = 'idle' | 'running' | 'finale'
 
@@ -93,6 +100,14 @@ export const useJourneyTourStore = create<JourneyTourState>((set) => {
     ws().setWorkspaceMode('generation')
     ws().requestCanvasFit()
     const map = result?.clientIdToNodeId ?? {}
+    // 注入预置成图：示例画布即显成片(status=success),像一个做完的示例项目(诚实——这就是示例项目)。
+    const canvas = useGenerationCanvasStore.getState()
+    for (const [clientId, nodeId] of Object.entries(map)) {
+      const url = DEMO_NODE_IMAGES[clientId]
+      if (url && nodeId) {
+        canvas.addNodeResult(nodeId, { id: `demo-${clientId}`, type: 'image', url, createdAt: Date.now() })
+      }
+    }
     const nodeSel = (clientId: string, suffix = ''): string[] => {
       const id = map[clientId]
       return id ? [`[data-node-id="${id}"]${suffix}`, '.generation-canvas-v2-node'] : ['.generation-canvas-v2-node']
