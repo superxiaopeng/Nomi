@@ -78,7 +78,14 @@ export function useDedupedModelSelect(
 
   const providerOptionsView = React.useMemo<NomiSelectOption[]>(() => {
     if (!selectedModel || selectedModel.providers.length <= 1) return []
-    return selectedModel.providers.map((p) => ({ value: p.option.value, label: vendorLabel(p.vendor) }))
+    // 同一供应商对同一模型若有多条（多 modelKey），锁定列表按 vendor 折叠成一行（取首条）——
+    // 用户锁的是「走哪家」，不该看到同名供应商重复。
+    const byVendor = new Map<string, NomiSelectOption>()
+    for (const p of selectedModel.providers) {
+      const key = p.vendor || p.option.value
+      if (!byVendor.has(key)) byVendor.set(key, { value: p.option.value, label: vendorLabel(p.vendor) })
+    }
+    return byVendor.size > 1 ? [...byVendor.values()] : []
   }, [selectedModel])
 
   return {
