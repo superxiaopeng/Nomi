@@ -657,6 +657,11 @@ export default function CanvasAssistantPanel({
           setDeviationReport(null)
           setDeviationAnchorId(null)
         }}
+        onRetry={() => {
+          // 错误卡「重试」= 重发上一条用户消息(网络/服务商抖动等瞬时错误的直接出路)。
+          const lastUser = [...messages].reverse().find((message) => message.role === 'user')
+          if (lastUser) submitAgentMessage(lastUser.content)
+        }}
         onDeviationDismiss={() => { setDeviationReport(null); setDeviationAnchorId(null) }}
         onDeviationAiFix={() => {
           // 让 AI 读画布、用所选模型支持的方式把没接上的参考连接重连(或换支持的模型)。
@@ -708,7 +713,6 @@ export default function CanvasAssistantPanel({
                 'size-7 grid place-items-center shrink-0',
                 'border-0 rounded-nomi-sm bg-transparent text-nomi-ink-60 cursor-pointer',
                 'hover:bg-nomi-ink-05 hover:text-nomi-ink',
-                'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
               )}
               label="添加附件"
               aria-label="添加附件（也可拖拽 / 粘贴）"
