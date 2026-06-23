@@ -25,10 +25,6 @@ const SOURCE_OPTIONS: { value: Source; label: string }[] = [
 
 // 「让 AI 帮我写技能」激活的元 skill（与 ActiveSkillChip 的 SKILL_AUTHOR 同口径）。
 const SKILL_AUTHOR = { key: 'workbench.creation.skill-author', name: 'AI 写技能' }
-
-// App 标准焦点环（accent 色，覆盖 macOS 系统强调色的 outline:auto，见 workbench.css §v0.7.8）。
-const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2'
-
 type Props = {
   opened: boolean
   onClose: () => void
@@ -165,7 +161,7 @@ export function SkillLibraryPanel({ opened, onClose }: Props): JSX.Element | nul
             <span className={cn('flex-1')} />
             <button
               type="button"
-              className={cn('w-7 h-7 grid place-items-center rounded-nomi-sm cursor-pointer border-0 bg-transparent', 'text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-ink-05', FOCUS_RING)}
+              className={cn('w-7 h-7 grid place-items-center rounded-nomi-sm cursor-pointer border-0 bg-transparent', 'text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-ink-05')}
               aria-label="关闭技能库"
               onClick={onClose}
             >
@@ -184,7 +180,7 @@ export function SkillLibraryPanel({ opened, onClose }: Props): JSX.Element | nul
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    className={cn('px-3 py-1 rounded-full text-caption cursor-pointer border-0 bg-transparent whitespace-nowrap', 'transition-[background,color] duration-[var(--nomi-transition-fast)]', active ? 'bg-nomi-paper text-nomi-ink font-semibold shadow-nomi-sm' : 'text-nomi-ink-60 hover:text-nomi-ink', FOCUS_RING)}
+                    className={cn('px-3 py-1 rounded-full text-caption cursor-pointer border-0 bg-transparent whitespace-nowrap', 'transition-[background,color] duration-[var(--nomi-transition-fast)]', active ? 'bg-nomi-paper text-nomi-ink font-semibold shadow-nomi-sm' : 'text-nomi-ink-60 hover:text-nomi-ink')}
                     onClick={() => setSource(option.value)}
                   >
                     {option.label}
@@ -196,14 +192,14 @@ export function SkillLibraryPanel({ opened, onClose }: Props): JSX.Element | nul
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={cn('shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full cursor-pointer', 'border border-nomi-line bg-transparent text-nomi-ink-80 text-caption hover:bg-nomi-ink-05 transition-colors', FOCUS_RING)}
+              className={cn('shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full cursor-pointer', 'border border-nomi-line bg-transparent text-nomi-ink-80 text-caption hover:bg-nomi-ink-05 transition-colors')}
             >
               <IconUpload size={14} stroke={1.7} />导入文件
             </button>
             <button
               type="button"
               onClick={handleNewWithAi}
-              className={cn('shrink-0 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full cursor-pointer border-0', 'bg-nomi-ink text-nomi-paper text-caption hover:bg-nomi-accent transition-colors', FOCUS_RING)}
+              className={cn('shrink-0 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full cursor-pointer border-0', 'bg-nomi-ink text-nomi-paper text-caption hover:bg-nomi-accent transition-colors')}
             >
               <IconWand size={14} stroke={1.7} />用 AI 新建
             </button>
@@ -239,7 +235,7 @@ export function SkillLibraryPanel({ opened, onClose }: Props): JSX.Element | nul
                   <button
                     type="button"
                     onClick={handleNewWithAi}
-                    className={cn('flex flex-col items-center justify-center gap-1.5 w-full min-h-[120px] cursor-pointer', 'rounded-nomi border border-dashed border-nomi-line bg-transparent text-nomi-ink-40', 'hover:border-nomi-accent hover:text-nomi-accent transition-colors', FOCUS_RING)}
+                    className={cn('flex flex-col items-center justify-center gap-1.5 w-full min-h-[120px] cursor-pointer', 'rounded-nomi border border-dashed border-nomi-line bg-transparent text-nomi-ink-40', 'hover:border-nomi-accent hover:text-nomi-accent transition-colors')}
                   >
                     <IconWand size={22} stroke={1.6} />
                     <span className={cn('text-caption')}>用 AI 新建一个</span>

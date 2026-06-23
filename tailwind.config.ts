@@ -18,6 +18,9 @@ const workbenchBasePlugin = plugin(({ addBase }) => {
       '--nomi-line-soft': 'oklch(0.95 0.003 80)',
       '--nomi-accent': 'oklch(0.55 0.13 250)',
       '--nomi-accent-soft': 'color-mix(in oklch, var(--nomi-accent) 12%, var(--nomi-paper))',
+      // 全局焦点环色（accent 42%）。所有交互控件 :focus-visible 统一用它，覆盖 macOS 系统强调色的
+      // outline:auto（用户设了橙/黄就冒橙环）。全局 :root → portal 到 body 的面板也生效。
+      '--nomi-focus': 'color-mix(in srgb, var(--nomi-accent) 42%, transparent)',
       '--nomi-track-text': 'var(--nomi-accent)',
       '--nomi-track-image': 'oklch(0.7 0.13 200)',
       '--nomi-track-video': 'oklch(0.65 0.13 150)',
@@ -107,6 +110,16 @@ const workbenchBasePlugin = plugin(({ addBase }) => {
     },
     '*': {
       'box-sizing': 'border-box',
+    },
+    // 全局焦点环根治（P2）：默认杀掉浏览器 :focus-visible 的 outline:auto（macOS 跟系统强调色＝橙环），
+    // 交互控件统一用 accent 环。没人需要再往按钮上记着加 className——漏一个就冒橙环的问题从根上没了。
+    // 编辑器（contenteditable，非 button）不吃 ring；其 workbench.css 的 outline:none 仍是防御性覆盖。
+    ':focus-visible': {
+      outline: 'none',
+    },
+    'button:focus-visible, [role="button"]:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible': {
+      outline: '2px solid var(--nomi-focus)',
+      'outline-offset': '2px',
     },
     'html, body, #root': {
       width: '100%',
@@ -313,7 +326,6 @@ const workbenchBasePlugin = plugin(({ addBase }) => {
       '--workbench-overlay': 'rgba(255, 255, 255, 0.82)',
       '--workbench-overlay-strong': 'rgba(255, 255, 255, 0.94)',
       '--workbench-backdrop': 'rgba(29, 29, 31, 0.16)',
-      '--workbench-focus': 'color-mix(in srgb, var(--workbench-accent) 42%, transparent)',
       '--workbench-code-bg': '#1d1d1f',
       '--workbench-code-ink': '#f5f5f7',
       '--workbench-radius': 'var(--nomi-radius)',
@@ -456,7 +468,6 @@ export default {
           pressed: 'var(--workbench-pressed)',
           overlay: 'var(--workbench-overlay)',
           backdrop: 'var(--workbench-backdrop)',
-          focus: 'var(--workbench-focus)',
           'code-bg': 'var(--workbench-code-bg)',
           'code-ink': 'var(--workbench-code-ink)',
         },

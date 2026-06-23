@@ -30,7 +30,6 @@ function ToolbarButton({ action }: { action: RichTextAction }): JSX.Element {
         'border border-transparent rounded-nomi-sm',
         'bg-transparent text-workbench-muted cursor-pointer',
         'hover:bg-workbench-hover',
-        'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-[0.38]',
       )}
       label={action.label}

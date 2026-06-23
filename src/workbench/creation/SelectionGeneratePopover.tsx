@@ -177,7 +177,6 @@ export default function SelectionGeneratePopover({
               'cursor-pointer',
               'hover:border-[color-mix(in_srgb,var(--workbench-accent)_14%,transparent)]',
               'hover:bg-workbench-accent-soft hover:text-workbench-accent',
-              'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
             )}
             label={action.label}
             data-active={action.active ? 'true' : 'false'}
@@ -209,7 +208,6 @@ export default function SelectionGeneratePopover({
             'cursor-pointer',
             'hover:border-[color-mix(in_srgb,var(--workbench-accent)_18%,transparent)]',
             'hover:bg-workbench-accent-soft hover:text-workbench-accent',
-            'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
           )}
           label="生成图片"
           onMouseDown={(event) => event.preventDefault()}
@@ -225,7 +223,6 @@ export default function SelectionGeneratePopover({
             'cursor-pointer',
             'hover:border-[color-mix(in_srgb,var(--workbench-accent)_18%,transparent)]',
             'hover:bg-workbench-accent-soft hover:text-workbench-accent',
-            'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2',
           )}
           label="生成视频"
           onMouseDown={(event) => event.preventDefault()}

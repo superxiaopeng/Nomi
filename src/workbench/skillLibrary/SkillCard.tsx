@@ -9,10 +9,6 @@ import {
   type SkillListItemDto,
   type SkillProviderKind,
 } from '../api/skillApi'
-
-// App 标准焦点环（accent 色，覆盖 macOS 系统强调色的 outline:auto，见 workbench.css §v0.7.8）。
-const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-workbench-focus focus-visible:outline-offset-2'
-
 export function SkillCard({
   skill,
   available,
@@ -70,7 +66,7 @@ export function SkillCard({
         <button
           type="button"
           onClick={() => onUse(skill)}
-          className={cn('shrink-0 whitespace-nowrap rounded-nomi-sm px-2 py-1 text-caption text-nomi-accent hover:bg-nomi-accent-soft transition-colors', FOCUS_RING)}
+          className={cn('shrink-0 whitespace-nowrap rounded-nomi-sm px-2 py-1 text-caption text-nomi-accent hover:bg-nomi-accent-soft transition-colors')}
         >
           在创作区用
         </button>
@@ -80,7 +76,7 @@ export function SkillCard({
           onClick={() => onExport(skill)}
           title="导出技能包"
           aria-label={`导出 ${skill.label}`}
-          className={cn('shrink-0 w-7 h-7 grid place-items-center rounded-nomi-sm text-nomi-ink-60 hover:text-nomi-ink hover:bg-nomi-ink-05 transition-colors', FOCUS_RING)}
+          className={cn('shrink-0 w-7 h-7 grid place-items-center rounded-nomi-sm text-nomi-ink-60 hover:text-nomi-ink hover:bg-nomi-ink-05 transition-colors')}
         >
           <IconDownload size={14} stroke={1.7} />
         </button>
@@ -90,7 +86,7 @@ export function SkillCard({
             onClick={() => onDelete(skill)}
             title="删除技能"
             aria-label={`删除 ${skill.label}`}
-            className={cn('shrink-0 w-7 h-7 grid place-items-center rounded-nomi-sm text-nomi-ink-60 hover:text-workbench-danger hover:bg-nomi-ink-05 transition-colors', FOCUS_RING)}
+            className={cn('shrink-0 w-7 h-7 grid place-items-center rounded-nomi-sm text-nomi-ink-60 hover:text-workbench-danger hover:bg-nomi-ink-05 transition-colors')}
           >
             <IconTrash size={14} stroke={1.7} />
           </button>

@@ -677,6 +677,14 @@ showUndoToast({
 可访问性：aria-label / 键盘行为 / focus ring
 ```
 
+### 焦点环（全局，别再 per-component 加）
+
+所有交互控件的键盘焦点环由**一条全局规则**统一供给（`tailwind.config.ts` 的 `addBase`）：
+- `:focus-visible { outline: none }` 先全局杀掉浏览器默认 `outline:auto`——它在 macOS 上**跟系统强调色**，用户设了橙/黄就冒橙环。
+- `button / [role=button] / a / input / select / textarea / summary` 的 `:focus-visible` 统一给 `2px solid var(--nomi-focus)` + `outline-offset:2px`。`--nomi-focus` = accent 42%（`:root` 全局 token）。
+
+**纪律**：新按钮**不要**再手写 `focus-visible:outline-*` className——全局规则已覆盖，手写=回到「漏一个就冒橙环」的症状层（2026-06-23 已根治，删了散在 6 文件的 13 处旧写法）。需要无焦点环的特例（如 contenteditable 编辑器）才显式 `outline:none` 覆盖。
+
 ---
 
 ## 9. 新增协议（开工前的规则）
