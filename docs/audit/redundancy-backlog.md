@@ -17,6 +17,11 @@
 
 | 项 | 问题 | 状态 |
 |---|---|---|
+| **A8** | 【第2轮·死码批】`GenerationCanvas.tsx:499-566` 不可达旧「生成渠道」内联设置面板（无人 dispatch `nomi-open-generation-settings`）+ 误导文案（提已下线的 AI 读文档子系统）| ⬜ 本轮做 |
+| **A9** | `ProjectLibraryStandaloneRoute.tsx`+`ProjectLibraryRoute.tsx` 整对死路径（无 importer）+ 内含 2 处违规 `window.confirm` + `templateId` 半残签名 → 删 | ⬜ 本轮做 |
+| **A10** | 死码：`tryNowExamples.ts`(101行仅test引)、`projectTabsStore.ts`(全仓零引用)、`WorkbenchAiHeaderActions.onModelIntegration` dead prop(⚠️ A4/A5 漏网的相关入口) | ⬜ 本轮做 |
+| **A11** | Wizard `inputMode` 恒真死分支 + 已删子系统残留注释（`OnboardingWizard.tsx:50,267,308`）| ⬜ 本轮做 |
+| **A12** | 文字三件套文案名实不符：空态写「上方『字幕/标题卡』」但按钮实际叫「标题」→ 统一术语（`TimelinePreview.tsx:714/721`、`TimelineTextTrack.tsx:128/148`）| ⬜ 本轮做 |
 | A1 | toast 三套+死 store/host → 收一套 | ✅ 3c041a8 |
 | A4/A5 | 删死 intent + 死函数 openWorkbenchModelIntegration | ✅ 3c041a8 |
 | A3 | 抽 DesignEmptyState → 3 库面板空态收口 | ✅ 7734f51 |
@@ -35,7 +40,8 @@
 | B4 | 创作 composer 三选择器（模式/技能/模型）相邻打架 | 中-高 | ⬜ |
 | B5 | 画布→时间轴 4 路径、落点语义三套（末尾/playhead/任意拖）| 高（核心桥）| ⬜ |
 | B6 | onboarding 三套并行（开屏/上手清单/聚光）+ 重复 hint | 中（首启必经）| ⬜ |
-| 已做 | 模型接入页简化（A 分区+能力概览）| — | ✅ 71ff41c（P7）|
+| **B7** | 🔴**【第2轮·用户点名】模型选择弹窗零信息架构**：画布节点下拉全量平铺（数十条）、无搜索/分组/最近用/能力分类、文生图图生图混排不标能力；现成的 ModelChipGroups 分组 + AssistantModelPicker 智能排序没复用；且节点/镜卡/助手三处选模型心智不一（默认项/排序各不同）| 🔴 最高（高频必经，用户点名）| ⬜ **出样张拍板中** |
+| 已做 | 模型接入页简化（A 分区+能力概览）| — | ✅ 71ff41c（P7）；第2轮复核**未回潮**，主流程已干净，「一大片」体感实为 A8/A11 死残留 |
 
 ## C · 字段收纳（中风险，穿插）
 
@@ -58,3 +64,4 @@
 
 ## 体检轮次
 - **第 1 轮 2026-06-22**：基线体检，五路并行扫出上述全部项，建 backlog。报告 `docs/audit/2026-06-22-app-wide-redundancy-audit.md`。
+- **第 2 轮 2026-06-23**：六路（五路 + 模型接入专项深扫），重点压用户点名的模型弹窗 + 模型接入。新增 **B7（模型弹窗 IA，真痛点）** + **A8-A12 死码/文案批**。回归看门狗：无并行版回潮；A4/A5 漏网的 `onModelIntegration` dead prop 补进 A10；模型接入主流程复核未回潮（71ff41c 保持）。报告 `docs/audit/2026-06-23-app-wide-redundancy-audit.md`。
