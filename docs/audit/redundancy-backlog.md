@@ -75,7 +75,7 @@
 | A | CR-A6 | 计划外单工具卡漏原始 id（n3→n5 黑话）→ 翻人话 | ⬜ |
 | A | CR-A7/A8 | 计划卡确认/拒绝手搓 className 走 variant + 撤销/确认文案统一 | ⬜ |
 | A | CR-A9 | `pendingLabel` 与内置「处理中」撞车核实去重 | ⬜ |
-| 🔵B | **CR-B1** | 🔴**错误透传重设计**：红色语气 + 接 narrate 人话 + 创作侧双重展示去重（最伤信任，最该先动）| ⬜ **出样张拍板** |
+| 🔵B | **CR-B1** | 🔴**错误透传重设计**：红色语气 + 接 narrate 人话 + 创作侧双重展示去重（最伤信任，最该先动）| ✅ 5175e58（方案A错误卡 AssistantErrorCard，两 agent 共用；plan 2026-06-23-error-transparency-redesign）|
 | 🔵B | CR-B2 | token 统计行降噪/收起（零行动价值的过渡债 + 两侧不对等）| ⬜ 出样张 |
 | 🔵B | CR-B3 | `AssistantToolsFold`+`MemoryFold` 占首屏（工具名=黑话）| ⬜ 出样张 |
 | ⚫D | CR-D1 | 截断/空响应无专门态（需底层 runner 透出 finishReason）| ⬜ 立项 |
