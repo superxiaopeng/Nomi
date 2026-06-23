@@ -197,6 +197,14 @@ export type HttpOperation = {
   body?: unknown;
   response_mapping?: Record<string, unknown>;
   provider_meta_mapping?: Record<string, unknown>;
+  /**
+   * 音频 create op 的**响应形状声明**（仅 audioTaskRunner 消费，P4 声明驱动不 hardcode vendor）。
+   *  - 缺省 / "binary"      ：响应体即裸音频字节（OpenAI 兼容 /v1/audio/speech，现有行为）。
+   *  - "ndjson-base64"      ：NDJSON 流（逐行 {code,data}，code===0 时 data 为 base64 音频块，
+   *                           code===20000000 收尾）——豆包语音 /api/v3/tts/unidirectional。
+   * 任何未来同形状的 vendor 声明此值即复用解码，无需碰 runtime（runTextToSpeech 按它分流）。
+   */
+  audioResponse?: "binary" | "ndjson-base64";
 };
 
 /**
