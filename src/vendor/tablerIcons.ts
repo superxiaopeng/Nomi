@@ -18,6 +18,7 @@ export { default as IconArrowsMove } from '@tabler/icons-react/dist/esm/icons/Ic
 export { default as IconBadgeCc } from '@tabler/icons-react/dist/esm/icons/IconBadgeCc.mjs'
 export { default as IconBlockquote } from '@tabler/icons-react/dist/esm/icons/IconBlockquote.mjs'
 export { default as IconBold } from '@tabler/icons-react/dist/esm/icons/IconBold.mjs'
+export { default as IconBooks } from '@tabler/icons-react/dist/esm/icons/IconBooks.mjs'
 export { default as IconBox } from '@tabler/icons-react/dist/esm/icons/IconBox.mjs'
 export { default as IconBoxMultiple } from '@tabler/icons-react/dist/esm/icons/IconBoxMultiple.mjs'
 export { default as IconBrain } from '@tabler/icons-react/dist/esm/icons/IconBrain.mjs'

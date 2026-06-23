@@ -60,6 +60,11 @@ const PromptLibraryPanel = lazyWithChunkBoundary("提示词库", () =>
         default: module.PromptLibraryPanel,
     })),
 );
+const SkillLibraryPanel = lazyWithChunkBoundary("技能库", () =>
+    import("./skillLibrary/SkillLibraryPanel").then((module) => ({
+        default: module.SkillLibraryPanel,
+    })),
+);
 const GenerationCanvas = lazyWithChunkBoundary(
     "生成画布",
     () => import("./generationCanvas/components/GenerationCanvas"),
@@ -112,6 +117,7 @@ export default function NomiStudioApp(): JSX.Element {
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
     const [assetLibraryOpened, setAssetLibraryOpened] = React.useState(false);
     const [promptLibraryOpened, setPromptLibraryOpened] = React.useState(false);
+    const [skillLibraryOpened, setSkillLibraryOpened] = React.useState(false);
     // 首启开屏：仅首次未看过时自动放；看过后可经项目库「看看 Nomi」重看。
     const [splashDone, setSplashDone] = React.useState(() => hasSeenSplash());
     const { hasTextModel, refresh: refreshModelStatus } = useHasTextModel();
@@ -170,6 +176,16 @@ export default function NomiStudioApp(): JSX.Element {
             window.removeEventListener(
                 "nomi-open-prompt-library",
                 handleOpenPromptLibrary,
+            );
+    }, []);
+
+    React.useEffect(() => {
+        const handleOpenSkillLibrary = () => setSkillLibraryOpened(true);
+        window.addEventListener("nomi-open-skill-library", handleOpenSkillLibrary);
+        return () =>
+            window.removeEventListener(
+                "nomi-open-skill-library",
+                handleOpenSkillLibrary,
             );
     }, []);
 
@@ -597,6 +613,13 @@ export default function NomiStudioApp(): JSX.Element {
                 <PromptLibraryPanel
                     opened={promptLibraryOpened}
                     onClose={() => setPromptLibraryOpened(false)}
+                />
+            </React.Suspense>
+
+            <React.Suspense fallback={null}>
+                <SkillLibraryPanel
+                    opened={skillLibraryOpened}
+                    onClose={() => setSkillLibraryOpened(false)}
                 />
             </React.Suspense>
 

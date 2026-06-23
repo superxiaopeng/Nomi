@@ -207,6 +207,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     list: () => invokeSync("nomi:skill:list"),
     exportPackage: (dirName: string) => invokeSync("nomi:skill:export", dirName),
     importPackage: (payload: unknown) => invokeSync("nomi:skill:import", payload),
+    deleteByDir: (dirName: string) => invokeSync("nomi:skill:delete", dirName),
   },
   // 能力核：上报当前窗口打开的项目，供外部调用的 A/B 路由（决定走渲染层网关还是磁盘网关）。
   capability: {

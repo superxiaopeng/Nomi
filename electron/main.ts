@@ -36,7 +36,7 @@ import { extractVideoFrameToAsset } from "./video/extractVideoFrame";
 import { framesToVideoAsset } from "./video/framesToVideo";
 import { mintSpendGrant } from "./spendGrant";
 import { listSkillsForRenderer } from "./skills/skillIpc";
-import { exportSkillPackageByName, importSkillPackageToUserDir } from "./skills/skillPackage";
+import { deleteUserSkill, exportSkillPackageByName, importSkillPackageToUserDir } from "./skills/skillPackage";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
 import { installCrashHandlers, logCrash } from "./crashLog";
@@ -297,6 +297,7 @@ function registerIpc(): void {
     exportSkillPackageByName(String(dirName || ""), Date.now()),
   );
   registerSyncIpc("nomi:skill:import", (payload: unknown) => importSkillPackageToUserDir(payload));
+  registerSyncIpc("nomi:skill:delete", (dirName: unknown) => deleteUserSkill(String(dirName || "")));
 
   ipcMain.handle("nomi:model-catalog:docs:fetch", (_event, payload) => fetchModelCatalogDocs(payload));
   ipcMain.handle("nomi:workspace:select-folder", async () => {
