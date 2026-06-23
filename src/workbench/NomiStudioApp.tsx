@@ -135,14 +135,6 @@ export default function NomiStudioApp(): JSX.Element {
         : "";
 
     React.useEffect(() => {
-        document.documentElement.dataset.theme = "light";
-        document.documentElement.setAttribute(
-            "data-mantine-color-scheme",
-            "light",
-        );
-    }, []);
-
-    React.useEffect(() => {
         const handleOpenModelCatalog = () => setModelCatalogOpened(true);
         window.addEventListener(
             "nomi-open-model-catalog",
