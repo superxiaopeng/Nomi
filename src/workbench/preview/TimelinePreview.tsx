@@ -694,7 +694,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
             className={cn('h-7 px-2.5 inline-flex items-center gap-1 border border-[var(--workbench-border)] rounded-full whitespace-nowrap bg-transparent text-[var(--workbench-muted)] text-micro font-bold cursor-pointer hover:bg-[var(--workbench-hover)] hover:text-[var(--workbench-ink)]')}
             aria-label="添加文字"
             aria-expanded={textMenuOpen}
-            title="加字幕 / 标题（都是文字，可自由拖动缩放）"
+            title="加字幕 / 标题卡（都是文字，可自由拖动缩放）"
             onClick={() => setTextMenuOpen((open) => !open)}
           >
             <IconLetterCase size={14} />文字<IconChevronDown size={12} className="opacity-60" />
@@ -718,7 +718,7 @@ export default function TimelinePreview({ activeClips, aspectRatio, fps, playhea
                 className={cn('flex items-center gap-2 px-2 py-1.5 rounded-[var(--nomi-radius-sm)] text-left text-caption text-[var(--workbench-ink)] hover:bg-[var(--workbench-hover)]')}
                 onClick={() => addText('title')}>
                 <IconLetterCase size={14} className="flex-none text-[var(--workbench-text)]" />
-                <span className="flex-1">标题</span>
+                <span className="flex-1">标题卡</span>
                 <span className="text-[var(--workbench-muted-soft)] text-micro">居中 · 大</span>
               </button>
             </div>
