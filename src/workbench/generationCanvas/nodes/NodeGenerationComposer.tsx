@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react'
 import { NomiLoadingMark } from '../../../design'
 import { cn } from '../../../utils/cn'
 import PromptEditor from '../../assets/PromptEditor'
-import { readArchetypeArray } from './controls/archetypeMeta'
+import { resolveReferenceSlots } from '../runner/referenceSlots'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { canRunGenerationNode, confirmAndRunNode } from '../runner/generationRunController'
@@ -110,6 +110,14 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   }, [promptEditor])
   // 拖文件到卡 → 加为参考（捷径 A）。仅当当前模式有数组参考槽时接管拖拽。
   const { acceptsDrop, isDragOver, isUploading, dropHandlers } = useNodeAssetDrop(node)
+  // @ 候选 = 当前模式 image_ref 槽的有序填充（连线在前+上传，option 2 单源），与面板编号①②③、
+  // 发送的 reference_image 数组同一口径——连线进来的参考图也在候选里、能被 @（此前只读 meta 漏掉边）。
+  const mentionNodes = useGenerationCanvasStore((state) => state.nodes)
+  const mentionEdges = useGenerationCanvasStore((state) => state.edges)
+  const mentionCandidates = React.useMemo(() => {
+    const imageSlot = resolveReferenceSlots(node, mentionNodes, mentionEdges).find((s) => s.slotKind === 'image_ref')
+    return imageSlot ? imageSlot.fills.flatMap((f) => (f.url ? [f.url] : [])) : []
+  }, [node, mentionNodes, mentionEdges])
 
   const handleGenerate = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -272,7 +280,7 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
             onChange={(next) => updateNode(node.id, { prompt: next })}
             onBlur={() => { void persistActiveWorkbenchProjectNow().catch(() => {}) }}
             onReady={setPromptEditor}
-            mentionCandidates={readArchetypeArray(node.meta || {}, 'referenceImageUrls')}
+            mentionCandidates={mentionCandidates}
           />
         </div>
       )}

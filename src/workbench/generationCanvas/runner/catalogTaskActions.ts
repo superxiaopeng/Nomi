@@ -13,7 +13,7 @@ import type {
 import type { ResolvedGenerationReferences } from './generationReferenceResolver'
 import { narrateProgress, type GenerationProgressPhase, type ProgressNarrationContext } from '../../observability/narrate'
 import { resolveArchetypeForModel } from '../../../config/modelArchetypes'
-import { buildArchetypeInputParams } from '../nodes/controls/archetypeMeta'
+import { buildArchetypeInputParams, orderedSentImageReferenceUrls } from '../nodes/controls/archetypeMeta'
 import { projectPromptForSend } from '../../assets/promptMentions'
 import {
   type CatalogTaskActionOptions,
@@ -108,19 +108,29 @@ export function buildCatalogTaskRequest(
   if (!modelKey) throw new Error('请先选择模型')
   const rawPrompt = asTrimmedString(node.prompt)
   if (!rawPrompt) throw new Error('prompt is required')
-  // @ 内联引用投影(R6 单源):发送前把 prompt 里的 @[asset:url] 标记转成 character{N}
-  // (N = url 在 referenceImageUrls 有序数组里的位置)。纯文字 prompt 无标记 → 原样(no-op)。
-  const prompt = projectPromptForSend(rawPrompt, readStringArray((node.meta || {}).referenceImageUrls))
 
   const references = options.references || {}
   const kind = resolveTaskKind(node, references)
+  const meta = node.meta || {}
+  // @ 内联引用投影(R6 单源 · option 2 · 2026-06-25):把 prompt 里的 @[asset:url] 标记转成 character{N}，
+  // N = url 在「连线在前+上传」有序数组里的位置——**与实际发送的 reference_image 数组逐位一致**。此前只读
+  // meta.referenceImageUrls，把连线进来的参考图当成「不在数组里」直接把 @ 标记删成空串（连线图 @ 不到/被
+  // 删空的根因）。纯文字 prompt 无标记 → 原样(no-op)。无档案模型回退旧口径（仅上传）。
+  const promptRefArchetype = resolveArchetypeForModel({
+    modelKey: asTrimmedString(meta.modelKey),
+    modelAlias: asTrimmedString(meta.modelAlias),
+    meta,
+  })
+  const orderedReferenceUrls = promptRefArchetype
+    ? orderedSentImageReferenceUrls(meta, promptRefArchetype, references.referenceImages || [])
+    : readStringArray(meta.referenceImageUrls)
+  const prompt = projectPromptForSend(rawPrompt, orderedReferenceUrls)
   // 站位构图参考：出关键帧时把 staging 灰模图当「构图蓝图」而非编辑底图——照站位/姿势/机位，
   // 但写实重渲染，别照搬灰模 3D 外观（评测发现 image_edit 直喂会出 CGI 感）。只对图像生成加。
   const finalPrompt =
     references.stagingComposition && (kind === 'text_to_image' || kind === 'image_edit')
       ? `${prompt}\n\n（构图参考仅用于确定人物站位、各自姿势和镜头机位；请据此完全写实地重新渲染人物与场景——真实皮肤/衣物/光影，不要保留参考图里灰色人偶或 3D 渲染的外观。）`
       : prompt
-  const meta = node.meta || {}
   const width = asFiniteNumber(meta.width)
   const height = asFiniteNumber(meta.height)
   const steps = asFiniteNumber(meta.steps)

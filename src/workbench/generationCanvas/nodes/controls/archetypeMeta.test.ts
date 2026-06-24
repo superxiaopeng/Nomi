@@ -15,8 +15,10 @@ import {
   currentArchetypeVariant,
   ensureArchetypeNodeMeta,
   hasArchetypeArrayReferences,
+  mergeOrderedReferenceImageUrls,
   modeHasCharacterSlot,
   normalizeArchetypeVariantMeta,
+  orderedSentImageReferenceUrls,
 } from './archetypeMeta'
 
 // C2b：模式分段切换 + 命名空间 meta + flat 帧键投影（M2 互斥）的核心逻辑钉死。
@@ -186,10 +188,12 @@ describe('C3 全能参考 — 数组 input 构建（M2 互斥含数组槽，snak
 })
 
 describe('切片1 — 画布边参考图喂进档案 image 槽（修边投递裂开）', () => {
-  it('omni：边参考图并入 reference_image_urls，与 meta 去重保序', () => {
+  // option 2（2026-06-25 用户拍板）：合并顺序统一成「连线在前、上传在后」——与面板编号①②③、@ 候选、
+  // @ 投影 character{N} 同口径，杜绝「面板①与模型 character1 不是同一张」。
+  it('omni：边参考图并入 reference_image_urls，连线在前+上传去重保序', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: ['c1.png', 'c2.png'] }
     expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['c2.png', 'e1.png'] })).toEqual({
-      reference_image_urls: ['c1.png', 'c2.png', 'e1.png'], // c2 去重，e1 追加在 meta 之后
+      reference_image_urls: ['c2.png', 'e1.png', 'c1.png'], // 边 c2/e1 在前，上传 c1 追加，c2 去重
       model: 'bytedance/seedance-2',
     })
   })
@@ -200,10 +204,10 @@ describe('切片1 — 画布边参考图喂进档案 image 槽（修边投递裂
       model: 'bytedance/seedance-2',
     })
   })
-  it('截到 slot.max（omni image ≤9）：meta 8 + 边 3 → 9，封死 vendor 422', () => {
+  it('截到 slot.max（omni image ≤9）：边 3 + meta 8 → 9（连线在前优先保留），封死 vendor 422', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'] }
     const result = buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1', 'e2', 'e3'] })
-    expect(result.reference_image_urls).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'e1'])
+    expect(result.reference_image_urls).toEqual(['e1', 'e2', 'e3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6'])
   })
   it('图片边不污染 video/audio 槽', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceVideoUrls: ['v1.mp4'] }
@@ -216,6 +220,30 @@ describe('切片1 — 画布边参考图喂进档案 image 槽（修边投递裂
   it('M2：首帧模式无 image_ref 槽，边参考图不泄漏进 body', () => {
     const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png' }
     expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: ['e1.png'] })).toEqual({ first_frame_url: 'F.png', model: 'bytedance/seedance-2' })
+  })
+})
+
+describe('option 2 单源 — 「有序参考图」连线在前、上传在后（面板/@/发送共用）', () => {
+  it('mergeOrderedReferenceImageUrls：边在前、上传在后、去重、截到 maxCap', () => {
+    expect(mergeOrderedReferenceImageUrls(['e1', 'e2'], ['u1', 'u2'], 9)).toEqual(['e1', 'e2', 'u1', 'u2'])
+    expect(mergeOrderedReferenceImageUrls(['e1', 'u1'], ['u1', 'u2'], 9)).toEqual(['e1', 'u1', 'u2']) // u1 去重
+    expect(mergeOrderedReferenceImageUrls(['e1', 'e2', 'e3'], ['u1', 'u2'], 4)).toEqual(['e1', 'e2', 'e3', 'u1']) // 截到 4，连线优先
+    expect(mergeOrderedReferenceImageUrls([], ['u1'], 0)).toEqual(['u1']) // maxCap≤0 不截
+    expect(mergeOrderedReferenceImageUrls([' ', 'e1', ''], ['u1'], 9)).toEqual(['e1', 'u1']) // 空白过滤
+  })
+
+  it('orderedSentImageReferenceUrls = buildArchetypeInputParams 给 image 槽的同一份列表（character{N} 编号锚点）', () => {
+    const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: ['u1.png', 'u2.png'] }
+    const edges = ['e1.png', 'u2.png']
+    const ordered = orderedSentImageReferenceUrls(meta, SEEDANCE, edges)
+    expect(ordered).toEqual(['e1.png', 'u2.png', 'u1.png']) // 连线在前、u2 去重、上传 u1 追加
+    // 与实际发送的 reference_image_urls 逐位一致——@ 投影 character{N} 才不会张冠李戴。
+    expect(buildArchetypeInputParams(meta, SEEDANCE, { referenceImages: edges }).reference_image_urls).toEqual(ordered)
+  })
+
+  it('当前模式无 image 数组槽（首帧模式）→ []（@ 投影回退 no-op）', () => {
+    const meta = { archetype: { id: 'seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png' }
+    expect(orderedSentImageReferenceUrls(meta, SEEDANCE, ['e1.png'])).toEqual([])
   })
 })
 

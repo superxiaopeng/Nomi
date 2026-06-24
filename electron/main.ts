@@ -463,7 +463,12 @@ function registerLocalProtocol(): void {
       if (url.hostname !== "asset") {
         return new Response("Unsupported nomi-local host", { status: 404 });
       }
-      const [projectId, ...relativeParts] = decodeURIComponent(url.pathname.replace(/^\/+/, "")).split("/");
+      // 解码与 localAssetUrl 的「逐段 encodeURIComponent」对称：先按 "/" 切段、再逐段 decode。
+      // （此前先整体 decode 再 split，文件名若含被编码的 %2F 会让段边界错位 → 路径错位 404。）
+      const segments = url.pathname.replace(/^\/+/, "").split("/").map((seg) => {
+        try { return decodeURIComponent(seg); } catch { return seg; }
+      });
+      const [projectId, ...relativeParts] = segments;
       const relativePath = relativeParts.join("/");
       const filePath = resolveProjectRelativePath(projectId, relativePath);
       const fileResponse = await net.fetch(pathToFileURL(filePath).toString());

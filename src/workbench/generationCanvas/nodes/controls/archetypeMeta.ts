@@ -378,6 +378,42 @@ function volcengineContentItem(inputKey: string, url: string): Record<string, un
 }
 
 /**
+ * 「有序参考图列表」单一真相源（option 2 · 2026-06-25 用户拍板）：**连线在前、上传在后**、去重、截到 maxCap。
+ * 面板编号①②③（resolveReferenceSlots）、@ 候选、@ 发送投影 character{N}、实际发送的 reference_image 数组
+ * 四处共用同一顺序——杜绝「面板①与模型 character1 不是同一张」的张冠李戴。edgeImageUrls = 画布边解析出的
+ * 有序图（与 resolveReferenceSlots 同口径：边按 order 升序在前）。maxCap ≤ 0 表示不截断。
+ */
+export function mergeOrderedReferenceImageUrls(
+  edgeImageUrls: readonly string[],
+  uploadUrls: readonly string[],
+  maxCap: number,
+): string[] {
+  const merged: string[] = []
+  for (const candidate of [...edgeImageUrls, ...uploadUrls]) {
+    const url = typeof candidate === 'string' ? candidate.trim() : ''
+    if (url && !merged.includes(url)) merged.push(url)
+  }
+  return maxCap > 0 ? merged.slice(0, maxCap) : merged
+}
+
+/**
+ * 当前模式「发给模型 + @ 投影 character{N}」共用的有序图片参考 URL 列表（option 2：连线在前）。
+ * = buildArchetypeInputParams 给 image_ref 槽算出的同一份列表，projectPromptForSend 复用它 → 保证
+ * character{N} 编号与实际发送的 reference_image 数组逐位一致。当前模式无 image 数组槽 → []。
+ */
+export function orderedSentImageReferenceUrls(
+  meta: Record<string, unknown>,
+  archetype: ModelArchetype,
+  edgeImageUrls: readonly string[],
+): string[] {
+  const mode = currentArchetypeMode(archetype, meta)
+  const slot = mode.slots.find((s) => ARRAY_SLOT_ROUTE[s.kind]?.accept === 'image')
+  const route = slot ? ARRAY_SLOT_ROUTE[slot.kind] : undefined
+  if (!slot || !route) return []
+  return mergeOrderedReferenceImageUrls(edgeImageUrls, readArchetypeArray(meta, route.metaKey), slot.max)
+}
+
+/**
  * **档案驱动的 input 构建（M1 单源 + M2 互斥 + M3 enum 覆盖）**：renderer 据当前模式把参考值打成
  * 最终的**通用 snake input 参数**（key = slot 的 API 名，值 = 标量或数组）。只含当前模式声明的键
  * → 别的模式的残留键根本不进结果（M2，§2 坑2）。供应商 mapping body 直接读 request.params.<key>
@@ -396,18 +432,13 @@ export function buildArchetypeInputParams(
     const asArray = slotAsArray(slot)
     const arr = ARRAY_SLOT_ROUTE[slot.kind]
     if (arr) {
-      // 切片1 修边投递：手动拖入的 meta 数组 + 画布边产出的实时参考图（references.referenceImages，
-      // 含 character_ref/style_ref/composition_ref 边的图）合并、去重、截到 slot.max。此前档案模型
-      // 只读 meta、把边的图丢了——agent 连的 character_ref 边对主流模型连了等于没连。仅 image 槽收
-      // 图片边（video/audio 槽不污染）；cap 至 slot.max 顺带封死手动超额导致的 vendor 422。
+      // 画布边产出的实时参考图 + 手动拖入的 meta 数组，经 mergeOrderedReferenceImageUrls 单源合并：
+      // **连线在前、上传在后**（option 2 · 2026-06-25 拍板），去重、截到 slot.max——与面板编号①②③、
+      // @ 候选、@ 投影 character{N} 同一顺序，杜绝张冠李戴。仅 image 槽收图片边（video/audio 槽不污染，
+      // edgeList=[]）；cap 顺带封死手动超额导致的 vendor 422。
       const metaList = readArchetypeArray(meta, arr.metaKey)
       const edgeList = arr.accept === 'image' ? (references?.referenceImages ?? []) : []
-      const merged: string[] = []
-      for (const candidate of [...metaList, ...edgeList]) {
-        const url = typeof candidate === 'string' ? candidate.trim() : ''
-        if (url && !merged.includes(url)) merged.push(url)
-      }
-      const capped = slot.max > 0 ? merged.slice(0, slot.max) : merged
+      const capped = mergeOrderedReferenceImageUrls(edgeList, metaList, slot.max)
       if (capped.length) {
         if (inputKey === 'volcengine_image_contents') {
           const role = DEFAULT_ROLE_FOR_KIND.image_ref ?? 'reference_image'

@@ -247,6 +247,9 @@ export default function NomiStudioApp(): JSX.Element {
                     void loadProjectConversations(hydrated.id);
                 }
                 activeProjectIdRef.current = hydrated.id;
+                // 同步喂全局（不等 effect 滞后一拍）：切项目瞬间拖图上传时 resolveProjectId 取的就是新项目，
+                // 不再误写进旧项目目录 / 编错 projectId 致渲染 404（C2 修，对齐 activeProjectIdRef 同步口径）。
+                setDesktopActiveProjectId(hydrated.id);
                 setActiveProject(hydrated);
                 setView("studio");
                 const migrationDiag =
@@ -398,6 +401,7 @@ export default function NomiStudioApp(): JSX.Element {
                 deleteLocalProject(project.id);
                 if (activeProjectIdRef.current === project.id) {
                     activeProjectIdRef.current = null;
+                    setDesktopActiveProjectId(null);
                     setActiveProject(null);
                     setView("library");
                     navigate(buildStudioUrl(), { replace: true });
@@ -427,6 +431,7 @@ export default function NomiStudioApp(): JSX.Element {
                 if (cancelled) return;
                 if (hydrated) {
                     activeProjectIdRef.current = hydrated.id;
+                    setDesktopActiveProjectId(hydrated.id);
                     setActiveProject(hydrated);
                     setView("studio");
                     navigate(buildStudioUrl(hydrated.id), { replace: true });
