@@ -6,8 +6,8 @@
 //
 // **参考图存储模型（对齐样张 v3）**：参考值按 slot 键**全局**存在 flat meta 里（firstFrameUrl /
 // lastFrameUrl…），跨模式持久——切模式只改变「显示哪些槽」，不搬动/清空数据，所以切回照片还在
-// （真实用户 F4「怕丢上传」）。**模式互斥（M2）发生在传输投影**：`projectArchetypeFrameExtras`
-// 只把**当前模式声明的槽键**放进请求，残留的别的模式的键不进 body（§2 坑2，避免 Seedance 422）。
+// （真实用户 F4「怕丢上传」）。**模式互斥（M2）发生在 `buildArchetypeInputParams`**：它只把**当前模式
+// 声明的槽键**打进 archetypeInput，残留的别的模式的键根本不进 body（§2 坑2，避免 Seedance 422）。
 // node.meta.archetype 只记 { id, modeId }（当前模式），不囤参考数据。
 //
 // C2b 只处理首帧 / 尾帧两类 frame 槽，映射到现有 flat 传输键（firstFrameUrl/lastFrameUrl），
@@ -233,7 +233,7 @@ function preservedVariantId(meta: Record<string, unknown>, archetype: ModelArche
 
 /**
  * 切到 nextModeId：只改 node.meta.archetype.modeId（参考值全局保留，不搬不清）。返回**整份新 meta**。
- * 互斥不在这里发生——发生在传输投影（projectArchetypeFrameExtras）。这样切回时照片还在。
+ * 互斥不在这里发生——发生在 buildArchetypeInputParams（只发当前模式声明的槽键）。这样切回时照片还在。
  * variantId 跟随保留（切 mode 不动变体）；无变体档案则不写 variantId 键。
  */
 export function applyArchetypeModeSwitch(

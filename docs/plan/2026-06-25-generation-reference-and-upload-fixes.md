@@ -79,9 +79,20 @@
    - ✅ C6 顺带：main.ts 协议解码改逐段对称（健壮性）。
    - ⏳ **C3 留 Round 1b**：上传失败重试需先在节点留住 File 引用（更大的 UX 改动），单列。
    - ⏳ **R13 真机走查**：@ 候选含连线图、裂图占位 两处待真机截图人眼验。
-2. **第 2 轮（附近最危险的静默发错）**：D1（变体夹取 resolution）+ D3（reference 边落首帧口径统一）+ B4（视频/音频边发送）。
-3. **第 3 轮（提示/边角）**：B3/D4（超额 toast）+ D2（参数栏换行）+ C4（跨项目拖图）+ C5（>8 提示）。
-4. **第 4 轮（潜伏/健壮性）**：B5 去重收口 + D5 注释/投影 + C6 编解码对称化。
+2. **第 2 轮（附近最危险的静默发错）** ✅ 已交付(59140d6)：
+   - ✅ D1 变体切换夹取越界清晰度(clampMetaToModeParams 通用派生)
+   - ✅ B4 连线视频/音频参考分流喂对槽(resolver 新增 referenceVideos/Audios + buildArchetypeInputParams 按 accept)
+   - ❎ **D3 经探针验证为非 bug**：reference/undefined 模式边经 fallback 已正确填 firstFrameUrl，agent 报告漏算 fallback，不改。
+3. **第 3 轮（提示/边角）** ✅ 部分已交付：
+   - ✅ C4 跨项目拖图导出读不到：根因=readNomiLocalAsset(信 URL 自带 projectId,生成侧能跑) vs absolutePathFromLocalAssetUrl(当前 projectId 强匹配,导出侧失败) 口径不一致;加 absolutePathFromLocalAssetUrlAnyProject 统一,导出侧改用。
+   - ✅ C5 >8 张截断 + 上传失败：导入结果加 skippedOverLimitCount/failedCount，canvasStageDrop 聚合成 toast(不再静默)。
+   - ✅ D5 死注释清理：archetypeMeta 注释引用了不存在的 projectArchetypeFrameExtras → 改指 buildArchetypeInputParams(真正做互斥处)。
+   - ⏳ **D2 参数栏换行：延后** —— blind 改宽度正是 violations.log 反复栽的坑(矫枉过正又截断)，必须真机几何实测，不盲改。
+   - ⏳ **D4 连线超额 toast：延后(minor)** —— verdict 系统外需非平凡的槽满检测，罕见(连第 10 个参考)。
+4. **第 4 轮（潜伏/健壮性）**：
+   - ✅ C6 编解码对称化(Round 1 顺带，main.ts)。
+   - ⏳ **B5 去重(minor)**：同 url 既上传又连线的「叉一次还在」，罕见边角，延后。
+   - ⏳ **C3 上传失败重试：延后** —— 需在节点留住 File 引用 + 重试 UI，是 UX 功能不是快修。
 
 每条修复守三闸：根因 P2 / 五门 R11 / 真机走查 R13；TDD 先写测试（referenceSlots.test.ts、promptMentions.test.ts 已存在，扩它们）。
 </content>

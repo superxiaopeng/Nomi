@@ -8,6 +8,7 @@ import { ASSET_LIBRARY_DRAG_MIME, parseAssetLibraryDrag } from '../../assets/ass
 import { importLocalMediaFilesToGenerationCanvas } from '../adapters/assetImportAdapter'
 import { dropKindFromMime } from '../model/nodeAssetDrop'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
+import { toast } from '../../../ui/toast'
 
 export type CanvasStageDropContext = {
   readOnly: boolean
@@ -87,5 +88,12 @@ export function handleCanvasStageDrop(event: DragEvent<HTMLDivElement>, ctx: Can
   if (!files.length) return
   event.preventDefault()
   event.stopPropagation()
-  void importLocalMediaFilesToGenerationCanvas(files, { basePosition, categoryId: ctx.activeCategoryId })
+  void importLocalMediaFilesToGenerationCanvas(files, { basePosition, categoryId: ctx.activeCategoryId }).then((result) => {
+    // C5：超限截断 / 上传失败不再静默——聚合成一句人话提示（此前 >8 张悄悄丢、失败只在节点上红）。
+    const notes: string[] = []
+    if (result.skippedOverLimitCount > 0) notes.push(`超过 8 个，已忽略 ${result.skippedOverLimitCount} 个`)
+    if (result.skippedTooLargeCount > 0) notes.push(`${result.skippedTooLargeCount} 个文件过大`)
+    if (result.failedCount > 0) notes.push(`${result.failedCount} 个导入失败`)
+    if (notes.length) toast(notes.join('；'), result.failedCount > 0 ? 'error' : 'info')
+  }).catch(() => {})
 }

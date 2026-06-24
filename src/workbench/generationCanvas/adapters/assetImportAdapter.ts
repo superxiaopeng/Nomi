@@ -24,6 +24,10 @@ export type GenerationAssetImportResult = {
   created: GenerationAssetImportItem[]
   skippedDuplicateCount: number
   skippedTooLargeCount: number
+  /** 单次拖入超过 MAX_IMPORT_FILES 被截断丢弃的数量（C5：此前静默丢，无任何提示）。 */
+  skippedOverLimitCount: number
+  /** 上传/落盘失败、最终落 error 态的数量（让调用方提示「N 张导入失败」）。 */
+  failedCount: number
 }
 
 export type ImportImageFilesOptions = {
@@ -170,8 +174,12 @@ export async function importLocalMediaFilesToGenerationCanvas(
   const recoverFile = options.recoverFile ?? recoverImportedWorkbenchLocalAssetFile
   const filtered = filterImportableMediaFiles(inputFiles)
   const created: GenerationAssetImportItem[] = []
+  // 单次拖入上限：超出截断（C5：此前 .slice(0,8) 静默丢，无提示）。
+  const MAX_IMPORT_FILES = 8
+  const accepted = filtered.files.slice(0, MAX_IMPORT_FILES)
+  const skippedOverLimitCount = filtered.files.length - accepted.length
 
-  await Promise.all(filtered.files.slice(0, 8).map(async (file, index) => {
+  await Promise.all(accepted.map(async (file, index) => {
     const kind = importKindForFile(file) ?? 'image'
     // 视频不在导入时离屏读尺寸（节点渲染的 onLoadedMetadata 会回填 W/H + 真实时长，单源 catch-all）；
     // 图片仍即时读尺寸以定节点初始大小。
@@ -206,6 +214,7 @@ export async function importLocalMediaFilesToGenerationCanvas(
     created.push({ node, file, kind })
   }))
 
+  let failedCount = 0
   await Promise.all(created.map(async ({ node, file, kind }) => {
     let hosted: WorkbenchAssetDto | null = null
     try {
@@ -215,6 +224,8 @@ export async function importLocalMediaFilesToGenerationCanvas(
     }
     const hostedUrl = hostedAssetUrl(hosted)
     if (!hostedUrl) {
+      const canPersistSmallFallbackPre = kind === 'image' && (typeof file.size === 'number' ? file.size : 0) <= DATA_URL_FALLBACK_MAX_BYTES
+      if (!canPersistSmallFallbackPre) failedCount += 1 // 无 data-url 兜底 → 真失败,计入提示
       // 图片可在极小阈值内退化成 data-url 落盘；视频体积过大，不做 data-url 兜底（直接报错让用户重导）。
       const canPersistSmallFallback = kind === 'image' && (typeof file.size === 'number' ? file.size : 0) <= DATA_URL_FALLBACK_MAX_BYTES
       const fallbackResult = canPersistSmallFallback
@@ -268,5 +279,7 @@ export async function importLocalMediaFilesToGenerationCanvas(
     created,
     skippedDuplicateCount: filtered.skippedDuplicateCount,
     skippedTooLargeCount: filtered.skippedTooLargeCount,
+    skippedOverLimitCount,
+    failedCount,
   }
 }
