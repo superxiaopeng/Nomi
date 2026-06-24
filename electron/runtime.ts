@@ -48,6 +48,7 @@ import type {
 } from "./catalog/types";
 import { selectExecutableModel, selectTaskMapping } from "./catalog/types";
 import { taskTemplateParams } from "./catalog/taskParams";
+import { applyParamMap, type ParamMap } from "./catalog/paramTranslate";
 import { assertAndConsumeSpendGrant } from "./spendGrant";
 export type {
   AiSdkProviderKind,
@@ -419,12 +420,12 @@ function findTaskMapping(vendorKey: string, taskKind: ProfileKind, modelKey?: st
   return selectTaskMapping(readCatalog().mappings, vendorKey, taskKind, modelKey);
 }
 
-// Adapter over the shared requestPipeline context builder(canonical context 形状在
-// shared 模块,wizard 测试与生产构建一致;params 经 taskTemplateParams 归一)。
-function templateContext(request: TaskRequest, model: Model, apiKey: string, providerMeta: JsonRecord = {}): JsonRecord {
+// 共享 requestPipeline context 构造（wizard 测试与生产同一份；params 经 taskTemplateParams 归一）。
+function templateContext(request: TaskRequest, model: Model, apiKey: string, providerMeta: JsonRecord = {}, paramMap?: ParamMap): JsonRecord {
+  // 铁律翻译层：渲染 body 前按本 codec 的 paramMap 把档案中性参数译成该站 wire 字段（见 catalog/paramTranslate）。
   return buildTemplateContext({
     request: request as unknown as JsonRecord,
-    params: taskTemplateParams(request),
+    params: applyParamMap(paramMap, taskTemplateParams(request)),
     model: model as unknown as JsonRecord,
     modelKey: model.modelAlias || model.modelKey,
     apiKey,
@@ -440,15 +441,14 @@ export function buildProfileHttpRequest(input: {
   operation: HttpOperation;
   providerMeta?: JsonRecord;
 }): { method: string; url: string; headers: Record<string, string>; query: Record<string, unknown>; body: unknown; preview: unknown } {
-  // 用共享 requestPipeline 构造请求（与向导测试同一份，"测过"=="prod 能用"）。
-  // extraHeaders（relay/代理网关自定义鉴权头）透传进 profile 路径，与文本路径同源（修 P1）。
+  // 共享 requestPipeline 构造请求；extraHeaders（relay/网关自定义鉴权头）透传进 profile 路径（与文本路径同源，修 P1）。
   const extraHeaders = extractVendorExtraHeaders(input.vendor);
   return buildHttpRequest({
     baseUrl: String(input.vendor.baseUrlHint || ""),
     authType: input.vendor.authType as AuthType,
     authHeaderName: input.vendor.authHeader ?? undefined,
     apiKey: input.apiKey,
-    context: templateContext(input.request, input.model, input.apiKey, input.providerMeta || {}),
+    context: templateContext(input.request, input.model, input.apiKey, input.providerMeta || {}, input.operation.paramMap),
     operation: input.operation,
     ...(extraHeaders ? { extraHeaders } : {}),
   });

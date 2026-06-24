@@ -2,6 +2,7 @@
 // electron 内部各处（runtime / seedBuiltins / kieSeedance …）一处定义、各处 import，避免漂移。
 // 渲染层不消费这些（electron 专用；渲染层有自己的 DTO，经 desktopClient 单源）。
 import type { ApiKeyRecord } from "./secrets";
+import type { ParamMap } from "./paramTranslate";
 
 export type BillingModelKind = "text" | "image" | "video" | "audio";
 export type ProfileKind =
@@ -205,6 +206,14 @@ export type HttpOperation = {
    * 任何未来同形状的 vendor 声明此值即复用解码，无需碰 runtime（runTextToSpeech 按它分流）。
    */
   audioResponse?: "binary" | "ndjson-base64";
+  /**
+   * 参数翻译表（铁律：模型身份决定参数，与渠道无关）。档案声明**中性 canonical 参数**（全站一致），
+   * 这里把它们翻译成本 codec 的 wire 字段（改名 / 值转换 / 显式 drop）——见 paramTranslate.ts。
+   * runtime 渲染 body 前 applyParamMap 注入 wire 键。**改名/identity 透传不必写**（canonical 键 =
+   * body 读的键时，值经 ...extras 直达）；只在 wire≠canonical 或要算值（如比例+档位→OpenAI 像素）时写。
+   * 可序列化（持久化进 catalog JSON）：规则纯数据，值转换用 PARAM_TRANSFORMS 的字符串 id 引用。
+   */
+  paramMap?: ParamMap;
 };
 
 /**
@@ -293,8 +302,11 @@ export function selectExecutableModel(
  *  flat Mapping.{create,query} HttpOperation fields. Old rows are normalized
  *  in `migrateCatalogForward`.
  */
-export type CatalogVersion = 1 | 2 | 3;
-export const CURRENT_CATALOG_VERSION: CatalogVersion = 3;
+/*  v4 给自建中转(relay)的旧图像/视频 op 补「中性参数→线缆字段」翻译表(paramMap)——存量用户已接入的
+ *  OpenAI 兼容中转其 op 是迁移前持久化的(读 size 像素却无 paramMap)，档案中性化后比例/清晰度发不出去。
+ *  见 docs/plan/2026-06-24-model-param-consistency-invariant.md。 */
+export type CatalogVersion = 1 | 2 | 3 | 4;
+export const CURRENT_CATALOG_VERSION: CatalogVersion = 4;
 
 export type CatalogState = {
   version: CatalogVersion;
