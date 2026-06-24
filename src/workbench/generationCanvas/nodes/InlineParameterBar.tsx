@@ -1,4 +1,6 @@
 import React from 'react'
+import { Popover } from '@mantine/core'
+import { IconChevronDown, IconAdjustmentsHorizontal } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
 import { NomiSelect } from '../../../design'
 import { formatVideoOptionLabel, type ModelParameterControl } from '../../../config/modelCatalogMeta'
@@ -32,8 +34,11 @@ type InlineParameterBarProps = {
   onVariantSelect?: (id: string) => void
 }
 
-// section="parameters"：底栏 = 模型芯片 + 该模型**所有参数横排内联**（每个带小标签的 pill）。
-// 参数不再藏进弹层——一眼可见、点一下就调；卡宽内容驱动(w-fit)，参数多则卡变宽、触上限在卡内换行。
+// section="parameters"：底栏 = 模型芯片 + 变体 + **前 N 个最常调参数内联** +「更多」弹层（其余参数 + 供应商）。
+// 主次分层（方案 B，2026-06-25 用户拍板替代旧「全摊平横排」——多供应商 Seedance 8+ 控件横排会超长/截断/换行丑）：
+// 最常调的（声明序前 2，如视频=比例+清晰度）一眼可见点一下就改；不常动的（时长/种子/音频/供应商）收进「更多」。
+// 永远单行、宽度恒定，再加参数也只往「更多」塞。INLINE_PARAM_MAX 是这条分层线。
+const INLINE_PARAM_MAX = 2
 export default function InlineParameterBar({
   modelOptions,
   modelCatalogStatus,
@@ -124,8 +129,13 @@ export default function InlineParameterBar({
       </label>
     )
   }
+  // 分层：模型/变体恒内联（身份级）；标量参数前 N 内联、其余进「更多」；供应商（设一次）进「更多」。
+  const hasProvider = modelSelect.providerOptions.length > 1
+  const inlineParams = renderedControls.slice(0, INLINE_PARAM_MAX)
+  const moreParams = renderedControls.slice(INLINE_PARAM_MAX)
+  const moreCount = moreParams.length + (hasProvider ? 1 : 0)
   return (
-    <div className={cn('generation-canvas-v2-node__params--parameters', 'flex flex-wrap items-center gap-2 min-w-0')}>
+    <div className={cn('generation-canvas-v2-node__params--parameters', 'flex items-center gap-2 min-w-0')}>
       <NomiSelect
         ariaLabel="模型"
         placeholder="选择模型"
@@ -134,17 +144,7 @@ export default function InlineParameterBar({
         options={modelSelect.modelOptions}
         onChange={modelSelect.onModelPick}
       />
-      {/* 供应商小下拉：仅当选中模型有多家可用时出现（去重后「N 家可用」点开切/锁定）。 */}
-      {modelSelect.providerOptions.length > 1 ? (
-        <NomiSelect
-          ariaLabel="供应商"
-          leadingLabel="供应商"
-          value={modelSelect.providerValue}
-          options={modelSelect.providerOptions}
-          onChange={modelSelect.onProviderPick}
-        />
-      ) : null}
-      {/* 变体（型号）小下拉：紧跟模型芯片。有变体的模型(Seedance:标准/快速/真人/真人快速)才显示；无变体不占位。 */}
+      {/* 变体（型号）小下拉：紧跟模型芯片（身份级，恒内联）。有变体的模型才显示。 */}
       {variantChoices && variantChoices.length > 1 ? (
         <NomiSelect
           ariaLabel="变体"
@@ -154,8 +154,43 @@ export default function InlineParameterBar({
           onChange={(v) => onVariantSelect?.(v)}
         />
       ) : null}
-      {/* 该模型的标量参数：横排内联，每个带标签，全可见 */}
-      {renderedControls.map((control) => renderInlineParam(control))}
+      {/* 最常调的前 N 个参数：内联，一眼可见点一下就改 */}
+      {inlineParams.map((control) => renderInlineParam(control))}
+      {/* 「更多」弹层：供应商 + 其余参数。永远单行的关键——再多参数也只往这里塞。 */}
+      {moreCount > 0 ? (
+        <Popover position="bottom-end" offset={6} withinPortal shadow="md" radius="md">
+          <Popover.Target>
+            <button
+              type="button"
+              aria-label="更多参数"
+              className={cn(
+                'inline-flex items-center gap-1 h-7 pl-2.5 pr-2 rounded-pill border border-nomi-line bg-nomi-paper',
+                'text-caption text-nomi-ink-80 cursor-pointer hover:border-nomi-ink-20 focus:outline-none focus-visible:border-nomi-accent',
+              )}
+            >
+              <IconAdjustmentsHorizontal size={13} stroke={1.6} className="shrink-0 text-nomi-ink-40" aria-hidden />
+              更多
+              <IconChevronDown size={12} stroke={1.6} className="shrink-0 text-nomi-ink-40 pointer-events-none" aria-hidden />
+            </button>
+          </Popover.Target>
+          <Popover.Dropdown
+            styles={{ dropdown: { padding: 10, border: '1px solid var(--nomi-line)', borderRadius: 'var(--nomi-radius-lg)', background: 'var(--nomi-paper)', boxShadow: 'var(--workbench-shadow-pop)' } }}
+          >
+            <div className={cn('flex flex-col items-start gap-2 min-w-[160px]')}>
+              {hasProvider ? (
+                <NomiSelect
+                  ariaLabel="供应商"
+                  leadingLabel="供应商"
+                  value={modelSelect.providerValue}
+                  options={modelSelect.providerOptions}
+                  onChange={modelSelect.onProviderPick}
+                />
+              ) : null}
+              {moreParams.map((control) => renderInlineParam(control))}
+            </div>
+          </Popover.Dropdown>
+        </Popover>
+      ) : null}
     </div>
   )
 }

@@ -95,5 +95,14 @@ console.log('  video samples:', JSON.stringify(videoM.slice(0,4).map(m=>({cardW:
 await snap(win, 'node-selected')
 const geo = { maxCard: Math.round(maxCard), anyClip }
 console.log('  GEO=', JSON.stringify(geo))
+
+// 方案 B：点「更多」弹层，截图看收纳的参数
+const moreBtn = win.locator('button[aria-label="更多参数"]').first()
+console.log('  更多按钮数:', await moreBtn.count())
+if (await moreBtn.count()) {
+  await moreBtn.click({ timeout: 3000 }).catch(() => {})
+  await win.waitForTimeout(500)
+  await snap(win, 'more-popover')
+}
 await app.close()
 console.log(`\n截图在 ${shotsDir}`)

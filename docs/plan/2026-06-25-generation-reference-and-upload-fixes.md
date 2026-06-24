@@ -87,7 +87,7 @@
    - ✅ C4 跨项目拖图导出读不到：根因=readNomiLocalAsset(信 URL 自带 projectId,生成侧能跑) vs absolutePathFromLocalAssetUrl(当前 projectId 强匹配,导出侧失败) 口径不一致;加 absolutePathFromLocalAssetUrlAnyProject 统一,导出侧改用。
    - ✅ C5 >8 张截断 + 上传失败：导入结果加 skippedOverLimitCount/failedCount，canvasStageDrop 聚合成 toast(不再静默)。
    - ✅ D5 死注释清理：archetypeMeta 注释引用了不存在的 projectArchetypeFrameExtras → 改指 buildArchetypeInputParams(真正做互斥处)。
-   - ✅ **D2 参数栏换行**：**真机几何实测驱动**(tests/ux/param-bar-geometry.walk.mjs)——隔离复制真 catalog(seedance 4 供应商→供应商下拉出现)+真项目,选中视频节点量到 cardW=880(顶上限)+clip=true 复现;改 InlineParameterBar/底栏 flex-nowrap→flex-wrap(min-w-0),复量 clip=false+视觉两行干净,窄卡不足一行不换行无副作用。**没盲改,先量后改再复量**(治本那条 violations.log 坑)。
+   - ✅ **D2 参数栏**：先 flex-wrap 止血,用户看了说换行丑→重设计。**根因=底栏摊平横排不 scale**(多供应商 Seedance 8+ 控件)。出可点样张(3 方案)→**用户拍板方案 B·主次分层**:模型/变体+前 2 常调参数(比例/清晰度)内联,其余(时长/种子/音频/供应商)收进「更多」Mantine Popover。真机复量 cardW 880(裁切)→678(单行无裁切),「更多」弹层竖排收纳正常。INLINE_PARAM_MAX=2 是分层线(通用,按档案声明序)。**全程先量后改再复量**(治本 violations.log 那条盲改宽度坑)。
    - ✅ **D4 连线超额 toast**：completeNodeConnection 用 resolveReferenceSlots 判断新边有没有落进槽 fill,没落=槽满→明提示「参考槽已满(最多N)」。
 4. **第 4 轮（潜伏/健壮性）** ✅ 全做完：
    - ✅ C6 编解码对称化(Round 1 顺带，main.ts)。
