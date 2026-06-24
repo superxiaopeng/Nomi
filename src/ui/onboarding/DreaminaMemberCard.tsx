@@ -8,7 +8,7 @@
  * （非任意即梦会员，光充积分不行）——非会员明示，不让用户点了干等（D4 effect-first / 诚实交付）。
  */
 import React from 'react'
-import { IconMovie, IconExternalLink, IconCircleCheck, IconAlertTriangle, IconQrcode, IconDownload, IconCopy, IconCheck } from '@tabler/icons-react'
+import { IconMovie, IconExternalLink, IconCircleCheck, IconQrcode, IconDownload, IconCopy, IconCheck } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { toast } from '../toast'
@@ -139,22 +139,18 @@ export function DreaminaMemberCard(): JSX.Element | null {
           <button type="button" onClick={() => { cancelPoll.current = true; setFlow(null) }} className="self-start text-caption text-nomi-ink-40 hover:text-workbench-danger">取消</button>
         </>
       ) : status.loggedIn ? (
-        /* 已登录 */
+        /* 已登录。注意：user_credit 成功 ≠ 能生成（「not maestro vip」只在生成时才报），故这里**不承诺**
+           能出片，始终诚实标门槛——避免给非会员账号误报「可以出片」（D4）。 */
         <>
-          <div className={cn('flex items-start gap-2 rounded-nomi-sm px-3 py-2.5',
-            status.notMaestroVip ? 'bg-nomi-ink-05' : 'bg-[var(--workbench-success-soft)]')}>
-            {status.notMaestroVip
-              ? <IconAlertTriangle size={17} className="shrink-0 mt-0.5 text-nomi-accent" />
-              : <IconCircleCheck size={17} className="shrink-0 mt-0.5 text-workbench-success" />}
+          <div className="flex items-start gap-2 rounded-nomi-sm bg-[var(--workbench-success-soft)] px-3 py-2.5">
+            <IconCircleCheck size={17} className="shrink-0 mt-0.5 text-workbench-success" />
             <div className="min-w-0">
               <div className="text-body-sm font-semibold text-nomi-ink">
-                {status.notMaestroVip ? '已登录，但不是高级会员' : '已登录即梦'}
+                已登录即梦
                 {status.totalCredit != null ? <span className="text-nomi-ink-60 font-normal"> · 积分 {status.totalCredit}</span> : null}
               </div>
               <div className="text-caption text-nomi-ink-60 mt-0.5">
-                {status.notMaestroVip
-                  ? '即梦 CLI 生成仅「高级会员 / maestro vip」可用——光充积分不行，需开通高级会员档才能在 Nomi 出片。'
-                  : '可以在生成画布选「即梦 Seedance 2.0（会员）」出视频了。'}
+                在生成画布选「即梦 Seedance 2.0（会员）」出视频。注意：生成需即梦<strong>高级会员（maestro vip）</strong>档——非此档会被拒（光充积分不够）。
               </div>
             </div>
           </div>
