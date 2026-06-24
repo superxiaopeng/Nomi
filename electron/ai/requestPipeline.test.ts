@@ -70,7 +70,7 @@ describe("authQueryParams", () => {
 describe("template rendering", () => {
   const ctx = buildTemplateContext({
     request: { prompt: "a cat" },
-    params: { aspect_ratio: "16:9", input_urls: ["http://x/y.png"] },
+    params: { aspect_ratio: "16:9", input_urls: ["http://x/y.png"], content_items: [{ type: "image_url", image_url: { url: "http://x/y.png" } }] },
     model: { displayName: "GPT Image" },
     modelKey: "gpt-image-2",
     apiKey: "SECRET",
@@ -96,6 +96,14 @@ describe("template rendering", () => {
 
   it("exact-match passthrough preserves arrays/objects (not stringified)", () => {
     expect(renderTemplateValue("{{request.params.input_urls}}", ctx)).toEqual(["http://x/y.png"]);
+  });
+
+  it("expands exact-placeholder arrays for content item composition only", () => {
+    expect(renderTemplateValue([{ type: "text", text: "{{request.prompt}}" }, "{{request.params.content_items}}"], ctx)).toEqual([
+      { type: "text", text: "a cat" },
+      { type: "image_url", image_url: { url: "http://x/y.png" } },
+    ]);
+    expect(renderTemplateValue([["literal"], "{{request.params.input_urls}}"], ctx)).toEqual([["literal"], "http://x/y.png"]);
   });
 
   it("missing placeholder renders empty string inline", () => {

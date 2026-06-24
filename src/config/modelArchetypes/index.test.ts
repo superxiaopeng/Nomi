@@ -75,6 +75,23 @@ describe("resolveArchetypeForModel — 供应商无关的识别桥", () => {
     expect(resOf("fast-face")).toEqual(["480p", "720p"]);
   });
 
+  it("火山方舟 Seedance 2.0：标准/Fast/Mini 解析到火山专属档案", () => {
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2-0-260128" })?.id).toBe("volcengine-seedance-2");
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2-0-fast-260128" })?.id).toBe("volcengine-seedance-2");
+    expect(resolveArchetypeForModel({ modelKey: "doubao-seedance-2-0-mini-260615" })?.id).toBe("volcengine-seedance-2");
+    const arch = getArchetypeById("volcengine-seedance-2")!;
+    expect(arch.variants?.map((v) => v.id)).toEqual(["standard", "fast", "mini"]);
+  });
+
+  it("火山方舟 Seedance Fast/Mini 变体：resolution 收窄到 480/720", () => {
+    const base = getArchetypeById("volcengine-seedance-2")!;
+    const resOf = (variantId: string) =>
+      specializeArchetypeForVariant(base, variantId).modes[0].params.find((p) => p.key === "resolution")!.options.map((o) => o.value);
+    expect(resOf("standard")).toEqual(["480p", "720p", "1080p", "4k"]);
+    expect(resOf("fast")).toEqual(["480p", "720p"]);
+    expect(resOf("mini")).toEqual(["480p", "720p"]);
+  });
+
   it("认不出的模型 → null（渲染层走通用回退）", () => {
     expect(resolveArchetypeForModel({ modelKey: "acme/some-unknown-video-model" })).toBeNull();
     expect(resolveArchetypeForModel(null)).toBeNull();

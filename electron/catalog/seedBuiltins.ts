@@ -40,6 +40,7 @@ import { MODELSCOPE_TEXT_MODELS } from "./modelscopeTexts";
 import { VOLCENGINE_VENDOR_SEED, VOLCENGINE_SPEECH_VENDOR_SEED } from "./volcengineVendor";
 import { VOLCENGINE_IMAGE_MODELS } from "./volcengineImages";
 import { VOLCENGINE_AUDIO_MODELS } from "./volcengineAudios";
+import { VOLCENGINE_SEEDANCE_QUERY_OP, VOLCENGINE_SEEDANCE_STATUS_MAPPING, VOLCENGINE_VIDEO_MODELS } from "./volcengineVideos";
 
 /** curated 模型/mapping 的内部类型（reconcile 两函数的输入）。 */
 type CuratedModel = { modelKey: string; labelZh: string; kind: Model["kind"]; archetypeId?: string };
@@ -132,15 +133,24 @@ const MODELSCOPE_CURATED_MAPPINGS: CuratedMapping[] = MODELSCOPE_IMAGE_MODELS.fl
   })),
 );
 
-/** 火山 Seedream curated 模型 + mapping（同步族：无 query / 无 statusMapping，响应即结果）。 */
-const VOLCENGINE_CURATED_MODELS: CuratedModel[] = VOLCENGINE_IMAGE_MODELS.map((m) => ({
-  modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId,
-}));
-const VOLCENGINE_CURATED_MAPPINGS: CuratedMapping[] = VOLCENGINE_IMAGE_MODELS.flatMap((m) =>
-  m.mappings.map((mp) => ({
-    id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name, create: mp.create,
-  })),
-);
+/** 火山 Seedream 图片（同步）+ Seedance 视频（异步）curated 模型 + mapping。 */
+const VOLCENGINE_CURATED_MODELS: CuratedModel[] = [
+  ...VOLCENGINE_IMAGE_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId })),
+  ...VOLCENGINE_VIDEO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "video" as const, archetypeId: m.archetypeId })),
+];
+const VOLCENGINE_CURATED_MAPPINGS: CuratedMapping[] = [
+  ...VOLCENGINE_IMAGE_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name, create: mp.create,
+    })),
+  ),
+  ...VOLCENGINE_VIDEO_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+      create: mp.create, query: VOLCENGINE_SEEDANCE_QUERY_OP, statusMapping: VOLCENGINE_SEEDANCE_STATUS_MAPPING,
+    })),
+  ),
+];
 
 /** 火山豆包语音 curated 模型 + mapping（同步族；NDJSON 解码由 audioTaskRunner 按 create.audioResponse 走）。 */
 const VOLCENGINE_SPEECH_CURATED_MODELS: CuratedModel[] = VOLCENGINE_AUDIO_MODELS.map((m) => ({

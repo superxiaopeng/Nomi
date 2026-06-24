@@ -90,11 +90,19 @@ export function renderTemplateString(input: string, context: JsonRecord): unknow
   });
 }
 
+function isExactTemplateString(input: unknown): input is string {
+  return typeof input === "string" && /^\{\{\s*([^}]+)\s*\}\}$/.test(input);
+}
+
 /** Deep-render an arbitrary value (string/array/object), dropping undefined. */
 export function renderTemplateValue(value: unknown, context: JsonRecord): unknown {
   if (typeof value === "string") return renderTemplateString(value, context);
   if (Array.isArray(value)) {
-    return value.map((item) => renderTemplateValue(item, context)).filter((item) => typeof item !== "undefined");
+    return value.flatMap((item) => {
+      const rendered = renderTemplateValue(item, context);
+      if (typeof rendered === "undefined") return [];
+      return Array.isArray(rendered) && isExactTemplateString(item) ? rendered : [rendered];
+    });
   }
   if (isRecord(value)) {
     const out: JsonRecord = {};

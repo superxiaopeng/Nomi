@@ -612,3 +612,59 @@ describe('apimart 参数补全 — fixedParams / flat 合并 / 变体 model', ()
     expect(dur.options.map((o) => o.value)).toEqual([4, 8, 12, 16, 20])
   })
 })
+
+describe('火山方舟 Seedance — 档案投影', () => {
+  const VOLC = getArchetypeById('volcengine-seedance-2')!
+
+  it('四模式：文生 / 首帧 / 首尾帧 / 全能参考；变体为标准/Fast/Mini', () => {
+    expect(VOLC.modes.map((m) => m.id)).toEqual(['t2v', 'first', 'firstlast', 'omni'])
+    expect(archetypeVariantChoices(VOLC)).toEqual([
+      { id: 'standard', label: '标准' },
+      { id: 'fast', label: '快速' },
+      { id: 'mini', label: 'Mini' },
+    ])
+  })
+
+  it('首帧模式：ratio 字段 + 默认变体 model 使用火山官方 Model ID', () => {
+    const meta = { archetype: { id: 'volcengine-seedance-2', modeId: 'first' }, firstFrameUrl: 'F.png' }
+    expect(buildArchetypeInputParams(meta, VOLC)).toEqual({
+      volcengine_first_image_content: { type: 'image_url', image_url: { url: 'F.png' }, role: 'first_frame' },
+      model: 'doubao-seedance-2-0-260128',
+    })
+    expect(VOLC.modes[0].params.map((p) => p.key)).toEqual(['ratio', 'resolution', 'duration', 'generate_audio'])
+  })
+
+  it('fast 变体：out.model 发 fast Model ID', () => {
+    const meta = { archetype: { id: 'volcengine-seedance-2', modeId: 't2v', variantId: 'fast' } }
+    expect(buildArchetypeInputParams(meta, VOLC).model).toBe('doubao-seedance-2-0-fast-260128')
+  })
+
+  it('mini 变体：out.model 发 mini Model ID', () => {
+    const meta = { archetype: { id: 'volcengine-seedance-2', modeId: 't2v', variantId: 'mini' } }
+    expect(buildArchetypeInputParams(meta, VOLC).model).toBe('doubao-seedance-2-0-mini-260615')
+  })
+
+  it('首尾帧：图像 item 带 first_frame / last_frame role', () => {
+    const meta = { archetype: { id: 'volcengine-seedance-2', modeId: 'firstlast' }, firstFrameUrl: 'F.png', lastFrameUrl: 'L.png' }
+    expect(buildArchetypeInputParams(meta, VOLC)).toEqual({
+      volcengine_first_role_image_content: { type: 'image_url', image_url: { url: 'F.png' }, role: 'first_frame' },
+      volcengine_last_role_image_content: { type: 'image_url', image_url: { url: 'L.png' }, role: 'last_frame' },
+      model: 'doubao-seedance-2-0-260128',
+    })
+  })
+
+  it('全能参考：数组参考转成火山 content item 数组，供模板扁平展开', () => {
+    const meta = {
+      archetype: { id: 'volcengine-seedance-2', modeId: 'omni' },
+      referenceImageUrls: ['c1.png'],
+      referenceVideoUrls: ['v1.mp4'],
+      referenceAudioUrls: ['a1.mp3'],
+    }
+    expect(buildArchetypeInputParams(meta, VOLC)).toEqual({
+      volcengine_image_contents: [{ type: 'image_url', image_url: { url: 'c1.png' }, role: 'reference_image' }],
+      volcengine_video_contents: [{ type: 'video_url', video_url: { url: 'v1.mp4' } }],
+      volcengine_audio_contents: [{ type: 'audio_url', audio_url: { url: 'a1.mp3' } }],
+      model: 'doubao-seedance-2-0-260128',
+    })
+  })
+})

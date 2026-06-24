@@ -347,7 +347,7 @@ const DEFAULT_ROLE_FOR_KIND: Partial<Record<ArchetypeReferenceSlotKind, string>>
 }
 
 /** 构造层产出的通用 input 值：标量 / 数组 / 角色对象数组（combineSlotsInto）。模板引擎原样透传。 */
-type ArchetypeInputValue = string | string[] | Array<{ url: string; role: string }>
+type ArchetypeInputValue = string | Record<string, unknown> | string[] | Array<{ url: string; role: string }> | Array<Record<string, unknown>>
 
 /** 一个声明槽在 meta 里的存储形态（单一真相源：槽→存储键 的知识只在这里）。无存储映射 → null。 */
 export type ReferenceSlotStorage = { metaKey: string; isArray: boolean }
@@ -364,6 +364,17 @@ function slotInputKey(slot: { kind: ArchetypeReferenceSlotKind; inputKey?: strin
 }
 function slotAsArray(slot: { kind: ArchetypeReferenceSlotKind; asArray?: boolean }): boolean {
   return slot.asArray ?? DEFAULT_AS_ARRAY[slot.kind]
+}
+
+function volcengineImageContentItem(url: string, role: string): Record<string, unknown> {
+  return { type: 'image_url', image_url: { url }, role }
+}
+
+function volcengineContentItem(inputKey: string, url: string): Record<string, unknown> | null {
+  if (inputKey === 'volcengine_first_image_content') return volcengineImageContentItem(url, DEFAULT_ROLE_FOR_KIND.first_frame ?? 'first_frame')
+  if (inputKey === 'volcengine_first_role_image_content') return volcengineImageContentItem(url, DEFAULT_ROLE_FOR_KIND.first_frame ?? 'first_frame')
+  if (inputKey === 'volcengine_last_role_image_content') return volcengineImageContentItem(url, DEFAULT_ROLE_FOR_KIND.last_frame ?? 'last_frame')
+  return null
 }
 
 /**
@@ -397,7 +408,18 @@ export function buildArchetypeInputParams(
         if (url && !merged.includes(url)) merged.push(url)
       }
       const capped = slot.max > 0 ? merged.slice(0, slot.max) : merged
-      if (capped.length) out[inputKey] = capped
+      if (capped.length) {
+        if (inputKey === 'volcengine_image_contents') {
+          const role = DEFAULT_ROLE_FOR_KIND.image_ref ?? 'reference_image'
+          out[inputKey] = capped.map((url) => volcengineImageContentItem(url, role))
+        } else if (inputKey === 'volcengine_video_contents') {
+          out[inputKey] = capped.map((url) => ({ type: 'video_url', video_url: { url } }))
+        } else if (inputKey === 'volcengine_audio_contents') {
+          out[inputKey] = capped.map((url) => ({ type: 'audio_url', audio_url: { url } }))
+        } else {
+          out[inputKey] = capped
+        }
+      }
       continue
     }
     const metaKey = SINGLE_SLOT_META_KEY[slot.kind]
@@ -407,7 +429,9 @@ export function buildArchetypeInputParams(
       : undefined
     const raw = (typeof fromRef === 'string' && fromRef.trim()) ? fromRef.trim()
       : (typeof meta[metaKey] === 'string' ? (meta[metaKey] as string).trim() : '')
-    if (raw) out[inputKey] = asArray ? [raw] : raw
+    if (raw) {
+      out[inputKey] = volcengineContentItem(inputKey, raw) ?? (asArray ? [raw] : raw)
+    }
   }
   // 角色数组合并（通用原语）：把本模式有值的槽 → [{url, role}] 落在 combineSlotsInto.key，删被合并的
   // 扁平键（M2 互斥）。role = slot.roleName ?? 由 kind 派生（单源）。键名来自档案声明，不写死/不 if-vendor。
