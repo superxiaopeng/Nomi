@@ -27,12 +27,10 @@ const SCAN_DIRS = ["src", "electron"];
 const ALLOWLIST = {
   "electron/runtime.ts": 648, // 续查收口已拆到 tasks/taskResultQuery.ts（2026-06-25）；付费守卫硬闸仍在本文件
   "src/workbench/generationCanvas/nodes/BaseGenerationNode.tsx": 887,
-  // PR#21 白板节点引入（2026-06-25）：WhiteboardDrawingTool 已按 Rule 9 拆出 WhiteboardToolbarControls.tsx +
-  // whiteboardStateOps.ts，壳缩到 760 < 800，已出白名单。WhiteboardLeaferCanvas 已抽出 whiteboardCanvasTypes/
-  // Export/NodeOps/Geometry 四个纯模块 + whiteboardSceneRender.ts（渲染树构建）；壳 3406→1921。
-  // 剩余 = 交互层（选择/翻转/编组 handler 链 + 键盘/右键菜单 + 绘制 + 框选），需自定义 hook + 共享 ctx 重构，
-  // 风险较高、须配 R13 走查，留作专项后续（见 docs/plan/2026-06-25-whiteboard-shell-split.md）。
-  "src/workbench/generationCanvas/nodes/whiteboard/WhiteboardLeaferCanvas.tsx": 1921,
+  // PR#21 白板节点引入（2026-06-25）：WhiteboardDrawingTool（1032）与 WhiteboardLeaferCanvas（3406）两巨壳
+  // 已按 Rule 9 全部拆完、双双出白名单。LeaferCanvas → whiteboardCanvasTypes/Export/NodeOps/Geometry 四纯模块
+  // + whiteboardSceneRender（渲染树）+ useWhiteboardDrawing/BoxSelection/SelectionActions/SceneSync 四交互 hook，
+  // 壳缩到 740 < 800。DrawingTool → WhiteboardToolbarControls + whiteboardStateOps，壳 760。
   // generationCanvasStore.ts 曾 871 行（巨壳）；S5-0 按 zustand slice 模式拆出 canvasStoreTypes.ts +
   // canvasNodeActions.ts + canvasGraphActions.ts + canvasRunActions.ts 后壳文件缩到 161 < 800，已出白名单。
   // NodeParameterControls.tsx 曾 1097 行（巨壳）；C2b 抽出 controls/parameterControlModel.ts +

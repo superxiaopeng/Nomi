@@ -43,7 +43,14 @@ PR#21 引入白板节点时为过门岗把两个巨壳临时入了白名单：
 assets/strokes/layers/dimensions + 三个 ref-map 值 + 四个 node-map ref 对象），行为逐字不变，typecheck 绿、
 lint 零新增。壳 2220→1921。
 
-**C2（剩余，高风险，留专项）：** 交互层。盘点后这部分**不是**可独立搬运的纯逻辑，而是相互依赖的 React hook 链：
+**C2（已做，已并 main）：** 交互层按「自定义 hook 收一个 refs 对象（顶部解构 → 函数体逐字不动）」抽出四个 hook：
+`useWhiteboardDrawing`（绘制/光标/草稿）、`useWhiteboardBoxSelection`（框选/多选拖拽/stage 指针捕获）、
+`useWhiteboardSelectionActions`（选择/翻转/编组/右键菜单/键盘）、`useWhiteboardSceneSync`（editor 选择同步 + 工具切换
+同步 + 交互禁用同步 + editor 事件）。壳保留 refs/state/imperativeHandle/init effect/paintSnapGuides/渲染薄 effect/JSX +
+四个 hook 装配。每抽一个跑 typecheck + lint（exhaustive-deps 同款 file-level disable）+ 清孤儿 import。
+**壳 1921→740 < 800，LeaferCanvas 出白名单，两巨壳债清零。** 五门全绿（filesize/tokens/lint/typecheck/test 1892✓）+ R13 走查。
+
+下方为 C2 落地前的盘点记录（保留作背景）：交互层**不是**可独立搬运的纯逻辑，而是相互依赖的 React hook 链：
 - 选择动作链：`getEditableSelectedTarget → moveSelectedTarget / deleteSelectedTarget / flipSelectedTarget /
   groupSelectedTargets → handleGroupMenu*`，全是 `useCallback`，彼此 deps 串联。
 - 键盘 / 右键菜单 / editor 事件 / 框选 / 多选拖拽 / 绘制：`useEffect` + `useCallback`，闭包 50+ 个共享 ref + 多个
