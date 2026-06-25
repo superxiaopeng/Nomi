@@ -105,6 +105,20 @@
 - 聚合中转「新手推荐」软提示微标。
 - 三套 vendor 名单单一来源合并（治本，碰 seed，单独 plan + 单独验）。
 
+### 8.1 做②时的存量数据铁律（用户硬要求：版本更新绝不能把用户数据整没）
+
+现状已被结构挡住（**做②前先读懂、别破坏**）：
+- **API key 不在目录**，单独存 OS 钥匙串加密库（`electron/catalog/secrets.ts` safeStorage）→ 重新种目录碰不到 key。
+- `seedVendor` **存在即跳过**（`vendors.some(v=>v.key===seed.key) → return false`），不覆盖用户已有 vendor。
+- `reconcileModels/Mappings` **只 insert/修我们自己的漂移，永不批量删**；用户自建（非 seed id）不碰，保留 enabled/labelZh/name。
+- 唯一删除口 `pruneRetired*` 只按**精确退役 seed id**删，有测试盯「不碰用户自建/改名记录」。
+- `seedBuiltins.test.ts` 20 条常设回归（幂等/存在即跳过/不碰自建/prune 不碰用户）→ 破坏即 test 闸红。
+
+②的铁律：
+1. **绝不改 vendorKey / modelKey / seed mapping id 这些身份键**（key 按 vendorKey 存钥匙串，改名 = 用户 key 认不上 = 看似掉线）。②只动**呈现层名单展示**（KNOWN_VENDORS/PROVIDER_PRESETS 合并去重），不动身份。
+2. 必须新增「**存量快照迁移测试**」：喂一份含用户 key（secrets）+ 自定义 vendor + 自建 model 的旧目录 → 跑 applyBuiltinSeeds → 断言一个都没丢、key 仍认得上。
+3. 任何 prune/rename 单独列出、单独真机验存量、单独可回滚。
+
 ## 9. 验收门（报完成前必过，P3/R11/R13）
 
 **五门**：`pnpm run gates`（filesize→tokens→lint→typecheck→test→build）全绿。
