@@ -21,7 +21,7 @@ import { useNodeImageEditing } from "./useNodeImageEditing";
 import { useNodeDragResize } from "./useNodeDragResize";
 import { useHasFrameSourceEdge, useShotIndex, useMountedCards } from "../hooks/useNodeRelationships";
 import { lazyWithChunkBoundary } from "../../../ui/chunkBoundary";
-import { GeneratingOverlay, PendingGenerationPlaceholder, Scene3DEditorLoading } from "./render/CardCommon";
+import { GeneratingOverlay, PendingGenerationPlaceholder, Scene3DEditorLoading, STRIPED_BG_CLASS } from "./render/CardCommon";
 import { cn } from "../../../utils/cn";
 import { NomiImage } from "../../../design/media";
 import { persistNodeImageFile } from "../adapters/persistNodeImage";
@@ -632,8 +632,7 @@ function BaseGenerationNodeImpl({
                     "rounded-nomi shadow-nomi-md cursor-grab touch-none ring-1 ring-inset ring-nomi-line",
                     // 棋盘格占位底纹只在「未生成」态出现；有结果后节点尺寸已贴合图片比例，
                     // 不再露出底纹，避免图片外面套一层框。
-                    !hasResult &&
-                        "bg-[repeating-linear-gradient(45deg,var(--nomi-ink-05)_0_23px,var(--nomi-ink-20)_23px_24px)]",
+                    !hasResult && STRIPED_BG_CLASS,
                     // [DESIGN-CARDS-07] 卡片模式隐藏 preview div；C5 文本节点同理。
                     (isCardKind || isTextKind) && "hidden",
                 )}

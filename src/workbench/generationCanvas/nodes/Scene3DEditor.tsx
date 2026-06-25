@@ -2,6 +2,7 @@ import React from 'react'
 import { IconCube, IconMaximize } from '@tabler/icons-react'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { cn } from '../../../utils/cn'
+import { EmptyStateLauncher } from './render/CardCommon'
 import { toast } from '../../../ui/toast'
 import { persistActiveWorkbenchProjectNow } from '../../project/workbenchProjectSession'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
@@ -194,19 +195,12 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
             draggable={false}
           />
         ) : (
-          <div
-            className={cn(
-              'flex h-full w-full flex-col items-center justify-center gap-3',
-              'text-nomi-ink-60',
-            )}
-          >
-            <div className="grid size-12 place-items-center rounded-nomi border border-nomi-line-soft bg-nomi-paper/[0.72] shadow-nomi-sm">
-              <IconCube className="text-nomi-ink-60" size={25} stroke={1.65} />
-            </div>
-            <div className="text-center">
-              <div className="text-caption font-medium text-nomi-ink-60">点击进入 3D 编辑器</div>
-              <div className="mt-1 text-micro text-nomi-ink-40">摆放模型、相机并输出截图</div>
-            </div>
+          <div className={cn('flex h-full w-full items-center justify-center')}>
+            <EmptyStateLauncher
+              icon={<IconCube size={24} stroke={1.65} />}
+              label="点击进入 3D 编辑器"
+              hint="摆放模型、相机并输出截图"
+            />
           </div>
         )}
         <button

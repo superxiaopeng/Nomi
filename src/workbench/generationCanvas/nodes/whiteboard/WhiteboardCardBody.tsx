@@ -3,6 +3,7 @@ import { IconBrush } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
 import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
+import { NodeBodyHeader, EmptyStateLauncher } from '../render/CardCommon'
 import WhiteboardModal from './WhiteboardModal'
 import { readWhiteboardState } from './whiteboardState'
 
@@ -28,17 +29,16 @@ function WhiteboardCardBodyImpl({ node, readOnly = false }: { node: GenerationCa
 
   return (
     <div className={cn('flex h-full w-full flex-col bg-nomi-paper')}>
-      {/* 标题走左上角，和 PendingGenerationPlaceholder(镜头/图片节点)同款 → 与其他节点一致。 */}
+      {/* 标题走左上角，统一 NodeBodyHeader（和占位/镜头节点同款）。 */}
       <div className={cn('p-2.5 pointer-events-none')}>
-        <span className={cn('text-body-sm font-semibold text-nomi-ink-80 truncate')}>{node.title || '画板'}</span>
+        <NodeBodyHeader title={node.title || '画板'} />
       </div>
-      {/* 中间只留启动器（用户拍板）。 */}
-      <div className={cn('flex-1 min-h-0 flex flex-col items-center justify-center gap-2 pb-3')}>
+      {/* 中间只留启动器（用户拍板）；圆底图标统一 EmptyStateLauncher。 */}
+      <div className={cn('flex-1 min-h-0 flex flex-col items-center justify-center pb-3')}>
         <button
           type="button"
           className={cn(
-            'flex flex-col items-center gap-2 rounded-nomi px-3 py-2 bg-transparent border-0',
-            'cursor-pointer text-nomi-ink',
+            'rounded-nomi px-3 py-2 bg-transparent border-0 cursor-pointer',
             'transition-[background] duration-[var(--nomi-transition-fast)] hover:bg-nomi-ink-05',
             'focus-visible:outline-2 focus-visible:outline-nomi-accent focus-visible:outline-offset-2',
           )}
@@ -46,10 +46,7 @@ function WhiteboardCardBodyImpl({ node, readOnly = false }: { node: GenerationCa
           onClick={handleOpen}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <span className="grid size-12 place-items-center rounded-full bg-nomi-ink text-nomi-paper">
-            <IconBrush size={24} stroke={1.55} />
-          </span>
-          <span className="text-caption text-nomi-ink-60">点击打开画板</span>
+          <EmptyStateLauncher icon={<IconBrush size={24} stroke={1.55} />} hint="点击打开画板" />
         </button>
       </div>
       {open ? (
