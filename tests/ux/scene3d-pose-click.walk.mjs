@@ -83,10 +83,22 @@ try {
   if ((await firstMan.count()) > 0) { await firstMan.click(); await win.waitForTimeout(700) }
   const poseTab = win.getByRole('button', { name: '姿势', exact: true })
   if ((await poseTab.count()) > 0) { await poseTab.first().click(); await win.waitForTimeout(700) }
+  // 逐个套用本次校准过的地面姿势，各截一张人眼判断（坐/蹲/单膝跪）
+  for (const label of ['坐姿', '蹲下', '单膝跪']) {
+    const btn = win.getByRole('button', { name: label, exact: true })
+    if ((await btn.count()) > 0) {
+      await btn.first().click()
+      await win.waitForTimeout(1500)
+      await win.screenshot({ path: path.join(outDir, `walk-03-${label}-in-editor.png`) })
+      if (label === '坐姿') pass.sitRendered = true
+      log(`  ✓ 真编辑器套用「${label}」并渲染`)
+    } else {
+      log(`  ✗ 预设按钮「${label}」未找到`)
+    }
+  }
+  // 最后停在「坐姿」做后续截图/点击验证
   const sitBtn = win.getByRole('button', { name: '坐姿', exact: true })
-  if ((await sitBtn.count()) > 0) { await sitBtn.first().click(); await win.waitForTimeout(1500); pass.sitRendered = true }
-  await win.screenshot({ path: path.join(outDir, 'walk-03-sit-in-editor.png') })
-  log(`  ${pass.sitRendered ? '✓' : '✗'} 真编辑器里套用「坐姿」并渲染`)
+  if ((await sitBtn.count()) > 0) { await sitBtn.first().click(); await win.waitForTimeout(1200) }
 
   // 截图（生成缩略图 + 回写节点）
   const shot = win.getByRole('button', { name: '截图', exact: false }).first()
