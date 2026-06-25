@@ -234,7 +234,7 @@ function TimelineClip({ clip }: TimelineClipProps): JSX.Element {
 
   const clipBaseClasses = cn(
     'workbench-timeline-clip',
-    'absolute top-[5px] h-9 flex items-center gap-0 p-0',
+    'absolute top-[5px] bottom-[5px] flex items-center gap-0 p-0',
     'rounded text-[var(--workbench-ink)] text-micro font-medium',
     'shadow-[inset_0_1px_0_var(--workbench-bevel)] cursor-grab select-none active:cursor-grabbing',
     clip.type === 'image' && 'border border-[color-mix(in_srgb,var(--workbench-accent)_22%,transparent)] bg-[var(--workbench-accent-soft)]',

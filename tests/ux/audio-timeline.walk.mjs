@@ -88,8 +88,10 @@ try {
     if (!audio) return { ok: false, why: 'audio not in workspace files', kinds: flat.map((f) => f.kind) }
     const renderUrl = `nomi-local://asset/${encodeURIComponent(pid)}/${audio.relativePath.split('/').map(encodeURIComponent).join('/')}`
     const payload = JSON.stringify({ kind: 'audio', name: audio.name, renderUrl, origin: { source: 'project', projectId: pid, relativePath: audio.relativePath } })
+    // 方案 B：空音频轨收起成「叠加层」窄条 → 拖到它；有 clip 时拖到音频轨 lane。
     const trackClips = document.querySelector('[data-track-type="audio"] .workbench-timeline-track__clips')
-    if (!trackClips) return { ok: false, why: 'no audio track in DOM' }
+      || document.querySelector('[data-testid="timeline-secondary-add"]')
+    if (!trackClips) return { ok: false, why: 'no audio drop target in DOM' }
     const rect = trackClips.getBoundingClientRect()
     const dt = new DataTransfer()
     dt.setData('application/x-nomi-asset-ref', payload)
