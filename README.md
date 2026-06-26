@@ -11,20 +11,20 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ 下载最新版</strong></a>
+  <a href="https://nomiaqm.com"><strong>🌐 官网</strong></a>
   ·
-  <a href="https://nomiaqm.com">官网</a>
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ GitHub 下载</strong></a>
+  ·
+  <a href="https://pan.quark.cn/s/8743e79e91f6"><strong>📦 网盘下载</strong></a>
   ·
   <a href="docs/user-guide.md">使用指南</a>
   ·
   <a href="https://github.com/aqm857886159/Nomi/issues/new/choose">反馈</a>
-  ·
-  <a href="LICENSE">Apache-2.0</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/aqm857886159/Nomi/stargazers"><img src="https://img.shields.io/badge/GitHub-%E2%AD%90%20Star-2563eb?logo=github&logoColor=2563eb&labelColor=f1f5f9" alt="Star on GitHub" /></a>
-  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.14.2-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.14.3-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2563eb?labelColor=f1f5f9" alt="Platform" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?labelColor=f1f5f9" alt="License" /></a>
 </p>
@@ -40,6 +40,8 @@
 | 🪟 **Windows** | Win 10 / 11 | [Nomi-windows-setup.exe](https://github.com/aqm857886159/Nomi/releases/latest/download/Nomi-windows-setup.exe) |
 
 > 不知道自己哪种 Mac？左上角苹果图标 → 关于本机 → 看「芯片」。
+>
+> 🇨🇳 **打不开 GitHub / 下载慢？用夸克网盘**（当前 v0.14.3）：<https://pan.quark.cn/s/8743e79e91f6>　·　🌐 也可上[官网](https://nomiaqm.com)自动识别系统下载。
 
 <details>
 <summary><b>第一次打开提示「未知开发者 / 已损坏」？</b>（还没买签名证书，正常现象，点开看绕过方法）</summary>
