@@ -34,6 +34,8 @@ orchestration/
 # OS / editor
 .DS_Store
 *.log
+*.out
+*.err
 .vscode/
 
 # Temporary release and design work
@@ -53,3 +55,5 @@ tests/ux/_stagingshot/
 # 3D 预设动作校准台的本地输出（pose-lab）
 .pose-lab/
 .pose-lab-vite.log
+
+.tmp/

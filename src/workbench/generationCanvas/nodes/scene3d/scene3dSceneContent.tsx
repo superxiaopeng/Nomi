@@ -1,5 +1,5 @@
 import React from 'react'
-import { Grid, Sky } from '@react-three/drei'
+import { Grid } from '@react-three/drei'
 import { crowdCount, mannequinRoleLabel } from './scene3dMath'
 import {
   SCENE3D_GRID_FLAG,
@@ -8,6 +8,7 @@ import {
   DARK_GRID_CELL_COLOR,
   DARK_GRID_SECTION_COLOR,
 } from './scene3dConstants'
+import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
 import type {
   Scene3DState,
   Scene3DCamera,
@@ -29,7 +30,6 @@ import {
 } from './scene3dViewControllers'
 import { CameraStateRecorder } from './CameraStateRecorder'
 import { TrajectoryRenderer } from './trajectory'
-import { Scene3DLocalEnvironmentLights } from './scene3dEnvironment'
 
 export function SceneContent({
   state,
@@ -140,10 +140,7 @@ export function SceneContent({
 
   return (
     <>
-      <color attach="background" args={[state.environment.backgroundColor]} />
-      <ambientLight intensity={0.65} />
-      <Scene3DLocalEnvironmentLights darkMode={state.environment.darkMode} />
-      {state.environment.showSky ? <Sky sunPosition={[2, 1, 4]} /> : null}
+      <Scene3DEnvironmentLayer environment={state.environment} />
       {state.environment.showGrid && !cameraViewEditing ? (
         <group userData={{ [SCENE3D_GRID_FLAG]: true }}>
           <Grid

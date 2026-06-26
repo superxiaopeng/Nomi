@@ -27,7 +27,6 @@ import {
   type Scene3DSelection,
   type Scene3DState,
   type Scene3DTransformMode,
-  type Scene3DVector3,
 } from './scene3dTypes'
 import {
   OBJECT_LIMIT,
@@ -209,7 +208,7 @@ export default function Scene3DFullscreen({
   const focusSceneItem = React.useCallback((id: string) => {
     if (cameraViewEditId) return
     exitTrajectoryMode()
-    setViewLocked(true)
+    setViewLocked(false)
     setFocusId(`${id}:${Date.now()}`)
   }, [cameraViewEditId, exitTrajectoryMode])
 

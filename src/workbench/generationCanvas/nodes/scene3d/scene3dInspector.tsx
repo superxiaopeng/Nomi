@@ -13,7 +13,6 @@ import {
   IconUser,
 } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
-import { Switch } from '../../../../ui/switch'
 import {
   SCENE3D_ASPECT_OPTIONS,
   type Scene3DAspectRatio,
@@ -28,8 +27,6 @@ import {
   radiansToDegrees,
   degreesToRadians,
   CROWD_MAX_AXIS,
-  SCENE3D_LIGHT_BACKGROUND,
-  SCENE3D_DARK_BACKGROUND,
   MANNEQUIN_POSE_SECTIONS,
   MANNEQUIN_POSE_MIN_DEG,
   MANNEQUIN_POSE_MAX_DEG,
@@ -47,6 +44,7 @@ import {
   updateVectorValue,
   numberInputValue,
 } from './scene3dMath'
+import { Scene3DEnvironmentPanel } from './scene3dEnvironmentPanel'
 
 function VectorInputs({
   label,
@@ -632,53 +630,11 @@ export function PropertyPanel({
           </div>
         </div>
       ) : (
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-2 text-caption text-[var(--nomi-ink-60)]">
-            <label htmlFor="scene3d-dark-mode">场景暗色</label>
-            <Switch
-              id="scene3d-dark-mode"
-              checked={state.environment.darkMode}
-              disabled={readOnly}
-              onCheckedChange={(darkMode) => onEnvironmentPatch({
-                darkMode,
-                backgroundColor: darkMode ? SCENE3D_DARK_BACKGROUND : SCENE3D_LIGHT_BACKGROUND,
-              })}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-2 text-caption text-[var(--nomi-ink-60)]">
-            <label htmlFor="scene3d-show-grid">网格地面</label>
-            <Switch
-              id="scene3d-show-grid"
-              checked={state.environment.showGrid}
-              disabled={readOnly}
-              onCheckedChange={(checked) => onEnvironmentPatch({ showGrid: checked })}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-2 text-caption text-[var(--nomi-ink-60)]">
-            <label htmlFor="scene3d-show-axes">坐标轴</label>
-            <Switch
-              id="scene3d-show-axes"
-              checked={state.environment.showAxes}
-              disabled={readOnly}
-              onCheckedChange={(checked) => onEnvironmentPatch({ showAxes: checked })}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-2 text-caption text-[var(--nomi-ink-60)]">
-            <label htmlFor="scene3d-show-sky">天空背景</label>
-            <Switch
-              id="scene3d-show-sky"
-              checked={state.environment.showSky}
-              disabled={readOnly}
-              onCheckedChange={(checked) => onEnvironmentPatch({ showSky: checked })}
-            />
-          </div>
-          <ColorField
-            label="背景颜色"
-            value={state.environment.backgroundColor}
-            disabled={readOnly}
-            onChange={(backgroundColor) => onEnvironmentPatch({ backgroundColor })}
-          />
-        </div>
+        <Scene3DEnvironmentPanel
+          environment={state.environment}
+          readOnly={readOnly}
+          onEnvironmentPatch={onEnvironmentPatch}
+        />
       )}
     </section>
   )

@@ -137,7 +137,7 @@ export default defineConfig(async ({ command, mode }) => {
     customLogger: createNomiLogger(),
     plugins: [nomiStaticAssetPlugin(), react()],
     resolve: {
-      dedupe: ['react', 'react-dom', 'scheduler', 'use-sync-external-store'],
+      dedupe: ['react', 'react-dom', 'scheduler', 'use-sync-external-store', 'three'],
       alias: [
         {
           find: /^react$/,
@@ -160,6 +160,10 @@ export default defineConfig(async ({ command, mode }) => {
           replacement: resolve(__dirname, 'node_modules/react-dom/client.js'),
         },
         {
+          find: /^three$/,
+          replacement: resolve(__dirname, 'node_modules/three'),
+        },
+        {
           find: /^@tabler\/icons-react$/,
           replacement: resolve(__dirname, 'src/vendor/tablerIcons.ts'),
         },
@@ -175,7 +179,8 @@ export default defineConfig(async ({ command, mode }) => {
       },
     },
     optimizeDeps: {
-      entries: ['src/dev/optimizeDepsEntry.ts'],
+      entries: ['index.html', 'src/dev/optimizeDepsEntry.ts'],
+      force: command === 'serve',
       noDiscovery: true,
       holdUntilCrawlEnd: false,
       esbuildOptions: {
@@ -189,6 +194,7 @@ export default defineConfig(async ({ command, mode }) => {
         'react-dom',
         'react-dom/client',
         'react-router-dom',
+        '@radix-ui/react-switch',
         '@mantine/core',
         '@mantine/modals',
         '@mantine/notifications',

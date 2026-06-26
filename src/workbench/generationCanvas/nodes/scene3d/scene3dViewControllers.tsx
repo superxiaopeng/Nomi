@@ -18,7 +18,6 @@ import {
   eulerToArray,
   hasActiveMovementKey,
   isEditableKeyboardTarget,
-  levelEditorCameraRotation,
   isMovementCode,
   pointerCaptureTarget,
   vectorFromArray,
@@ -33,6 +32,35 @@ import {
   type Scene3DState,
   type Scene3DVector3,
 } from './scene3dTypes'
+
+const FOCUS_VIEW_DIRECTION = new THREE.Vector3(1, 0.62, 1).normalize()
+
+function objectFocusTarget(object: Scene3DObject): THREE.Vector3 {
+  const target = vectorFromArray(object.position)
+  if (object.type === 'light') return target
+  target.y += objectVisualHalfHeight(object) * 0.32
+  return target
+}
+
+function objectFocusDistance(object: Scene3DObject): number {
+  const footprint = objectGroundFootprint(object)
+  const halfHeight = objectVisualHalfHeight(object)
+  const radius = Math.max(footprint.width, footprint.depth, halfHeight * 2)
+  return THREE.MathUtils.clamp(radius * 2.25 + 1.2, 3.2, 18)
+}
+
+function cameraFocusTarget(cameraData: Scene3DCamera): THREE.Vector3 {
+  const position = vectorFromArray(cameraData.position)
+  const target = vectorFromArray(cameraData.target || CAMERA_DEFAULT_TARGET)
+  if (position.distanceToSquared(target) < 0.0001) return position
+  return position.lerp(target, 0.45)
+}
+
+function cameraFocusDistance(cameraData: Scene3DCamera): number {
+  const aimDistance = vectorFromArray(cameraData.position)
+    .distanceTo(vectorFromArray(cameraData.target || CAMERA_DEFAULT_TARGET))
+  return THREE.MathUtils.clamp(aimDistance * 0.9 + 1.6, 3.2, 16)
+}
 
 export function Scene3DControls({
   freeLook,
@@ -191,7 +219,7 @@ export function Scene3DControls({
       window.removeEventListener('pointercancel', stopDrag)
       element.style.cursor = ''
     }
-  }, [camera, gl, navigationLockedRef, onWheelNavigation])
+  }, [camera, gl, invalidate, navigationLockedRef, onWheelNavigation])
 
   React.useEffect(() => {
     const clearKeys = () => {
@@ -347,52 +375,27 @@ export function FocusController({
     const sceneCamera = cameras.find((candidate) => candidate.id === targetId)
     if (!object && !sceneCamera) return
     lastFocusRef.current = focusId
-    const target = object ? focusTargetForObject(object) : vectorFromArray(sceneCamera!.position)
-    const position = focusCameraPosition(camera, controls, target, object)
-    const editorCamera = {
-      position: vectorToArray(position),
-      target: vectorToArray(target),
-      rotation: levelEditorCameraRotation(vectorToArray(position), vectorToArray(target)),
-      mode: 'edit',
-    } satisfies Scene3DState['editorCamera']
-    applyEditorCameraPose(camera, editorCamera)
+    const target = object ? objectFocusTarget(object) : cameraFocusTarget(sceneCamera!)
+    const distance = object ? objectFocusDistance(object) : cameraFocusDistance(sceneCamera!)
+    const nextPosition = vectorToArray(target.clone().addScaledVector(FOCUS_VIEW_DIRECTION, distance))
+    const nextTarget = vectorToArray(target)
+    applyEditorCameraPose(camera, {
+      position: nextPosition,
+      target: nextTarget,
+    })
     syncOrbitControlsTarget(controls, target)
-    onCameraChange(editorCamera)
+    onCameraChange({
+      position: nextPosition,
+      target: nextTarget,
+      rotation: eulerToArray(camera.rotation),
+      mode: 'fly',
+    })
     onFocusConsumed()
     // demand 下聚焦移动相机走 effect（不走 useFrame），需请求重绘。
     invalidate()
   }, [camera, cameras, controls, focusId, invalidate, objects, onCameraChange, onFocusConsumed])
 
   return null
-}
-
-function focusTargetForObject(object: Scene3DObject): THREE.Vector3 {
-  return vectorFromArray(object.position)
-}
-
-function focusCameraPosition(
-  camera: THREE.Camera,
-  controls: unknown,
-  target: THREE.Vector3,
-  object?: Scene3DObject,
-): THREE.Vector3 {
-  const currentTarget = orbitControlsTarget(controls) ?? target
-  const direction = camera.position.clone().sub(currentTarget)
-  if (direction.lengthSq() < 0.0001) {
-    direction.set(1, 0.62, 1)
-  }
-  direction.normalize()
-  return target.clone().addScaledVector(direction, focusDistance(camera, object))
-}
-
-function focusDistance(camera: THREE.Camera, object?: Scene3DObject): number {
-  if (!object) return 4.5
-  const footprint = objectGroundFootprint(object)
-  const diameter = Math.max(footprint.width, footprint.depth, objectVisualHalfHeight(object) * 2, 0.8)
-  const radius = diameter / 2
-  const fov = camera instanceof THREE.PerspectiveCamera ? THREE.MathUtils.degToRad(camera.fov) : THREE.MathUtils.degToRad(55)
-  const fitDistance = radius / Math.tan(Math.max(0.2, fov / 2))
-  return THREE.MathUtils.clamp(fitDistance * 1.7, 3.5, 28)
 }
 
 function orbitControlsTarget(controls: unknown): THREE.Vector3 | null {
