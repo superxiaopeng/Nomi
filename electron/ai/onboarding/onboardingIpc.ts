@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import type { AiSdkProviderKind } from "../../catalog/types";
 import { describeNetworkError } from "../../systemProxy";
+import { describeIllegalHeader, findIllegalHeader, findNonHeaderSafeChar } from "../../jsonUtils";
 import { guessModelKind } from "../../catalog/modelKindHeuristic";
 import {
   commitManualOpenAiCompatibleModels,
@@ -133,6 +134,13 @@ export function registerOnboardingIpc(): void {
         if (key && value) extraHeaders[key] = value;
       }
     }
+    // 发送前请求头守卫（与 vendorHttp.requestJson 同一判据/措辞）：这条 handler 自带裸 fetch，
+    // 不经发送闸——脏 key（含中文/全角）会让 fetch 同步抛原始 ByteString，被 describeNetworkError
+    // 误判网络。先识别、说人话、根本不发 fetch（治本，避免「连不上：Cannot convert…」）。
+    const keyProblem = apiKey ? findNonHeaderSafeChar(apiKey) : null;
+    if (keyProblem) return { ok: false, error: describeIllegalHeader({ name: "API Key", ...keyProblem }).message };
+    const headerProblem = findIllegalHeader(extraHeaders);
+    if (headerProblem) return { ok: false, error: describeIllegalHeader(headerProblem).message };
     // 候选协议：强制 → 只它；自动 → chat+responses（+anthropic 当 hostname 像 anthropic 或地址留空）。
     let candidates: AiSdkProviderKind[];
     if (forcedKind) {
@@ -198,6 +206,9 @@ export function registerOnboardingIpc(): void {
       providerKind === "anthropic"
         ? { "anthropic-version": "2023-06-01", ...(apiKey ? { "x-api-key": apiKey } : {}), ...extraHeaders }
         : { ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}), ...extraHeaders };
+    // 发送前请求头守卫（同 test-connection）：自带裸 fetch 绕过发送闸，脏 key 先拦+说人话，不发 fetch。
+    const headerProblem = findIllegalHeader(headers);
+    if (headerProblem) return { ok: false, error: describeIllegalHeader(headerProblem).message };
     // 候选 URL：openai-compatible baseUrl 通常已含 /v1 → /models；但很多 new-api 后台给的是
     // **裸地址**（不带 /v1）——那样 /models 会 404。鲁棒兜底：依次试 /models 与 /v1/models，
     // 命中即返回（用户填不填 /v1 都能拉到，Issue #8「开箱即用」）。

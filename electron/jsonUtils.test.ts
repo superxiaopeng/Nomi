@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findNonHeaderSafeChar, firstString, isJsonRecord, nowIso, readNestedRecord, trim } from "./jsonUtils";
+import { describeIllegalHeader, findIllegalHeader, findNonHeaderSafeChar, firstString, isJsonRecord, nowIso, readNestedRecord, trim } from "./jsonUtils";
 
 describe("trim", () => {
   it("trims strings and returns '' for non-strings", () => {
@@ -74,5 +74,36 @@ describe("findNonHeaderSafeChar", () => {
   it("Latin1 扩展区(0x80-0xFF)与制表符不算非法（fetch 可接受）", () => {
     expect(findNonHeaderSafeChar("aÿb")).toBeNull();
     expect(findNonHeaderSafeChar("a\tb")).toBeNull();
+  });
+});
+
+describe("findIllegalHeader", () => {
+  it("全安全 → null", () => {
+    expect(findIllegalHeader({ authorization: "Bearer sk-abc123", "content-type": "application/json" })).toBeNull();
+  });
+  it("头值含中文 → 命中该头名+位置/码点", () => {
+    expect(findIllegalHeader({ Authorization: "Bearer 衣abc" })).toEqual({ name: "Authorization", index: 7, code: 34915, char: "衣" });
+  });
+  it("头名含非法字符也命中（头注入防线）", () => {
+    expect(findIllegalHeader({ "X-标题": "v" })).toMatchObject({ name: "X-标题", char: "标" });
+  });
+});
+
+describe("describeIllegalHeader", () => {
+  it("鉴权头 → isAuth + 指向重新粘贴密钥（与发送闸同措辞前缀）", () => {
+    const out = describeIllegalHeader({ name: "Authorization", index: 7, code: 34915, char: "衣" });
+    expect(out.isAuth).toBe(true);
+    expect(out.message).toContain("API 密钥含非法字符");
+    expect(out.message).toContain("第 8 位");
+    expect(out.message).toContain("请重新粘贴密钥");
+  });
+  it("「API Key」名（带空格）也识别为鉴权类", () => {
+    expect(describeIllegalHeader({ name: "API Key", index: 0, code: 34915, char: "衣" }).isAuth).toBe(true);
+  });
+  it("非鉴权头 → 非 auth，标头名+位置不归咎密钥", () => {
+    const out = describeIllegalHeader({ name: "X-Note", index: 0, code: 26631, char: "标" });
+    expect(out.isAuth).toBe(false);
+    expect(out.message).toContain("请求头 X-Note");
+    expect(out.message).not.toContain("密钥");
   });
 });
