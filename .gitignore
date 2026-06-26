@@ -57,3 +57,6 @@ tests/ux/_stagingshot/
 .pose-lab-vite.log
 
 .tmp/
+
+# 下载量可视化看板：派生产物（pnpm stats:html 按需生成），数据每次都变故不提交
+docs/stats/dashboard.html

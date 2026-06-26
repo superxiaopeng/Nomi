@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HISTORY_PATH = path.join(ROOT, "docs", "stats", "downloads-history.json");
+const HTML_PATH = path.join(ROOT, "docs", "stats", "dashboard.html");
 
 /** 从 GITHUB_REPOSITORY（Action 注入）或 git remote 推断 owner/repo。 */
 function resolveRepo() {
@@ -130,8 +131,70 @@ function printDashboard(agg, sinceLast) {
   console.log("");
 }
 
+/** 生成自包含可视化看板（数据 baked in,单一真相源=本脚本聚合器,HTML 只是纯视图）。 */
+function generateHtml(agg, history) {
+  const versions = Object.entries(agg.byVersion)
+    .filter(([, v]) => v.published)
+    .sort((a, b) => new Date(a[1].published) - new Date(b[1].published))
+    .slice(-14)
+    .map(([tag, v]) => ({ tag, dl: v.dl }));
+  const trend = history.snapshots.map((s) => ({ date: s.date, total: s.total }));
+  const data = {
+    generatedAt: todayISO(),
+    total: agg.total,
+    byPlatform: agg.byPlatform,
+    versions,
+    trend,
+  };
+
+  const head =
+    '<!doctype html><html lang="zh"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    "<title>Nomi 下载看板</title>" +
+    '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></scr' + "ipt>" +
+    "<style>" +
+    ":root{--bg:#faf9f5;--card:#fff;--ink:#1f1e1b;--muted:#6b6a64;--line:#e7e5dd;--accent:#534ab7;--win:#534ab7;--marm:#1d9e75;--mintel:#d85a30}" +
+    "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;padding:32px 20px}" +
+    ".wrap{max-width:880px;margin:0 auto}h1{font-size:22px;font-weight:600;margin:0 0 4px}.sub{color:var(--muted);font-size:13px;margin:0 0 24px}" +
+    ".cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:28px}" +
+    ".card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}.card .lbl{font-size:13px;color:var(--muted);margin-bottom:6px}.card .num{font-size:26px;font-weight:600}.card .num span{font-size:14px;color:var(--muted);font-weight:400}" +
+    ".panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:20px}.panel h2{font-size:14px;font-weight:600;margin:0 0 14px;color:var(--muted)}" +
+    ".row{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}@media(max-width:680px){.row{grid-template-columns:1fr}}" +
+    ".note{color:var(--muted);font-size:12px;margin-top:18px;line-height:1.7}.cv{position:relative;height:260px}" +
+    "</style></head><body><div class=\"wrap\">";
+
+  const body =
+    "<h1>Nomi 下载看板</h1>" +
+    '<p class="sub">真人安装包下载（剔除自动更新噪音）· 数据生成于 ' + data.generatedAt + "</p>" +
+    '<div class="cards">' +
+    '<div class="card"><div class="lbl">下载总计</div><div class="num">' + agg.total + "</div></div>" +
+    '<div class="card"><div class="lbl">Windows</div><div class="num">' + agg.byPlatform.windows + " <span>" + pct(agg.byPlatform.windows, agg.total) + "</span></div></div>" +
+    '<div class="card"><div class="lbl">Mac Apple 芯</div><div class="num">' + agg.byPlatform.macArm + " <span>" + pct(agg.byPlatform.macArm, agg.total) + "</span></div></div>" +
+    '<div class="card"><div class="lbl">Mac Intel</div><div class="num">' + agg.byPlatform.macIntel + " <span>" + pct(agg.byPlatform.macIntel, agg.total) + "</span></div></div>" +
+    "</div>" +
+    '<div class="panel"><h2>累计下载趋势（随每日快照累积）</h2><div class="cv"><canvas id="trend"></canvas></div></div>' +
+    '<div class="row">' +
+    '<div class="panel"><h2>各版本下载量</h2><div class="cv"><canvas id="ver"></canvas></div></div>' +
+    '<div class="panel"><h2>平台分布</h2><div class="cv"><canvas id="plat"></canvas></div></div>' +
+    "</div>" +
+    '<p class="note">口径：只数 .dmg / .exe 真人下载，剔除 .blockmap / latest*.yml / .zip（electron 自动更新机制拉取，非真人）。' +
+    "诚实边界：下载 ≠ 安装 ≠ 活跃用户（重复点 / 爬虫都会计数）。趋势曲线由每日 GitHub Action 快照累积，刚启用时只有一两个点，会逐日生长。" +
+    "刷新数据：<code>pnpm stats:html</code>。</p>";
+
+  const script =
+    "<scr" + "ipt>const DATA=" + JSON.stringify(data) + ";" +
+    "const winC='#534ab7',marmC='#1d9e75',mintelC='#d85a30';" +
+    "new Chart(document.getElementById('trend'),{type:'line',data:{labels:DATA.trend.map(p=>p.date),datasets:[{label:'累计下载',data:DATA.trend.map(p=>p.total),borderColor:winC,backgroundColor:'rgba(83,74,183,.08)',fill:true,tension:.25,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});" +
+    "new Chart(document.getElementById('ver'),{type:'bar',data:{labels:DATA.versions.map(v=>v.tag),datasets:[{data:DATA.versions.map(v=>v.dl),backgroundColor:winC,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:60,minRotation:60,font:{size:10}},grid:{display:false}},y:{beginAtZero:true}}}});" +
+    "new Chart(document.getElementById('plat'),{type:'doughnut',data:{labels:['Windows','Mac Apple 芯','Mac Intel'],datasets:[{data:[DATA.byPlatform.windows,DATA.byPlatform.macArm,DATA.byPlatform.macIntel],backgroundColor:[winC,marmC,mintelC],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:12}}}}}});" +
+    "</scr" + "ipt>";
+
+  return head + body + script + "</div></body></html>\n";
+}
+
 async function main() {
   const snapshot = process.argv.includes("--snapshot");
+  const html = process.argv.includes("--html");
   const repo = resolveRepo();
   const releases = await fetchReleases(repo);
   const agg = aggregate(releases);
@@ -146,6 +209,13 @@ async function main() {
     const last = prior[prior.length - 1];
     if (last) sinceLast = agg.total - last.total;
   }
+
+  if (html) {
+    fs.mkdirSync(path.dirname(HTML_PATH), { recursive: true });
+    fs.writeFileSync(HTML_PATH, generateHtml(agg, readHistory()));
+    console.log(`  已生成可视化看板 → ${path.relative(ROOT, HTML_PATH)}（浏览器打开）`);
+  }
+
   printDashboard(agg, sinceLast);
 }
 
