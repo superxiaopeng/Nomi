@@ -46,4 +46,30 @@ describe("requestJson 结构化错误(S4-0,修压扁根因)", () => {
     stubFetch(() => new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
     await expect(requestJson(vendor, "k", "GET", "https://x", {}, {}, null)).resolves.toEqual({ ok: 1 });
   });
+
+  it("请求头含非法字符(密钥混中文)→ 发送前拦截为 auth 不可重试,根本不发 fetch(治 ByteString 误判网络)", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const error = await requestJson(
+      vendor,
+      "k",
+      "POST",
+      "https://api.kie.ai/api/v1/jobs/createTask",
+      { Authorization: "Bearer 衣abc", "Content-Type": "application/json" },
+      {},
+      { a: 1 },
+    ).catch((e) => e);
+    expect(error).toBeInstanceOf(VendorRequestError);
+    expect(error.structured).toMatchObject({ category: "auth", retryable: false });
+    expect(error.structured.upstreamMsg).toContain("API 密钥含非法字符");
+    expect(fetchSpy).not.toHaveBeenCalled(); // 不再让 fetch 抛 ByteString → 不会被误判成网络超时
+  });
+
+  it("非鉴权头含非法字符 → input 类(不归咎密钥)", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const error = await requestJson(vendor, "k", "POST", "https://x", { "X-Note": "标题" }, {}, { a: 1 }).catch((e) => e);
+    expect(error.structured).toMatchObject({ category: "input", retryable: false });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

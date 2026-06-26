@@ -8,8 +8,19 @@ import {
   authQueryParams as buildAuthQueryParams,
   looksLikeLogicalError,
 } from "../ai/requestPipeline";
-import { firstString, isJsonRecord, readNestedRecord } from "../jsonUtils";
+import { findNonHeaderSafeChar, firstString, isJsonRecord, readNestedRecord } from "../jsonUtils";
 import type { Vendor } from "../catalog/types";
+
+/** 扫描请求头名与值，返回第一个含非 HTTP-safe 字符的头（含哪个字符/位置），null = 全安全。 */
+function findIllegalHeader(headers: Record<string, string>): { name: string; index: number; code: number; char: string } | null {
+  for (const [name, value] of Object.entries(headers)) {
+    const inName = findNonHeaderSafeChar(name);
+    if (inName) return { name, ...inName };
+    const inValue = findNonHeaderSafeChar(String(value ?? ""));
+    if (inValue) return { name, ...inValue };
+  }
+  return null;
+}
 
 export type VendorErrorCategory = "auth" | "balance" | "quota" | "input" | "server" | "network" | "unknown";
 
@@ -90,6 +101,25 @@ export async function requestJson(
   const finalUrl = appendQueryParams(url, { ...authQueryParams(vendor, apiKey), ...query });
   const upperMethod = method.toUpperCase();
   const hasBody = upperMethod !== "GET" && upperMethod !== "HEAD" && body != null;
+  // 发送前请求头守卫：fetch 遇到码点 > 255 的头值会同步抛 ByteString 错，被下面 catch
+  // 误判成「网络超时」让用户白查网络（最常见来源=密钥混进中文/全角字符）。在这里先识别，
+  // 抛 auth 类（不可重试）+ 说人话的 upstreamMsg，让错误卡指向「重新粘贴密钥」而非网络。
+  const headerProblem = findIllegalHeader(headers);
+  if (headerProblem) {
+    const isAuth = /authorization|api[-_]?key|token|secret/i.test(headerProblem.name);
+    const where = `请求头 ${headerProblem.name} 第 ${headerProblem.index + 1} 位「${headerProblem.char}」，码点 ${headerProblem.code}`;
+    const upstreamMsg = isAuth
+      ? `API 密钥含非法字符（${where}）。密钥应为纯英文/数字，常见原因是误粘了中文或全角字符——请到「模型接入」重新粘贴密钥。`
+      : `${where}：含非法字符，无法作为 HTTP 头发送。`;
+    throw new VendorRequestError(`Provider request rejected (invalid header) at ${vendor.key} ${upperMethod} ${url}: ${upstreamMsg}`, {
+      vendorKey: vendor.key,
+      method: upperMethod,
+      url,
+      upstreamMsg,
+      category: isAuth ? "auth" : "input",
+      retryable: false,
+    });
+  }
   const timeoutMs = vendorHttpTimeoutMs();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
