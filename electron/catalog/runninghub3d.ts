@@ -20,7 +20,8 @@ export const RUNNINGHUB_VENDOR_SEED = {
 } as const;
 
 // 状态动词 → 我们三态。RunningHub 返大写；matcher 大小写不确定 → 大小写都列（防 casing，不脑补一种）。
-const RUNNINGHUB_STATUS_MAPPING: Record<string, string[]> = {
+// 导出供 runninghubVideos 等同 vendor 文件复用（P1：轮询/状态映射单源，不每个文件重声明）。
+export const RUNNINGHUB_STATUS_MAPPING: Record<string, string[]> = {
   queued: ["QUEUED", "CREATE", "PENDING", "queued", "create", "pending"],
   running: ["RUNNING", "running"],
   succeeded: ["SUCCESS", "success"],
@@ -30,7 +31,7 @@ const RUNNINGHUB_STATUS_MAPPING: Record<string, string[]> = {
 // 轮询 op（所有 3D 模型共用）。任务响应是扁平 {taskId,status,results:[{fileUrl}]}（实查官方示例），但标准
 // 模型 API 别处（resource/list）用 {code,data} 信封 → 任务端点是否套信封文档/实测略有出入。故每个 key 给
 // flat + data.* 两条候选（mappingCandidates 支持数组、先命中者胜），真验收(待 key)首跑收敛到一条。
-const RUNNINGHUB_QUERY_OP: HttpOperation = {
+export const RUNNINGHUB_QUERY_OP: HttpOperation = {
   method: "POST",
   path: "/query",
   headers: { Authorization: "Bearer {{user_api_key}}", "Content-Type": "application/json" },
@@ -43,7 +44,8 @@ const RUNNINGHUB_QUERY_OP: HttpOperation = {
   },
 };
 
-const HDR = { Authorization: "Bearer {{user_api_key}}", "Content-Type": "application/json" };
+export const RUNNINGHUB_HDR = { Authorization: "Bearer {{user_api_key}}", "Content-Type": "application/json" };
+const HDR = RUNNINGHUB_HDR;
 
 // ── 混元3D v3.1（文生 + 图生）──
 const HUNYUAN3D_T2_CREATE: HttpOperation = {
