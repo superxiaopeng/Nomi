@@ -14,4 +14,8 @@ export type WorkbenchAiMessage = {
   status?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled'
   /** 用户消息携带的附件（仅展示用；已上传为 nomi-local）。 */
   attachments?: ComposerAttachment[]
+  /** 跨面板动作卡：assistant 消息携带可一键触发的动作（拆镜头/立角色卡）。
+   *  识别到意图后不再静默开跑，而是推这张卡让用户看见并点击才落画布。
+   *  prompt = 原始用户输入（按钮点击时传给 launch，供编辑器为空时抠故事）。 */
+  action?: { kind: 'storyboard' | 'fixation'; prompt: string }
 }

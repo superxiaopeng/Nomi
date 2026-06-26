@@ -20,8 +20,30 @@ describe('routeCreationIntent（删 chip 后自然语言是唯一入口，覆盖
     }
   })
 
-  it('不误伤：含「视频/片」但非拆镜头意图 → null', () => {
-    for (const text of ['这个视频模型怎么样', '看张照片', '下一步呢', '帮我配个视频字幕的文案']) {
+  it('放宽口径：旧正则漏的「动词+画面/段落」人话也要接住（治脆，6-26）', () => {
+    for (const text of [
+      '把这个故事整成一段段画面',
+      '铺成画面接画面',
+      '切成几个镜头',
+      '排成分镜',
+      '把剧情整理成一幕幕',
+      '帮我把它拆成画面',
+    ]) {
+      expect(routeCreationIntent(text)).toBe('storyboard')
+    }
+  })
+
+  it('不误伤：含「视频/片/画面」但非拆镜头意图 → null', () => {
+    for (const text of [
+      '这个视频模型怎么样',
+      '看张照片',
+      '下一步呢',
+      '帮我配个视频字幕的文案',
+      '今天天气怎么样',
+      '看个视频',
+      '给他打个视频通话',
+      '这个画面描写得不错',
+    ]) {
       expect(routeCreationIntent(text)).toBeNull()
     }
   })

@@ -8,12 +8,22 @@
 
 export type CreationIntent = 'storyboard' | 'fixation' | null
 
-// 覆盖「只要镜头图」与「要完整轨迹/视频」两类说法；命中即把正文甩给画布 agent。
-// 视频类要求「动词 + 视频/短片/片子」（做/弄/变/剪/拍/生成），既接住「做个视频/弄成短片/
-// 变成片子/剪成视频」等人话，又不碰裸「片」防「照片」误命中；「下一步」这类太模糊的故意不接。
-const STORYBOARD_REQUEST_PATTERN =
-  /拆镜头|分镜|拆分|拆成.{0,4}镜头|切.{0,2}镜头|镜头脚本|成片|出片|(?:做|弄|变|剪|拍|生成).{0,3}(?:视频|短片|片子)/
+// 高召回的拆镜头口径（治脆）：识别到意图后只是弹「动作卡」让用户确认、不静默开跑，
+// 所以可以放心放宽——残余漏判由用户换句话兜底，误判只是多一张可忽略的卡，代价低。
+// 两路命中：
+//  ① 明确名词/动宾：拆镜头/分镜/镜头脚本/storyboard/成片/出片；
+//  ② 产生式「动词 + 宾语」：把各种人话（拆/切/变/做/整/铺/排/拍/剪/生成…
+//     + 镜头/画面/分镜/视频/短片/片子/一段段/一幕…）一网打尽，
+//     接住「整成一段段画面」「铺成画面接画面」「排成分镜」这类旧口径必漏的说法。
+// 防误伤：动词表不含「看/通/开」，不裸匹配「片」——「照片/看视频/视频通话」不触发。
+const STORYBOARD_NOUN_PATTERN = /拆镜头|分镜|拆分|镜头脚本|storyboard|成片|出片/i
+const STORYBOARD_VERB_OBJECT_PATTERN =
+  /(?:拆|切|分|变|做|整|铺|排|拍|剪|生成|搞|弄).{0,6}(?:镜头|分镜|画面|视频|短片|片子|一段段|一格格|一幕幕|一幕)/
 const FIXATION_REQUEST_PATTERN = /立角色卡|角色卡|人物卡|定妆|角色设定|建.{0,2}角色/
+
+function isStoryboardRequest(text: string): boolean {
+  return STORYBOARD_NOUN_PATTERN.test(text) || STORYBOARD_VERB_OBJECT_PATTERN.test(text)
+}
 
 /**
  * 把用户输入归类到跨面板动作。storyboard 优先（「分镜」「拆」类词更高频明确）；
@@ -22,7 +32,7 @@ const FIXATION_REQUEST_PATTERN = /立角色卡|角色卡|人物卡|定妆|角色
 export function routeCreationIntent(text: string): CreationIntent {
   const trimmed = text.trim()
   if (!trimmed) return null
-  if (STORYBOARD_REQUEST_PATTERN.test(trimmed)) return 'storyboard'
+  if (isStoryboardRequest(trimmed)) return 'storyboard'
   if (FIXATION_REQUEST_PATTERN.test(trimmed)) return 'fixation'
   return null
 }
@@ -39,6 +49,9 @@ export function extractStoryFromRequest(text: string): string {
   if (!trimmed) return ''
   const afterColon = trimmed.split(/[:：]/).slice(1).join('：').trim()
   if (afterColon.length >= 12) return afterColon
-  const withoutCommand = trimmed.replace(STORYBOARD_REQUEST_PATTERN, '').replace(/[\s,，。、!！?？]+/g, '')
+  const withoutCommand = trimmed
+    .replace(STORYBOARD_NOUN_PATTERN, '')
+    .replace(STORYBOARD_VERB_OBJECT_PATTERN, '')
+    .replace(/[\s,，。、!！?？]+/g, '')
   return withoutCommand.length >= 12 ? trimmed : ''
 }

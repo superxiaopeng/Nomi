@@ -133,6 +133,7 @@ export { default as IconTransform } from '@tabler/icons-react/dist/esm/icons/Ico
 export { default as IconTrash } from '@tabler/icons-react/dist/esm/icons/IconTrash.mjs'
 export { default as IconUpload } from '@tabler/icons-react/dist/esm/icons/IconUpload.mjs'
 export { default as IconUser } from '@tabler/icons-react/dist/esm/icons/IconUser.mjs'
+export { default as IconUserPlus } from '@tabler/icons-react/dist/esm/icons/IconUserPlus.mjs'
 export { default as IconVideo } from '@tabler/icons-react/dist/esm/icons/IconVideo.mjs'
 export { default as IconVolume } from '@tabler/icons-react/dist/esm/icons/IconVolume.mjs'
 export { default as IconVolumeOff } from '@tabler/icons-react/dist/esm/icons/IconVolumeOff.mjs'

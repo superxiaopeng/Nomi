@@ -12,6 +12,7 @@ import { AssistantErrorCard } from '../ai/AssistantErrorCard'
 import { useHasTextModel } from '../library/useHasTextModel'
 import AssistantModelPicker from '../ai/AssistantModelPicker'
 import StoryboardPlanCard from './storyboard/StoryboardPlanCard'
+import StoryboardActionCard from './storyboard/StoryboardActionCard'
 import { handleAiComposerKeyDown } from '../ai/aiComposerKeyboard'
 import { extractStoryFromRequest, routeCreationIntent } from './creationIntentRouting'
 import type { WorkbenchAiMessage } from '../ai/workbenchAiTypes'
@@ -99,6 +100,8 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
   // 让它能展示自己的「大脑已就位」done 态，而不是露出旧报错文本。
   const { hasTextModel, refresh: refreshTextModel } = useHasTextModel()
   const [recoveryShownIds, setRecoveryShownIds] = React.useState<ReadonlySet<string>>(() => new Set())
+  // resolvedActionIds：某张动作卡已被点过开跑 → 按钮置灰防重复触发（仿 recoveryShownIds 黏住态）。
+  const [resolvedActionIds, setResolvedActionIds] = React.useState<ReadonlySet<string>>(() => new Set())
   const attachments = useWorkbenchStore((state) => state.creationAiAttachments)
   const error = useWorkbenchStore((state) => state.creationAiError)
   const setModeId = useWorkbenchStore((state) => state.setCreationAiModeId)
@@ -265,12 +268,19 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
     // 否则含「分镜/镜头」的输入会盖过用户明确选的模式/技能（这正是双路互劫的根因）。
     const skipIntentRouting = skillSelRef.current.activeSkill || skillSelRef.current.activeMode.id === 'storyboard'
     const intent = skipIntentRouting ? null : routeCreationIntent(userRequest)
-    if (intent === 'storyboard') {
-      launchStoryboardPlanning(userRequest || '🎬 拆镜头')
-      return
-    }
-    if (intent === 'fixation') {
-      launchFixationPlanning(userRequest || '🎭 立角色卡')
+    if (intent) {
+      // 识别到跨面板意图 → 不再静默直接开跑，推一张可见的动作卡（治隐形）：
+      // 用户看见「看起来你想拆镜头 → [按钮]」，点按钮才真正落画布。口径放宽后这里召回更高，
+      // 误判只是多一张可忽略的卡、不会误触动作（点了才跑），所以放心放宽（治脆）。
+      const userId = turn.getState().nextMessageId('user')
+      const actionId = turn.getState().nextMessageId('assistant')
+      setMessages((prev) => [
+        ...prev,
+        { id: userId, role: 'user', content: userRequest || (intent === 'storyboard' ? '🎬 拆镜头' : '🎭 立角色卡') },
+        { id: actionId, role: 'assistant', content: '', status: 'done' as const, action: { kind: intent, prompt: userRequest } },
+      ])
+      setDraft('')
+      setError('')
       return
     }
     const prompt = buildCreationAiPrompt({ mode: activeMode, userRequest })
@@ -559,6 +569,18 @@ export default function CreationAiPanel({ onCollapse }: { onCollapse?: () => voi
             <React.Fragment key={message.id}>
               {message.role === 'user' ? (
                 <UserMessageBubble content={message.content} attachments={message.attachments} />
+              ) : message.action ? (
+                <StoryboardActionCard
+                  kind={message.action.kind}
+                  resolved={resolvedActionIds.has(message.id)}
+                  onRun={() => {
+                    if (resolvedActionIds.has(message.id)) return
+                    setResolvedActionIds((prev) => new Set(prev).add(message.id))
+                    const prompt = message.action!.prompt
+                    if (message.action!.kind === 'storyboard') launchStoryboardPlanning(prompt || '🎬 拆镜头')
+                    else launchFixationPlanning(prompt || '🎭 立角色卡')
+                  }}
+                />
               ) : message.status === 'error' && (hasTextModel === false || recoveryShownIds.has(message.id)) ? (
                 <NoTextModelRecoveryCard
                   onResolved={() => {
