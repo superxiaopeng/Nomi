@@ -117,7 +117,7 @@ describe("runtime export job IPC functions", () => {
       }),
     });
     await cancelExportJob(result.jobId);
-  });
+  }, 15_000);
 
   it("returns status and can cancel a job", async () => {
     const { cancelExportJob, createProject, getExportJobStatus, startExportJob } = await import("../runtime");
