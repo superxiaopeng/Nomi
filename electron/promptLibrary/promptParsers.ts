@@ -81,6 +81,22 @@ export function parseYouMind(markdown: string): ParsedPrompt[] {
   return out;
 }
 
+/** YouMind-OpenLab/awesome-seedance-2-prompts —— `### 标题` + `#### 📝 Prompt` 代码块 + 缩略图(twimg)。
+ *  视频源,但媒体是缩略图 jpg(mp4 在 releases、id 口径与 ?id= 不一致难映射)→ 取缩略图当图片预览(降级)。
+ *  无 `#### 📝 Prompt` 代码块 = 目录/介绍等非提示词标题,跳过(容错铁律)。 */
+export function parseSeedance2(markdown: string): ParsedPrompt[] {
+  const out: ParsedPrompt[] = [];
+  for (const block of splitBlocks(markdown, "^### .+")) {
+    const head = block.match(/^### (.+)/);
+    if (!head) continue;
+    const prompt = first(block, /####[^\n]*Prompt[^\n]*\n+```[a-zA-Z]*\n([\s\S]*?)\n```/);
+    const mediaUrl = first(block, /<img[^>]+src="(https:\/\/[^"]+)"/);
+    if (!prompt || !mediaUrl) continue;
+    out.push({ title: stripInline(head[1]), prompt: clean(prompt), mediaUrl, mediaType: "image" });
+  }
+  return out;
+}
+
 /** zhangchenchen/awesome_sora2_prompt —— `### 标题` + `**Prompt:**` 代码块 + twitter mp4(可能缺)。 */
 export function parseSora2(markdown: string): ParsedPrompt[] {
   const out: ParsedPrompt[] = [];

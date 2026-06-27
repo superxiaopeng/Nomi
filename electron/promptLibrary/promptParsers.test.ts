@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEvoLinkAI, parseImgEdify, parseYouMind, parseSora2, parseSoraOfficial, splitBlocks } from "./promptParsers";
+import { parseEvoLinkAI, parseImgEdify, parseYouMind, parseSeedance2, parseSora2, parseSoraOfficial, splitBlocks } from "./promptParsers";
 
 describe("splitBlocks", () => {
   it("按行首标题切块,每块含到下一标题前", () => {
@@ -52,6 +52,21 @@ describe("parseYouMind", () => {
     expect(r[0].title).toBe("水彩风");
     expect(r[0].prompt).toBe("watercolor village morning");
     expect(r[0].mediaUrl).toContain("cms-assets.youmind.com");
+  });
+});
+
+describe("parseSeedance2", () => {
+  const md = `## 🎬 All Prompts\n\n### Artificial Sun Interior\n\n![English](https://x/badge)\n\n> A cinematic video prompt.\n\n#### 📝 Prompt\n\n\`\`\`\nThe camera dives through an artificial sun.\n\`\`\`\n\n<img src="https://pbs.twimg.com/amplify_video_thumb/123/img/abc.jpg" width="600" alt="t">\n\n**[🎬 Watch Video →](https://youmind.com/seedance-2-0-prompts?id=6441)**\n`;
+  it("解析标题+Prompt代码块+缩略图", () => {
+    const r = parseSeedance2(md);
+    expect(r).toHaveLength(1);
+    expect(r[0].title).toBe("Artificial Sun Interior");
+    expect(r[0].prompt).toContain("camera dives through an artificial sun");
+    expect(r[0].mediaUrl).toContain("pbs.twimg.com");
+    expect(r[0].mediaType).toBe("image");
+  });
+  it("无 Prompt 代码块的标题(目录/介绍)跳过", () => {
+    expect(parseSeedance2("### What is Seedance 2.0?\n\nsome intro text\n")).toHaveLength(0);
   });
 });
 
