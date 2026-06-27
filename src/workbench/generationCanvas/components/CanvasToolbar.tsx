@@ -12,7 +12,7 @@ const QUICK_ADD_NODE_ITEMS = getQuickAddGenerationNodePlugins()
 // manual add — keeping this list short de-clutters the right-click menu.
 // 2026-06-15：左侧栏瘦身为「纯创建节点」——复制/剪切走快捷键(⌘C/⌘X)、批量生成移到选中浮条、
 // 发送到时间轴删除(节点可直接拖入时间轴)。这里只保留可手动新建的节点种类（含新增的「声音」）。
-const PRIMARY_NODE_KINDS: GenerationNodeKind[] = ['text', 'image', 'video', 'audio', 'whiteboard', 'panorama', 'scene3d']
+const PRIMARY_NODE_KINDS: GenerationNodeKind[] = ['text', 'image', 'video', 'audio', 'whiteboard', 'panorama', 'scene3d', 'model3d']
 const PRIMARY_ADD_ITEMS = PRIMARY_NODE_KINDS
   .map((kind) => QUICK_ADD_NODE_ITEMS.find((item) => item.kind === kind))
   .filter((item): item is (typeof QUICK_ADD_NODE_ITEMS)[number] => Boolean(item))
