@@ -1,7 +1,7 @@
 // 已接入的公开提示词仓库清单(实查锁定 2026-06-21)。
 // 每源:从 rawBase 拉 files,逐文件喂 parse,聚合。图片源媒体稳;视频源结构干净但媒体可能降级。
 import type { ParsedPrompt } from "./promptLibraryTypes";
-import { parseEvoLinkAI, parseImgEdify, parseSora2, parseSoraOfficial, parseYouMind } from "./promptParsers";
+import { parseEvoLinkAI, parseImgEdify, parseSeedance2, parseSora2, parseSoraOfficial, parseYouMind } from "./promptParsers";
 
 export type PromptSource = {
   id: string;
@@ -23,6 +23,7 @@ const gh = (owner: string, repo: string) => ({
 const evo = gh("EvoLinkAI", "awesome-gpt-image-2-API-and-Prompts");
 const imgEdify = gh("ImgEdify", "Awesome-GPT4o-Image-Prompts");
 const youMind = gh("YouMind-OpenLab", "awesome-nano-banana-pro-prompts");
+const seedance2 = gh("YouMind-OpenLab", "awesome-seedance-2-prompts");
 const sora2 = gh("zhangchenchen", "awesome_sora2_prompt");
 const soraOfficial = gh("hr98w", "awesome-sora-prompts");
 
@@ -56,6 +57,16 @@ export const PROMPT_SOURCES: PromptSource[] = [
     files: ["README.md"],
     cap: 200,
     parse: parseImgEdify,
+  },
+  {
+    id: "seedance-2",
+    label: "Seedance 2.0",
+    sourceUrl: seedance2.url,
+    promptType: "video",
+    rawBase: seedance2.raw,
+    files: ["README.md"],
+    cap: 200,
+    parse: parseSeedance2,
   },
   {
     id: "sora2-viral",
