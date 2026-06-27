@@ -1,6 +1,26 @@
 # 拆镜头闭环 · 镜级 verify + 有界回灌重做
 
-> 日期：2026-06-28 ｜ 状态：待开工（方案已拍板两个岔路）
+> 日期：2026-06-28 ｜ 状态：**Stage 1 地基已交付**（commit + push，五门全过），Stage 0/1实时编排/2/3 续做
+>
+> ## 进度（2026-06-28）
+> **已交付（commit + push，五门全过，30 新测）**：
+> - `shotVerify.ts` — verify 原语纯函数（身份/构图/连贯三轴 1-5 档；组 prompt / 解析判决 / 判偏差 / 映射成 ReconcileDeviation）。
+> - `storyboardLoopBudget.ts` — 有界 governor 纯状态机（默认封顶 2 轮，`decideNext` 决策 done/replan/exhausted；与瞬态 retry 完全分开）。
+> - `reconcile.ts` — `ReconcileDeviation` 加 `kind('structure'|'content')` + `shotNodeId`。
+> - `ReconcileDeviationCard.tsx` — 渲染内容偏差（直显人话原因）+「让 AI 修」对画面偏差也出现。
+>
+> **架构决策已锁定（替用户定，无需再问）**：
+> - verify 调模型 = **复用 agent 的 `attachments` 多模态链路**（`runWorkbenchAgent`，mode:'chat' 无工具 + 首帧图作 image attachment），非评测专用 chatVision。
+> - 视频镜取帧 = 渲染层 IPC **`extractFrame`**（`preload.ts:42` → `nomi:video:extract-frame` → `extractVideoFrameToAsset`，返回 `{url}`）；图片镜直接用 `result.url`。
+>
+> **续做（按风险，每步守三闸；Stage 2 必须真机走查验花钱安全才算完）**：
+> 1. **Stage 1 实时编排** `shotVerifyRunner.ts`（impure，DI 可测）：批量生成完成后 → 逐镜组 `ShotVerifyContext`（标题/prompt/连边锚描述/前一镜）→ 取帧 → 调模型 → 映射偏差 → 喂 `CanvasAssistantPanel` 的 `setDeviationReport`（现仅结构对账注入，见 `:322`）。集成假设（attachment 须 `nomi-local://`、一次性视觉判断用法、抽帧输出格式）须真机验。
+> 2. **Stage 0** 解锁提交后 re-plan + `onDeviationAiFix`（`CanvasAssistantPanel.tsx:651`）对 content 偏差升级为 scoped re-plan。
+> 3. **Stage 2** 有界闭环 + 新 run.id 付费隔离 + 每轮确认 + loop 预算封顶 + **付费隔离回归测** + **真机走查**。
+> 4. **Stage 3** 镜头字段拆静态×动态（可选后置）。
+>
+> ---
+> 原始方案（下方不变）：状态：方案已拍板两个岔路（半自动·每轮确认 / verify 默认开）
 > 来源：2026-06-28 论文雷达（HollyWood Town/OmniAgent 2510.22431、MUSE 2602.03028、DramaDirector 2606.24107）+ 真实代码勘查（见下「现状勘查」每条 file:line）
 > 关联记忆：[[retry-must-not-wrap-paid-submit]]、[[reconcile-edge-drop-and-card-redesign]]、[[memory-system-redesign-2026-06-20]]、[[staging-reference-tool-shipped]]、[[storyboard-image-first-convergence]]
 
