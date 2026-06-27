@@ -117,6 +117,21 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
     },
   },
   {
+    // RunningHub 标准模型 API（openapi/v2）：一个 key 解锁 355+ 模型（Seedance/可灵/Veo/混元3D/Meshy…）。
+    // ⚠️ 实测（2026-06-27）：标准模型 API **仅限 Enterprise-Shared（企业级-共享）key**，Consumer/个人 key
+    // 会报错误码 1014「访问被拒绝」。故 credentialHint 明着标，免得用户拿个人 key 填进来被 1014 蒙（D4 诚实）。
+    vendorKey: 'runninghub',
+    glyph: 'R',
+    tagline: '一个 key，解锁 355+ 标准模型（Seedance / 可灵 / 混元3D / Meshy…）',
+    credentialPlaceholder: '粘贴 RunningHub API Key（32 位）',
+    credentialHint: '⚠️ 标准模型 API 需「Enterprise-Shared（企业级-共享）」API Key；个人/Consumer key 会报「访问被拒绝（1014）」。登录 RunningHub → API 设置里拿。凭证本地加密存储。',
+    promo: {
+      text: 'RunningHub 聚合 355+ 主流模型（按量付费）。标准模型 API 需企业级-共享 key——登录后在控制台 API 设置里获取。',
+      ctaLabel: '去 RunningHub',
+      url: 'https://www.runninghub.cn',
+    },
+  },
+  {
     // 火山「语音技术」= 独立产品线，凭证 ≠ 方舟 bearer key（见 volcengineVendor.ts）。
     // 故必须独立成卡：否则豆包语音音色被归进「其他模型」且写死「已配置」，
     // 用户既无处填 APP_ID:ACCESS_KEY，又被误导以为已连通（真实坑，2026-06-25 用户反馈）。

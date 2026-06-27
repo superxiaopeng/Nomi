@@ -13,7 +13,7 @@ import { CURRENT_CATALOG_VERSION } from "./types";
 
 // 内置 vendor（由 seedBuiltins 管理、op 已正确）。v4 relay 迁移只碰这之外的**用户自建中转**——
 // 尤其别碰 apimart：它的 size 是比例字符串("16:9")不是像素，套 OpenAI 像素转换会发错。
-const BUILTIN_VENDOR_KEYS = new Set(["kie", "apimart", "modelscope", "volcengine", "volcengine-speech"]);
+const BUILTIN_VENDOR_KEYS = new Set(["kie", "apimart", "modelscope", "volcengine", "volcengine-speech", "runninghub"]);
 
 /**
  * v3 → v4：给**用户自建 OpenAI 兼容中转**的旧图像/视频 create op 补 paramMap（铁律翻译层）。
