@@ -15,6 +15,7 @@ const VENDOR_LABELS: Record<string, string> = {
   apimart: 'APIMart',
   kie: 'Kie',
   newapi: 'new-api',
+  runninghub: 'RunningHub',
 }
 
 function vendorLabel(vendor?: string): string {

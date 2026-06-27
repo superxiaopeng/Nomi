@@ -20,11 +20,12 @@ const GPT_I2I = op("/rhart-image-g-2-official/image-to-image", { prompt: PROMPT,
 const QWEN_T2I = op("/alibaba/qwen-image-2.0/text-to-image", { prompt: PROMPT, size: P("size"), promptExtend: P("promptExtend") });
 const QWEN_EDIT = op("/alibaba/qwen-image-2.0/image-edit", { prompt: PROMPT, size: P("size"), imageUrls: P("imageUrls") });
 
+// labelZh 与现有 apimart/kie 同模型**精确一致**（不加后缀）→ 选择器去重合并成「N 家」一条，供应商下拉锁家。
 export const RUNNINGHUB_IMAGE_CURATED_MODELS = [
-  { modelKey: "seedream-v4.5", labelZh: "Seedream 4.5 (RunningHub)", kind: "image" as const, archetypeId: "rh-seedream-4.5" },
-  { modelKey: "rhart-image-v1", labelZh: "Nano Banana (RunningHub)", kind: "image" as const, archetypeId: "rh-nano-banana" },
-  { modelKey: "rhart-image-g-2-official", labelZh: "GPT Image 2 (RunningHub)", kind: "image" as const, archetypeId: "rh-gpt-image-2" },
-  { modelKey: "rh-qwen-image-2.0", labelZh: "Qwen-Image 2.0 (RunningHub)", kind: "image" as const, archetypeId: "rh-qwen-image-2.0" },
+  { modelKey: "seedream-v4.5", labelZh: "Seedream 4.5", kind: "image" as const, archetypeId: "rh-seedream-4.5" },
+  { modelKey: "rhart-image-v1", labelZh: "Nano Banana", kind: "image" as const, archetypeId: "rh-nano-banana" },
+  { modelKey: "rhart-image-g-2-official", labelZh: "GPT Image 2", kind: "image" as const, archetypeId: "rh-gpt-image-2" },
+  { modelKey: "rh-qwen-image-2.0", labelZh: "Qwen-Image 2.0", kind: "image" as const, archetypeId: "rh-qwen-image-2.0" },
 ];
 
 const mk = (id: string, taskKind: ProfileKind, modelKey: string, name: string, create: HttpOperation) => ({

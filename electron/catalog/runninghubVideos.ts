@@ -27,13 +27,15 @@ const HAILUO_I2V = op("/minimax/hailuo-2.3/i2v-standard", { prompt: PROMPT, dura
 const SORA_T2V = op("/rhart-video-s-official/text-to-video", { prompt: PROMPT, size: P("size"), duration: P("duration") });
 const SORA_I2V = op("/rhart-video-s-official/image-to-video", { prompt: PROMPT, duration: P("duration"), imageUrl: P("imageUrl") });
 
+// labelZh 与现有 apimart/kie 同模型**精确一致**（不加「(RunningHub)」后缀）→ 模型选择器按规范化 label
+// 去重合并成一条「N 家」，选中后用供应商下拉锁 RunningHub（治「一大堆/重复」，见 modelIdentity 去重）。
 export const RUNNINGHUB_VIDEO_CURATED_MODELS = [
-  { modelKey: "bytedance/seedance-2.0-global", labelZh: "Seedance 2.0 (RunningHub)", kind: "video" as const, archetypeId: "runninghub-seedance" },
-  { modelKey: "rhart-video-v3.1-pro-official", labelZh: "Veo 3.1 (RunningHub)", kind: "video" as const, archetypeId: "rh-veo-3.1" },
-  { modelKey: "kling-v3.0-pro", labelZh: "可灵 3.0 (RunningHub)", kind: "video" as const, archetypeId: "rh-kling-3.0" },
-  { modelKey: "rh-wan-2.7", labelZh: "Wan 2.7 (RunningHub)", kind: "video" as const, archetypeId: "rh-wan-2.7" },
-  { modelKey: "rh-hailuo-2.3", labelZh: "海螺 2.3 (RunningHub)", kind: "video" as const, archetypeId: "rh-hailuo-2.3" },
-  { modelKey: "rhart-video-s-official", labelZh: "Sora 2 (RunningHub)", kind: "video" as const, archetypeId: "rh-sora-2" },
+  { modelKey: "bytedance/seedance-2.0-global", labelZh: "Seedance 2.0", kind: "video" as const, archetypeId: "runninghub-seedance" },
+  { modelKey: "rhart-video-v3.1-pro-official", labelZh: "Veo 3.1", kind: "video" as const, archetypeId: "rh-veo-3.1" },
+  { modelKey: "kling-v3.0-pro", labelZh: "可灵 3.0", kind: "video" as const, archetypeId: "rh-kling-3.0" },
+  { modelKey: "rh-wan-2.7", labelZh: "Wan 2.7", kind: "video" as const, archetypeId: "rh-wan-2.7" },
+  { modelKey: "rh-hailuo-2.3", labelZh: "Hailuo 2.3", kind: "video" as const, archetypeId: "rh-hailuo-2.3" },
+  { modelKey: "rhart-video-s-official", labelZh: "Sora 2", kind: "video" as const, archetypeId: "rh-sora-2" },
 ];
 
 const mk = (id: string, taskKind: ProfileKind, modelKey: string, name: string, create: HttpOperation) => ({
