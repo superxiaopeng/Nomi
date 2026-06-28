@@ -6,11 +6,13 @@
 // 落盘后 uniqueAssetPath 保留原扩展名（.mp3/.wav/.m4a…），workspace 索引按扩展名归类成 audio。
 
 import { importWorkbenchLocalAssetFile } from '../api/assetUploadApi'
+import { extensionsForKind } from '../../../electron/assets/mediaTypes'
 
 // 音频通常远小于视频；给个宽松上限，挡住误选的超大文件。
 export const ASSET_LIBRARY_AUDIO_IMPORT_MAX_BYTES = 200 * 1024 * 1024
 
-const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'flac', 'opus', 'weba'])
+// 从媒体类型单一真相源派生，与 workspaceFileIndex 的音频分类同源（不再手维护第二份）。
+const AUDIO_EXTENSIONS = new Set(extensionsForKind('audio'))
 
 /** 文件是否音频：MIME 优先，缺 MIME 时回落扩展名（部分系统拖来的音频 file.type 为空）。 */
 export function isAudioFile(file: File): boolean {

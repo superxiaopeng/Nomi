@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { MEDIA_TYPES, type MediaKind } from "../assets/mediaTypes";
 
 export type WorkspaceFileKind = "directory" | "text" | "image" | "video" | "audio" | "document" | "file";
 
@@ -22,24 +23,14 @@ export type WorkspaceFileListResult = {
 const SKIPPED_NAMES = new Set([".git", "node_modules"]);
 const SKIPPED_RELATIVE_PATHS = new Set([".nomi/cache"]);
 
-const CONTENT_TYPES: Record<string, { kind: WorkspaceFileKind; contentType: string }> = {
-  ".md": { kind: "text", contentType: "text/markdown" },
-  ".markdown": { kind: "text", contentType: "text/markdown" },
-  ".txt": { kind: "text", contentType: "text/plain" },
-  ".json": { kind: "text", contentType: "application/json" },
-  ".csv": { kind: "text", contentType: "text/csv" },
-  ".png": { kind: "image", contentType: "image/png" },
-  ".jpg": { kind: "image", contentType: "image/jpeg" },
-  ".jpeg": { kind: "image", contentType: "image/jpeg" },
-  ".webp": { kind: "image", contentType: "image/webp" },
-  ".gif": { kind: "image", contentType: "image/gif" },
-  ".mp4": { kind: "video", contentType: "video/mp4" },
-  ".webm": { kind: "video", contentType: "video/webm" },
-  ".mov": { kind: "video", contentType: "video/quicktime" },
-  ".mp3": { kind: "audio", contentType: "audio/mpeg" },
-  ".wav": { kind: "audio", contentType: "audio/wav" },
-  ".pdf": { kind: "document", contentType: "application/pdf" },
-};
+// 从媒体类型单一真相源派生(不再手维护第二张表)。WorkspaceFileKind 无 model3d,
+// 故把 model3d 映射成 "file"(保持 .glb 在文件树仍是通用文件,行为不变)。
+function toWorkspaceKind(kind: MediaKind): WorkspaceFileKind {
+  return kind === "model3d" ? "file" : kind;
+}
+const CONTENT_TYPES: Record<string, { kind: WorkspaceFileKind; contentType: string }> = Object.fromEntries(
+  MEDIA_TYPES.map((entry) => [entry.ext, { kind: toWorkspaceKind(entry.kind), contentType: entry.contentType }]),
+);
 
 function toRelative(rootPath: string, absolutePath: string): string {
   return path.relative(rootPath, absolutePath).split(path.sep).join("/");
