@@ -30,7 +30,9 @@ function check(name, ok, detail) {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
-const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data-dir=${userData}`], cwd: repoRoot, env: { ...process.env } })
+// NOMI_E2E=1：跳过 COOP/COEP cross-origin isolation。该 isolation(2026-06-27 为 ONNX SharedArrayBuffer 引入)
+// 会卡死 Playwright 的 CDP target 握手 → electron.launch 永远 timeout。仅走查时关,生产不受影响。
+const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data-dir=${userData}`], cwd: repoRoot, env: { ...process.env, NOMI_E2E: '1' } })
 let win = await app.firstWindow()
 const getWin = () => {
   const live = app.windows().filter((w) => !w.isClosed())
