@@ -1,10 +1,11 @@
 import React from 'react'
-import { IconCategory, IconFolder, IconPlus } from '@tabler/icons-react'
+import { IconCategory, IconFolder, IconPlus, IconLayoutGrid } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { type ProjectCategory } from '../project/projectCategories'
 import { useWorkbenchStore } from '../workbenchStore'
 import CategoryTree from '../sidebar/CategoryTree'
 import WorkspaceFileExplorerPanel from './WorkspaceFileExplorerPanel'
+import AssetFinderPanel from '../assets/autoGroup/AssetFinderPanel'
 
 type Props = {
   categories?: ProjectCategory[]
@@ -12,7 +13,7 @@ type Props = {
 }
 
 export default function ProjectExplorerSidebar({ categories, projectId = null }: Props): JSX.Element {
-  const [tab, setTab] = React.useState<'categories' | 'files'>('files')
+  const [tab, setTab] = React.useState<'find' | 'categories' | 'files'>('files')
   const [createCategoryNonce, setCreateCategoryNonce] = React.useState(0)
   const collapsed = useWorkbenchStore((s) => s.sidebarCollapsed)
   const toggle = useWorkbenchStore((s) => s.toggleSidebarCollapsed)
@@ -51,6 +52,9 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
           <span aria-hidden />
           <div className="flex items-center justify-center gap-1">
             <div className="flex items-center gap-0.5 rounded-nomi-sm bg-nomi-bg p-0.5">
+              <button type="button" onClick={() => setTab('find')} className={cn('flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm', tab === 'find' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60')}>
+                <IconLayoutGrid size={14} stroke={1.5} />找
+              </button>
               <button type="button" onClick={() => setTab('categories')} className={cn('flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm', tab === 'categories' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60')}>
                 <IconCategory size={14} stroke={1.5} />分类
               </button>
@@ -69,9 +73,12 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
       )}
       {collapsed ? (
         <div className="flex flex-col items-center gap-1 py-2">
+          <button type="button" onClick={() => { setTab('find'); toggle() }} className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="展开找素材面板" title="找素材"><IconLayoutGrid size={16} stroke={1.5} /></button>
           <button type="button" onClick={() => { setTab('categories'); toggle() }} className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="展开分类面板" title="分类"><IconCategory size={16} stroke={1.5} /></button>
           <button type="button" onClick={() => { setTab('files'); toggle() }} className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="展开文件面板" title="文件"><IconFolder size={16} stroke={1.5} /></button>
         </div>
+      ) : tab === 'find' ? (
+        <AssetFinderPanel />
       ) : tab === 'files' ? (
         <WorkspaceFileExplorerPanel projectId={projectId} />
       ) : (

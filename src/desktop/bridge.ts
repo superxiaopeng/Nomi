@@ -147,6 +147,7 @@ export type DesktopBridge = {
       imageUrl: string
       numLayers?: number
       grantId?: string
+      projectId?: string
     }) => Promise<{ layers: string[] }>
   }
   scene3d: {

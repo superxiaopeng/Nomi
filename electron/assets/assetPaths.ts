@@ -4,18 +4,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import type { JsonRecord } from "../jsonUtils";
+import { contentTypeFromExtension, extensionFromContentType } from "./mediaTypes";
 
 export function extensionFromMime(contentType: string, fallback = "bin"): string {
-  const type = contentType.split(";")[0]?.trim().toLowerCase();
-  if (type === "image/png") return "png";
-  if (type === "image/jpeg") return "jpg";
-  if (type === "image/webp") return "webp";
-  if (type === "image/gif") return "gif";
-  if (type === "video/mp4") return "mp4";
-  if (type === "video/webm") return "webm";
-  if (type === "model/gltf-binary") return "glb";
-  if (type === "application/json") return "json";
-  return fallback;
+  return extensionFromContentType(contentType) ?? fallback;
 }
 
 export function extensionFromUrl(url: string): string {
@@ -32,27 +24,13 @@ export function localAssetUrl(projectId: string, relativePath: string): string {
 }
 
 export function contentTypeFromPath(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
-  if (ext === ".gif") return "image/gif";
-  if (ext === ".mp4") return "video/mp4";
-  if (ext === ".webm") return "video/webm";
-  if (ext === ".mov") return "video/quicktime";
-  if (ext === ".glb") return "model/gltf-binary";
-  if (ext === ".json") return "application/json";
-  if (ext === ".txt" || ext === ".md") return "text/plain";
-  if (ext === ".pdf") return "application/pdf";
-  if (ext === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  if (ext === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  if (ext === ".csv") return "text/csv";
-  return "application/octet-stream";
+  return contentTypeFromExtension(path.extname(filePath)) ?? "application/octet-stream";
 }
 
 export function assetKindFromContentType(contentType: string): string {
   if (contentType.startsWith("image/")) return "image";
   if (contentType.startsWith("video/")) return "video";
+  if (contentType.startsWith("audio/")) return "audio";
   if (contentType.startsWith("model/")) return "model3d";
   if (
     contentType === "application/json" ||

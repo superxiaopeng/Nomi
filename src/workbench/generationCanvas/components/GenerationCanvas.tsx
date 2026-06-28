@@ -350,6 +350,45 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     // 解组结果画布即时可见 → 成功 toast 是噪音（弹窗审计 R2）。
   }, [selectedGroupIds, ungroupGroups])
 
+  const lastPastePositionRef = React.useRef<{ x: number; y: number } | null>(null)
+
+  const getCanvasPointFromClientPoint = React.useCallback((clientX: number, clientY: number) => {
+    if (!stageRef.current) return null
+    const rect = stageRef.current.getBoundingClientRect()
+    return {
+      x: (clientX - rect.left - offsetRef.current.x) / zoomRef.current,
+      y: (clientY - rect.top - offsetRef.current.y) / zoomRef.current,
+    }
+  }, [offsetRef, stageRef, zoomRef])
+
+  const rememberPastePositionFromClientPoint = React.useCallback((clientX: number, clientY: number) => {
+    const point = getCanvasPointFromClientPoint(clientX, clientY)
+    if (!point) return
+    lastPastePositionRef.current = {
+      x: Math.max(40, Math.round(point.x)),
+      y: Math.max(40, Math.round(point.y)),
+    }
+  }, [getCanvasPointFromClientPoint])
+
+  const getToolbarInsertionPosition = React.useCallback(
+    () => {
+      const rect = stageRef.current?.getBoundingClientRect()
+      const viewportAnchor = rect
+        ? { x: rect.width * 0.38, y: rect.height * 0.42 }
+        : { x: 360, y: 280 }
+      return {
+        x: Math.round((viewportAnchor.x - offset.x) / zoom),
+        y: Math.round((viewportAnchor.y - offset.y) / zoom),
+      }
+    },
+    [offset.x, offset.y, zoom, stageRef],
+  )
+
+  const getPastePosition = React.useCallback(
+    () => lastPastePositionRef.current ?? getToolbarInsertionPosition(),
+    [getToolbarInsertionPosition],
+  )
+
   const handleGroupFramePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>, groupId: string) => {
     if (readOnly || event.button !== 0) return
     event.preventDefault()
@@ -377,6 +416,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     copySelectedNodes,
     cutSelectedNodes,
     pasteNodes,
+    getPastePosition,
     undo,
     redo,
   })
@@ -385,14 +425,15 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     handleCanvasStageDrop(event, { readOnly, offset, zoom, activeCategoryId })
   }, [activeCategoryId, offset, readOnly, zoom])
 
-  const getCanvasPointFromClientPoint = React.useCallback((clientX: number, clientY: number) => {
-    if (!stageRef.current) return null
-    const rect = stageRef.current.getBoundingClientRect()
-    return {
-      x: (clientX - rect.left - offsetRef.current.x) / zoomRef.current,
-      y: (clientY - rect.top - offsetRef.current.y) / zoomRef.current,
-    }
-  }, [offsetRef, stageRef, zoomRef])
+  const handleStagePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    rememberPastePositionFromClientPoint(event.clientX, event.clientY)
+    pointer.onPointerDown(event)
+  }, [pointer, rememberPastePositionFromClientPoint])
+
+  const handleStagePointerMove = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    rememberPastePositionFromClientPoint(event.clientX, event.clientY)
+    pointer.onPointerMove(event)
+  }, [pointer, rememberPastePositionFromClientPoint])
 
   const handleStageContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     if (readOnly || !stageRef.current) return
@@ -494,23 +535,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     return () => clearTimeout(tid)
   }, [canvasFitNonce])
 
-  // 落点：把视口锚换回画布坐标，作为「期望落点」交给 store.addNode——真实 AABB 碰撞避让
-  // 统一收口在 addNode（落点总闸，见 canvasNodeActions），这里不再各自算避让（否则就是
-  // 第二份避让真相源，正是本类 bug 的来源）。kind 入参已无用（避让按落点+同分类在闸内做）。
-  const getToolbarInsertionPosition = React.useCallback(
-    () => {
-      const rect = stageRef.current?.getBoundingClientRect()
-      const viewportAnchor = rect
-        ? { x: rect.width * 0.38, y: rect.height * 0.42 }
-        : { x: 360, y: 280 }
-      return {
-        x: Math.round((viewportAnchor.x - offset.x) / zoom),
-        y: Math.round((viewportAnchor.y - offset.y) / zoom),
-      }
-    },
-    [offset.x, offset.y, zoom, stageRef],
-  )
-
   const zoomPercent = Math.round(zoom * 100)
   const selectedCount = selectedNodeIds.length
 
@@ -536,8 +560,8 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
           data-panning={isPanning ? 'true' : undefined}
           data-space-pan={isSpaceHeld ? 'true' : undefined}
           onPointerDownCapture={pointer.onPointerDownCapture}
-          onPointerDown={pointer.onPointerDown}
-          onPointerMove={pointer.onPointerMove}
+          onPointerDown={handleStagePointerDown}
+          onPointerMove={handleStagePointerMove}
           onPointerUp={pointer.onPointerUp}
           onContextMenu={handleStageContextMenu}
           onDragOver={(event) => {
