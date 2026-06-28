@@ -68,3 +68,4 @@ docs/stats/dashboard.html
 docs/feedback/sources.json
 docs/feedback/state.json
 docs/feedback/*-raw.json
+docs/feedback/*-digest.md
