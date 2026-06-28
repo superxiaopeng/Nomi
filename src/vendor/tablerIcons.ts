@@ -8,6 +8,7 @@ export type IconProps = Partial<Omit<ComponentPropsWithoutRef<'svg'>, 'stroke'>>
 export type Icon = ForwardRefExoticComponent<IconProps & RefAttributes<SVGSVGElement>>
 
 export { default as Icon360 } from '@tabler/icons-react/dist/esm/icons/IconView360Arrow.mjs'
+export { default as Icon3dCubeSphere } from '@tabler/icons-react/dist/esm/icons/IconCube3dSphere.mjs'
 export { default as IconAdjustmentsHorizontal } from '@tabler/icons-react/dist/esm/icons/IconAdjustmentsHorizontal.mjs'
 export { default as IconAlertTriangle } from '@tabler/icons-react/dist/esm/icons/IconAlertTriangle.mjs'
 export { default as IconArrowBackUp } from '@tabler/icons-react/dist/esm/icons/IconArrowBackUp.mjs'
@@ -71,6 +72,7 @@ export { default as IconKey } from '@tabler/icons-react/dist/esm/icons/IconKey.m
 export { default as IconLayersSubtract } from '@tabler/icons-react/dist/esm/icons/IconLayersSubtract.mjs'
 export { default as IconLayoutBoard } from '@tabler/icons-react/dist/esm/icons/IconLayoutBoard.mjs'
 export { default as IconLayoutGrid } from '@tabler/icons-react/dist/esm/icons/IconLayoutGrid.mjs'
+export { default as IconLayoutList } from '@tabler/icons-react/dist/esm/icons/IconLayoutList.mjs'
 export { default as IconLayoutRows } from '@tabler/icons-react/dist/esm/icons/IconLayoutRows.mjs'
 export { default as IconLetterCase } from '@tabler/icons-react/dist/esm/icons/IconLetterCase.mjs'
 export { default as IconLink } from '@tabler/icons-react/dist/esm/icons/IconLink.mjs'
@@ -92,6 +94,7 @@ export { default as IconPaperclip } from '@tabler/icons-react/dist/esm/icons/Ico
 export { default as IconPencil } from '@tabler/icons-react/dist/esm/icons/IconPencil.mjs'
 export { default as IconPhoto } from '@tabler/icons-react/dist/esm/icons/IconPhoto.mjs'
 export { default as IconPhotoPlus } from '@tabler/icons-react/dist/esm/icons/IconPhotoPlus.mjs'
+export { default as IconPhotoStar } from '@tabler/icons-react/dist/esm/icons/IconPhotoStar.mjs'
 export { default as IconPin } from '@tabler/icons-react/dist/esm/icons/IconPin.mjs'
 export { default as IconPinFilled } from '@tabler/icons-react/dist/esm/icons/IconPinFilled.mjs'
 export { default as IconPlane } from '@tabler/icons-react/dist/esm/icons/IconPlane.mjs'
@@ -124,6 +127,8 @@ export { default as IconSparkles } from '@tabler/icons-react/dist/esm/icons/Icon
 export { default as IconSphere } from '@tabler/icons-react/dist/esm/icons/IconSphere.mjs'
 export { default as IconSquare } from '@tabler/icons-react/dist/esm/icons/IconSquare.mjs'
 export { default as IconStack2 } from '@tabler/icons-react/dist/esm/icons/IconStack2.mjs'
+export { default as IconStar } from '@tabler/icons-react/dist/esm/icons/IconStar.mjs'
+export { default as IconStarFilled } from '@tabler/icons-react/dist/esm/icons/IconStarFilled.mjs'
 export { default as IconSun } from '@tabler/icons-react/dist/esm/icons/IconSun.mjs'
 export { default as IconTable } from '@tabler/icons-react/dist/esm/icons/IconTable.mjs'
 export { default as IconTag } from '@tabler/icons-react/dist/esm/icons/IconTag.mjs'

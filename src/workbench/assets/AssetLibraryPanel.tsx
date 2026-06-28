@@ -16,9 +16,12 @@ import { cn } from '../../utils/cn'
 import { useAssetPool } from './useAssetPool'
 import { filterAssets, type AssetKind, type AssetRef } from './assetTypes'
 import { ASSET_LIBRARY_DRAG_MIME, serializeAssetLibraryDrag } from './assetLibraryDrag'
-import { importAudioFilesToLibrary, isAudioFile } from './importAudioToLibrary'
+import { importAudioFilesToLibrary, type AudioImportResult } from './importAudioToLibrary'
+import type { GenerationAssetImportResult } from '../generationCanvas/adapters/assetImportAdapter'
 import { AssetThumb } from './AssetTile'
 import { DesignEmptyState, DesignSearchInput } from '../../design'
+import { acceptAttrForKinds, mediaKindFromExtension } from '../../../electron/assets/mediaTypes'
+import { toast } from '../../ui/toast'
 
 const GRID_COLS = 3
 const ESTIMATED_ROW_HEIGHT = 121
@@ -27,14 +30,54 @@ const PANEL_WIDTH = 380
 const TOP_OFFSET = 64
 const RIGHT_OFFSET = 12
 
-// 通配 + 显式扩展名一起列：macOS/Chromium 对纯 `video/*`/`audio/*` 通配常因 MIME 映射不到而把
-// .mp4/.mov/.mp3 灰掉（MDN 推荐补显式扩展名）。覆盖素材库三类（图/视频/音频）的常见格式。
-const UPLOAD_ACCEPT = [
-  'image/*', 'video/*', 'audio/*',
-  '.png', '.jpg', '.jpeg', '.webp', '.gif',
-  '.mp4', '.mov', '.m4v', '.webm',
-  '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac',
-].join(',')
+// 从媒体类型单一真相源派生（通配 + 显式扩展名，见 mediaTypes.acceptAttrForKinds 注释）。
+// 素材库三类：图 / 视频 / 音频。accept 放行的每个格式下游都接得住（同源,不再漂移）。
+const UPLOAD_ACCEPT = acceptAttrForKinds(['image', 'video', 'audio'])
+
+// 上传文件分流（纯函数便于单测）。kind 判定：MIME 优先，缺/不匹配回落扩展名——与音频分支对称，
+// 修「空 MIME 的图/视频被静默丢」(Gap B)。图/视频走画布节点(可拖画布)，音频落项目文件进库。
+export type UploadClassification = {
+  mediaFiles: File[]   // image / video → 画布素材节点
+  audioFiles: File[]   // audio → 项目文件源（音频 tab）
+  unsupported: File[]  // 既非图/视频也非音频 → 跳过并提示
+}
+
+export function classifyUploadFiles(files: File[]): UploadClassification {
+  const mediaFiles: File[] = []
+  const audioFiles: File[] = []
+  const unsupported: File[] = []
+  for (const file of files) {
+    const mime = (file.type || '').toLowerCase()
+    const kind = mime.startsWith('image/') ? 'image'
+      : mime.startsWith('video/') ? 'video'
+      : mime.startsWith('audio/') ? 'audio'
+      : mediaKindFromExtension(file.name) // 空/未知 MIME → 扩展名兜底
+    if (kind === 'image' || kind === 'video') mediaFiles.push(file)
+    else if (kind === 'audio') audioFiles.push(file)
+    else unsupported.push(file)
+  }
+  return { mediaFiles, audioFiles, unsupported }
+}
+
+// 导入结果 → 用户反馈（Gap C：此前计数全被丢弃，超大/重复/失败/超上限零提示）。
+function reportMediaImport(result: GenerationAssetImportResult): void {
+  if (result.created.length) toast(`已导入 ${result.created.length} 个素材`, 'success')
+  const skipped: string[] = []
+  if (result.skippedTooLargeCount) skipped.push(`${result.skippedTooLargeCount} 个过大`)
+  if (result.skippedOverLimitCount) skipped.push(`${result.skippedOverLimitCount} 个超单次上限`)
+  if (result.skippedDuplicateCount) skipped.push(`${result.skippedDuplicateCount} 个重复`)
+  if (result.failedCount) skipped.push(`${result.failedCount} 个失败`)
+  if (skipped.length) toast(`已跳过：${skipped.join('、')}`, result.failedCount ? 'error' : 'warning')
+}
+
+function reportAudioImport(result: AudioImportResult): void {
+  if (result.uploadedCount) toast(`已导入 ${result.uploadedCount} 个音频`, 'success')
+  const skipped: string[] = []
+  if (result.skippedTooLargeCount) skipped.push(`${result.skippedTooLargeCount} 个过大`)
+  if (result.skippedDuplicateCount) skipped.push(`${result.skippedDuplicateCount} 个重复`)
+  if (result.failedCount) skipped.push(`${result.failedCount} 个失败`)
+  if (skipped.length) toast(`已跳过：${skipped.join('、')}`, result.failedCount ? 'error' : 'warning')
+}
 
 type FilterValue = 'all' | AssetKind
 
@@ -168,24 +211,30 @@ export function AssetLibraryPanel({ opened, onClose, projectId }: Props): JSX.El
   const handleUploadFiles = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const all = Array.from(event.currentTarget.files || [])
     event.currentTarget.value = ''
-    // 图/视频走画布节点导入（可拖到画布）；音频没有画布节点，落项目文件源进库（音频 tab）。
-    const mediaFiles = all.filter((file) => (file.type || '').startsWith('image/') || (file.type || '').startsWith('video/'))
-    const audioFiles = all.filter((file) => isAudioFile(file))
+    const { mediaFiles, audioFiles, unsupported } = classifyUploadFiles(all)
     if (mediaFiles.length) {
       void import('../generationCanvas/adapters/assetImportAdapter')
-        .then(({ importLocalMediaFilesToGenerationCanvas }) => {
-          void importLocalMediaFilesToGenerationCanvas(mediaFiles, { basePosition: { x: 120, y: 90 } })
-        })
+        .then(({ importLocalMediaFilesToGenerationCanvas }) =>
+          importLocalMediaFilesToGenerationCanvas(mediaFiles, { basePosition: { x: 120, y: 90 } }))
+        .then((result) => reportMediaImport(result))
         .catch((error) => {
           console.error('asset library upload failed', error)
+          toast('素材导入失败，请重试', 'error')
         })
     }
     if (audioFiles.length) {
       void importAudioFilesToLibrary(audioFiles, { projectId })
-        .then(() => refresh())
+        .then((result) => {
+          refresh()
+          reportAudioImport(result)
+        })
         .catch((error) => {
           console.error('asset library audio upload failed', error)
+          toast('音频导入失败，请重试', 'error')
         })
+    }
+    if (unsupported.length) {
+      toast(`已跳过 ${unsupported.length} 个不支持的文件`, 'warning')
     }
   }, [projectId, refresh])
 

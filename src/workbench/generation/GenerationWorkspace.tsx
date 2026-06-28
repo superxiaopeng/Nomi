@@ -1,11 +1,11 @@
 import React from 'react'
-import { IconChevronUp, IconMovie } from '@tabler/icons-react'
-import { WorkbenchIconButton } from '../../design'
+import { IconChevronUp, IconLayoutList } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { lazyWithChunkBoundary } from '../../ui/chunkBoundary'
 import { useWorkbenchStore } from '../workbenchStore'
 
 const TimelinePanel = lazyWithChunkBoundary('生成时间轴', () => import('../timeline/TimelinePanel'))
+import { computeTimelineDuration } from '../timeline/timelineMath'
 
 type GenerationWorkspaceProps = {
   canvas: React.ReactNode
@@ -20,30 +20,52 @@ export default function GenerationWorkspace({
 }: GenerationWorkspaceProps): JSX.Element {
   const width = useWorkbenchStore((s) => s.assistantWidth)
   const setWidth = useWorkbenchStore((s) => s.setAssistantWidth)
+  const timeline = useWorkbenchStore((s) => s.timeline)
   const [timelineCollapsed, setTimelineCollapsed] = React.useState(true)
+  // 折叠态悬浮把手的真实摘要：段数（含字幕/标题卡）+ 总时长，绝不编造。
+  const timelineSummary = React.useMemo(() => {
+    const clipCount =
+      (timeline.tracks ?? []).reduce((sum, track) => sum + (track.clips?.length ?? 0), 0) +
+      (timeline.textClips?.length ?? 0)
+    const totalSeconds = Math.round(computeTimelineDuration(timeline) / Math.max(1, timeline.fps))
+    const mm = Math.floor(totalSeconds / 60)
+    const ss = String(totalSeconds % 60).padStart(2, '0')
+    return { clipCount, durationLabel: `${mm}:${ss}` }
+  }, [timeline])
   const dragRef = React.useRef<{ startX: number; startW: number } | null>(null)
-  const onPointerDown = React.useCallback((e: React.PointerEvent) => {
-    dragRef.current = { startX: e.clientX, startW: width }
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }, [width])
-  const onPointerMove = React.useCallback((e: React.PointerEvent) => {
-    const st = dragRef.current
-    if (!st) return
-    // 右侧停靠：往左拖（clientX 变小）= 加宽。
-    setWidth(st.startW + (st.startX - e.clientX))
-  }, [setWidth])
+  const onPointerDown = React.useCallback(
+    (e: React.PointerEvent) => {
+      dragRef.current = { startX: e.clientX, startW: width }
+      e.currentTarget.setPointerCapture(e.pointerId)
+    },
+    [width],
+  )
+  const onPointerMove = React.useCallback(
+    (e: React.PointerEvent) => {
+      const st = dragRef.current
+      if (!st) return
+      // 右侧停靠：往左拖（clientX 变小）= 加宽。
+      setWidth(st.startW + (st.startX - e.clientX))
+    },
+    [setWidth],
+  )
   const endDrag = React.useCallback((e: React.PointerEvent) => {
     dragRef.current = null
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* noop */ }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* noop */
+    }
   }, [])
-  const sidebarStyle = aiSidebar && aiLayout === 'sidebar'
-    ? {
-        gridTemplateColumns: `minmax(0,1fr) ${width}px`,
-        gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '42px' : 'var(--workbench-timeline-height)'}`,
-      } as React.CSSProperties
-    : {
-        gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '42px' : 'var(--workbench-timeline-height)'}`,
-      } as React.CSSProperties
+  const sidebarStyle =
+    aiSidebar && aiLayout === 'sidebar'
+      ? ({
+          gridTemplateColumns: `minmax(0,1fr) ${width}px`,
+          gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '0px' : 'var(--workbench-timeline-height)'}`,
+        } as React.CSSProperties)
+      : ({
+          gridTemplateRows: `minmax(0,1fr) ${timelineCollapsed ? '0px' : 'var(--workbench-timeline-height)'}`,
+        } as React.CSSProperties)
   return (
     <section
       className={cn(
@@ -57,21 +79,49 @@ export default function GenerationWorkspace({
       data-ai-layout={aiSidebar ? aiLayout : 'none'}
       aria-label="生成区"
     >
-      <div className={cn(
-        'workbench-generation__canvas',
-        'min-w-0 min-h-0 overflow-hidden border-b border-[var(--workbench-border)]',
-        'relative',
-      )}>
+      <div
+        className={cn(
+          'workbench-generation__canvas',
+          'min-w-0 min-h-0 overflow-hidden border-b border-[var(--workbench-border)]',
+          'relative',
+        )}
+      >
         {canvas}
+        {/* 折叠态：底部悬浮把手——画布吃满高度，把手给一眼可见的成片摘要 + 拉起入口。 */}
+        {timelineCollapsed ? (
+          <button
+            type="button"
+            className={cn(
+              'workbench-generation__timeline-handle',
+              'absolute bottom-3 left-1/2 z-[8] -translate-x-1/2',
+              'inline-flex items-center gap-2 rounded-full px-3 py-1.5',
+              'border border-[var(--workbench-border)] bg-nomi-paper shadow-workbench-pop',
+              'text-body-sm font-medium text-nomi-ink',
+              'transition-colors hover:bg-nomi-ink-05',
+            )}
+            aria-label="展开生成时间轴"
+            onClick={() => setTimelineCollapsed(false)}
+          >
+            <IconLayoutList size={15} stroke={1.8} className="text-nomi-ink-60" />
+            <span>时间轴</span>
+            <span className="text-nomi-ink-60">
+              {timelineSummary.clipCount} 段 · {timelineSummary.durationLabel}
+            </span>
+            <IconChevronUp size={15} stroke={1.8} className="text-nomi-ink-60" />
+          </button>
+        ) : null}
       </div>
       {aiSidebar ? (
-        <aside className={cn(
-          'workbench-generation__ai relative',
-          'grid min-w-0 min-h-0 overflow-hidden border-b border-[var(--workbench-border)]',
-          aiLayout === 'overlay'
-            ? 'absolute top-4 right-4 z-[80] block w-auto h-auto border-0 bg-transparent pointer-events-auto'
-            : 'border-l border-l-[var(--workbench-border)] bg-[var(--workbench-surface)]',
-        )} aria-label="生成区 AI 侧栏">
+        <aside
+          className={cn(
+            'workbench-generation__ai relative',
+            'grid min-w-0 min-h-0 overflow-hidden border-b border-[var(--workbench-border)]',
+            aiLayout === 'overlay'
+              ? 'absolute top-4 right-4 z-[80] block w-auto h-auto border-0 bg-transparent pointer-events-auto'
+              : 'border-l border-l-[var(--workbench-border)] bg-[var(--workbench-surface)]',
+          )}
+          aria-label="生成区 AI 侧栏"
+        >
           {/* 左缘拖手柄：仅停靠态显示。 */}
           {aiLayout === 'sidebar' ? (
             <div
@@ -93,40 +143,8 @@ export default function GenerationWorkspace({
           {aiSidebar}
         </aside>
       ) : null}
-      <div className={cn(
-        'workbench-generation__timeline',
-        'relative col-span-full min-w-0 min-h-0',
-      )}>
-        {timelineCollapsed ? (
-          <section
-            className={cn(
-              'workbench-generation__timeline-collapsed',
-              'grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3',
-              'border-t border-[var(--workbench-border)] bg-[var(--workbench-surface-solid)] px-4',
-              'shadow-[0_-1px_0_var(--workbench-bevel)]',
-            )}
-            aria-label="生成时间轴已收起"
-          >
-            <div className={cn('inline-flex min-w-0 items-center gap-2 text-workbench-muted')}>
-              <span
-                className={cn(
-                  'grid size-7 shrink-0 place-items-center rounded-[var(--workbench-control-radius)]',
-                  'bg-[var(--workbench-surface-soft)] text-workbench-muted',
-                )}
-                aria-hidden="true"
-              >
-                <IconMovie size={15} stroke={1.8} />
-              </span>
-              <span className="truncate text-body-sm font-medium text-workbench-ink">生成时间轴</span>
-            </div>
-            <WorkbenchIconButton
-              className="size-8"
-              label="展开生成时间轴"
-              icon={<IconChevronUp size={15} />}
-              onClick={() => setTimelineCollapsed(false)}
-            />
-          </section>
-        ) : (
+      <div className={cn('workbench-generation__timeline', 'relative col-span-full min-w-0 min-h-0')}>
+        {timelineCollapsed ? null : (
           <React.Suspense fallback={null}>
             <TimelinePanel
               density="compact"

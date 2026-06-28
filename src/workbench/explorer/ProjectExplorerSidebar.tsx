@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCategory, IconFolder, IconPlus } from '@tabler/icons-react'
+import { IconCategory, IconFolder, IconPlus, IconLayoutGrid } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { type ProjectCategory } from '../project/projectCategories'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -7,6 +7,7 @@ import { lazyWithChunkBoundary } from '../../ui/chunkBoundary'
 
 const CategoryTree = lazyWithChunkBoundary('分类面板', () => import('../sidebar/CategoryTree'))
 const WorkspaceFileExplorerPanel = lazyWithChunkBoundary('项目文件面板', () => import('./WorkspaceFileExplorerPanel'))
+import AssetFinderPanel from '../assets/autoGroup/AssetFinderPanel'
 
 type Props = {
   categories?: ProjectCategory[]
@@ -14,7 +15,7 @@ type Props = {
 }
 
 export default function ProjectExplorerSidebar({ categories, projectId = null }: Props): JSX.Element {
-  const [tab, setTab] = React.useState<'categories' | 'files'>('files')
+  const [tab, setTab] = React.useState<'find' | 'categories' | 'files'>('files')
   const [createCategoryNonce, setCreateCategoryNonce] = React.useState(0)
   const collapsed = useWorkbenchStore((s) => s.sidebarCollapsed)
   const toggle = useWorkbenchStore((s) => s.toggleSidebarCollapsed)
@@ -29,7 +30,10 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
 
   // picker 的「浏览全部 →」→ 展开侧栏 + 切到文件面板(全量浏览在面板,弹层只做快速取,规范 §5)。
   React.useEffect(() => {
-    const open = () => { setTab('files'); setSidebarCollapsed(false) }
+    const open = () => {
+      setTab('files')
+      setSidebarCollapsed(false)
+    }
     window.addEventListener('nomi-open-files-panel', open)
     return () => window.removeEventListener('nomi-open-files-panel', open)
   }, [setSidebarCollapsed])
@@ -46,34 +50,116 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
     >
       {collapsed ? (
         <div className="flex items-center justify-center px-2 py-2 border-b border-nomi-line">
-          <button type="button" onClick={toggle} className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption" aria-label="展开侧栏">›</button>
+          <button
+            type="button"
+            onClick={toggle}
+            className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption"
+            aria-label="展开侧栏"
+          >
+            ›
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-[1fr_auto_1fr] items-center px-2 py-2 border-b border-nomi-line">
           <span aria-hidden />
           <div className="flex items-center justify-center gap-1">
             <div className="flex items-center gap-0.5 rounded-nomi-sm bg-nomi-bg p-0.5">
-              <button type="button" onClick={() => setTab('categories')} className={cn('flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm', tab === 'categories' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60')}>
-                <IconCategory size={14} stroke={1.5} />分类
+              <button
+                type="button"
+                onClick={() => setTab('find')}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
+                  tab === 'find' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
+                )}
+              >
+                <IconLayoutGrid size={14} stroke={1.5} />找
               </button>
-              <button type="button" onClick={() => setTab('files')} className={cn('flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm', tab === 'files' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60')}>
-                <IconFolder size={14} stroke={1.5} />文件
+              <button
+                type="button"
+                onClick={() => setTab('categories')}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
+                  tab === 'categories' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
+                )}
+              >
+                <IconCategory size={14} stroke={1.5} />
+                分类
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('files')}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
+                  tab === 'files' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
+                )}
+              >
+                <IconFolder size={14} stroke={1.5} />
+                文件
               </button>
             </div>
-            <button type="button" onClick={handleAddCategory} className="grid place-items-center w-7 h-7 rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="新建分类" title="新建一个顶层分类">
+            <button
+              type="button"
+              onClick={handleAddCategory}
+              className="grid place-items-center w-7 h-7 rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
+              aria-label="新建分类"
+              title="新建一个顶层分类"
+            >
               <IconPlus size={16} stroke={1.5} />
             </button>
           </div>
           <div className="flex justify-end">
-            <button type="button" onClick={toggle} className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption" aria-label="收起侧栏">‹</button>
+            <button
+              type="button"
+              onClick={toggle}
+              className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption"
+              aria-label="收起侧栏"
+            >
+              ‹
+            </button>
           </div>
         </div>
       )}
       {collapsed ? (
         <div className="flex flex-col items-center gap-1 py-2">
-          <button type="button" onClick={() => { setTab('categories'); toggle() }} className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="展开分类面板" title="分类"><IconCategory size={16} stroke={1.5} /></button>
-          <button type="button" onClick={() => { setTab('files'); toggle() }} className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg" aria-label="展开文件面板" title="文件"><IconFolder size={16} stroke={1.5} /></button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab('find')
+              toggle()
+            }}
+            className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
+            aria-label="展开找素材面板"
+            title="找素材"
+          >
+            <IconLayoutGrid size={16} stroke={1.5} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab('categories')
+              toggle()
+            }}
+            className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
+            aria-label="展开分类面板"
+            title="分类"
+          >
+            <IconCategory size={16} stroke={1.5} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab('files')
+              toggle()
+            }}
+            className="w-9 h-8 grid place-items-center rounded-nomi-sm text-nomi-ink-40 hover:text-nomi-ink hover:bg-nomi-bg"
+            aria-label="展开文件面板"
+            title="文件"
+          >
+            <IconFolder size={16} stroke={1.5} />
+          </button>
         </div>
+      ) : tab === 'find' ? (
+        <AssetFinderPanel />
       ) : (
         <React.Suspense fallback={null}>
           {tab === 'files' ? (

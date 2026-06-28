@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import { resolveProjectRelativePath } from "../projects/repository";
 import { contentTypeFromPath } from "./assetPaths";
+import { categorizeVendorFailure } from "../vendor/vendorHttp";
 import type { LocalAsset } from "../catalog/assetLocalization";
 
 /** nomi-local URL → 项目内文件绝对路径(校验 projectId 一致 + 是真实文件);否则 null。 */
@@ -90,26 +91,75 @@ export function readNomiLocalAsset(url: string): LocalAsset | null {
   }
 }
 
-/** R1 上传通道(JSON body):固定可信端点(vendor 声明里),用普通 fetch(与 requestJson 一致)。 */
+// 资产上传的瞬态失败有界重试。
+//
+// 根因(2026-06-28，用户实测）：本地参考图发送前要上传换公网地址，这步经系统代理（Clash 127.0.0.1:7897）。
+// undici ProxyAgent 复用 keep-alive 长连接，代理掐掉空闲连接后复用陈旧 socket → connect/ECONNRESET 到
+// 127.0.0.1（即「间歇性报 127.0.0.1 的错」）→ 上传一把过即抛 → 参考图拿不到公网地址。多参 = N 次顺序
+// 上传 → N 倍撞概率，所以「多参视频」尤其常中。修法：瞬态失败（连接级 / 5xx / 429）有界重试自愈。
+//
+// 安全边界（[[retry-must-not-wrap-paid-submit]] 铁律）：此重试**只**裹免费的素材上传端点（apimart
+// uploads / KIE file-upload / litterbox），绝不裹付费生成提交（那在 vendorHttp.requestJson，另有控制）。
+// 重试不会二次扣费——上传不计费、且失败的上传根本没产出可计费结果。
+const ASSET_UPLOAD_MAX_ATTEMPTS = 3;
+const ASSET_UPLOAD_RETRY_BASE_MS = 400;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// 终态错误（4xx 鉴权/请求问题）包一层标记 → 立即冒泡不重试，区别于连接级瞬态错误。
+class NonRetryableUploadError extends Error {
+  constructor(readonly original: Error) {
+    super(original.message);
+    this.name = "NonRetryableUploadError";
+  }
+}
+
+function uploadErrorDetail(json: unknown): string {
+  const record = json && typeof json === "object" ? (json as Record<string, unknown>) : {};
+  return [record.msg, record.message, record.error].find((value): value is string => typeof value === "string" && value.length > 0) ?? "";
+}
+
+/**
+ * 跑一次上传请求并按可重试性分诊；瞬态（连接级 / 5xx / 429）有界重试，终态（4xx）立即抛。
+ * doFetch 是 thunk：每次重试重新构造请求体（multipart 的 FormData/Blob 重建，避免复用已被读过的流）。
+ * opts.delayMs 仅供单测注 0 免真 sleep。
+ */
+export async function postWithUploadRetry(
+  doFetch: () => Promise<Response>,
+  opts: { maxAttempts?: number; delayMs?: number } = {},
+): Promise<unknown> {
+  const maxAttempts = opts.maxAttempts ?? ASSET_UPLOAD_MAX_ATTEMPTS;
+  const baseDelay = opts.delayMs ?? ASSET_UPLOAD_RETRY_BASE_MS;
+  let lastError: Error = new Error("素材上传失败：未知错误");
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await doFetch();
+      const text = await response.text();
+      let json: unknown = null;
+      try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+      if (response.ok) return json;
+      const { retryable } = categorizeVendorFailure(response.status);
+      const httpError = new Error(`素材上传失败(HTTP ${response.status})：${uploadErrorDetail(json) || "(无详情)"}`);
+      if (!retryable) throw new NonRetryableUploadError(httpError); // 4xx 鉴权/请求 → 不重试
+      lastError = httpError; // 5xx / 429 → 可重试
+    } catch (error) {
+      if (error instanceof NonRetryableUploadError) throw error.original;
+      // 连接级错误（fetch 抛、无 HTTP 响应）= 代理瞬态（127.0.0.1 reset/timeout 等）→ 可重试
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (attempt < maxAttempts) await delay(baseDelay * attempt); // 线性退避
+  }
+  throw lastError;
+}
+
+/** R1 上传通道(JSON body):固定可信端点(vendor 声明里),用普通 fetch(与 requestJson 一致)。瞬态失败有界重试。 */
 export async function postJsonForAssetUpload(url: string, headers: Record<string, string>, body: unknown): Promise<unknown> {
-  const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-  const text = await response.text();
-  let json: unknown = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = text;
-  }
-  if (!response.ok) {
-    const record = json && typeof json === "object" ? (json as Record<string, unknown>) : {};
-    const detail = [record.msg, record.message, record.error].find((value) => typeof value === "string" && value) || "";
-    throw new Error(`素材上传失败(HTTP ${response.status})：${detail || "(无详情)"}`);
-  }
-  return json;
+  const serialized = JSON.stringify(body);
+  return postWithUploadRetry(() => fetch(url, { method: "POST", headers, body: serialized }));
 }
 
 /** R1 上传通道(multipart/form-data):file 字段二进制 + 可选文本字段(如 KIE stream 的 uploadPath/fileName)。
- *  fileField 默认 "file";litterbox 等匿名托管用 "fileToUpload"。 */
+ *  fileField 默认 "file";litterbox 等匿名托管用 "fileToUpload"。瞬态失败有界重试(每次重建 FormData)。 */
 export async function postMultipartForAssetUpload(
   url: string,
   headers: Record<string, string>,
@@ -119,24 +169,14 @@ export async function postMultipartForAssetUpload(
   extraFields?: Record<string, string>,
   fileField = "file",
 ): Promise<unknown> {
-  const form = new FormData();
-  const arrayBuffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
-  form.append(fileField, new Blob([arrayBuffer], { type: contentType }), fileName);
-  for (const [key, value] of Object.entries(extraFields ?? {})) form.append(key, value);
   // 不手动设 Content-Type，fetch 会自动加 boundary。
   const { "Content-Type": _drop, ...restHeaders } = headers;
-  const response = await fetch(url, { method: "POST", headers: restHeaders, body: form });
-  const text = await response.text();
-  let json: unknown = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = text;
-  }
-  if (!response.ok) {
-    const record = json && typeof json === "object" ? (json as Record<string, unknown>) : {};
-    const detail = [record.msg, record.message, record.error].find((value) => typeof value === "string" && value) || "";
-    throw new Error(`素材上传失败(HTTP ${response.status})：${detail || "(无详情)"}`);
-  }
-  return json;
+  const arrayBuffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength) as ArrayBuffer;
+  return postWithUploadRetry(() => {
+    // 每次重试重建 FormData/Blob：Blob 由 ArrayBuffer 支撑可重读，但重建最稳（不赌流是否已被消费）。
+    const form = new FormData();
+    form.append(fileField, new Blob([arrayBuffer], { type: contentType }), fileName);
+    for (const [key, value] of Object.entries(extraFields ?? {})) form.append(key, value);
+    return fetch(url, { method: "POST", headers: restHeaders, body: form });
+  });
 }

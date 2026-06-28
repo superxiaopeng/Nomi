@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   Icon360,
+  Icon3dCubeSphere,
   IconBoxMultiple,
   IconBrush,
   IconCube,
@@ -41,7 +42,7 @@ const NODE_ICONS: Record<GenerationNodeIconKey, GenerationNodeIcon> = {
   output: IconFlag,
   panorama: Icon360,
   scene3d: IconCube,
-  model3d: IconCube,
+  model3d: Icon3dCubeSphere,
   whiteboard: IconBrush,
   audio: IconWaveSine,
 }

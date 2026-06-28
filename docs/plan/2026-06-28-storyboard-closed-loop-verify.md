@@ -20,6 +20,16 @@
 > 4. **Stage 3** 镜头字段拆静态×动态（可选后置）。
 >
 > ---
+> ## 自审「测评发现的问题」（2026-06-28，real-machine 走查前的代码级审查）
+> 真实生成 GUI 走查在当前沙箱被**环境硬堵**（三路全证伪：① Playwright `electron.launch` 崩——仓库自带 `test:e2e` 同样 `ws 1006` 死，非本特性代码问题；② 裸 electron 解不开 key——用户 key 是打包版 Nomi.app 代码签名加密、Keychain ACL 只放行真 app；③ key 本身 safeStorage 加密，node 直连不可行）。故真模型/真生成验证须在**真 Nomi.app 内**跑（用户交互 或 computer-use 驱动可见窗口）。下列问题来自代码级自审：
+> - **P-V1 身份轴对照偏弱**：`gatherShotVerifyInputs` 喂给模型的锚描述 = 锚节点的 `prompt`（= `buildAnchorSheetPrompt` 的版面指令「角色定妆参考卡。白色中性背景…」），不是干净的外观描述；且**没有把锚卡图片一并 attach**，模型只能「文字描述 vs 帧」比，做不到真正的人脸比对。身份轴 v1 实为「主体是否符合文字描述」，非视觉身份比对。改进方向：attach 锚卡图 + 帧双图，或存干净 appearance 描述。
+> - **P-V2 闭环对单镜重生不闭合**：re-verify 只挂在 `runPlanWithToasts`（批量）。修复消息已指示 agent 走 `run_generation_batch`（→闭合），但若 agent 用单镜 `regenerateNodeInPlace` 修 → 不触发 re-verify。健壮性缺口（单镜重生后未自动复验）。
+> - **P-V3 verify 失败 = 静默当「无偏差」**：所有镜 judge 失败（非多模态/解析失败）→ `setDeviations([])` → 无卡 + 预算回满，与「真收敛」不可区分。方向安全（不误报），但 verify 整体失效时用户无感。
+> - **P-V4 「可关」无 UI**：plan 说 verify 默认开可关，目前只有 `localStorage` flag（`isShotVerifyEnabled`），无设置开关。需补设置项。
+> - **P-V5 chat 模式工具仍在场**：`agentChatV2` 不读 `payload.mode`，verify 调用仍带画布工具 → 模型理论上可能吐 tool call 而非 JSON。已用「不要调用任何工具，只输出 JSON」prompt 缓解，残留风险待真机观测。
+> 这些**不在沙箱里盲改**（P3：模型面的质量调整须真机验证，否则是没验过的猜测）；留待真 Nomi.app 走查时按真实表现定优先级再改。
+>
+> ---
 > 原始方案（下方不变）：状态：方案已拍板两个岔路（半自动·每轮确认 / verify 默认开）
 > 来源：2026-06-28 论文雷达（HollyWood Town/OmniAgent 2510.22431、MUSE 2602.03028、DramaDirector 2606.24107）+ 真实代码勘查（见下「现状勘查」每条 file:line）
 > 关联记忆：[[retry-must-not-wrap-paid-submit]]、[[reconcile-edge-drop-and-card-redesign]]、[[memory-system-redesign-2026-06-20]]、[[staging-reference-tool-shipped]]、[[storyboard-image-first-convergence]]
