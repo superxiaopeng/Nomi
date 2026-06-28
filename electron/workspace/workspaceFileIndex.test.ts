@@ -44,6 +44,22 @@ describe("workspace file index", () => {
     expect(exportsNode?.children?.[0]).toMatchObject({ name: "movie.mp4", relativePath: "exports/movie.mp4", kind: "video", contentType: "video/mp4" });
   });
 
+  it("classifies uploaded audio formats beyond mp3/wav (the silent-vanish bug)", () => {
+    // 根因回归:此前 .m4a/.aac/.ogg/.flac 不在分类表 → kind "file" → 被素材池过滤 → 上传成功却消失。
+    const root = makeTempDir();
+    write(root, "audio/voice.m4a", "x");
+    write(root, "audio/track.flac", "x");
+    write(root, "audio/clip.aac", "x");
+    write(root, "audio/loop.ogg", "x");
+
+    const audioDir = listWorkspaceFiles({ rootPath: root }).items.find((n) => n.relativePath === "audio");
+    const byName = Object.fromEntries((audioDir?.children || []).map((n) => [n.name, n]));
+    expect(byName["voice.m4a"]).toMatchObject({ kind: "audio", contentType: "audio/mp4" });
+    expect(byName["track.flac"]).toMatchObject({ kind: "audio", contentType: "audio/flac" });
+    expect(byName["clip.aac"]).toMatchObject({ kind: "audio", contentType: "audio/aac" });
+    expect(byName["loop.ogg"]).toMatchObject({ kind: "audio", contentType: "audio/ogg" });
+  });
+
   it("skips .git node_modules .nomi/cache and hidden folders by default", () => {
     const root = makeTempDir();
     write(root, ".git/config");
