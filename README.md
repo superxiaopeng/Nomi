@@ -15,7 +15,7 @@
   ·
   <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ GitHub 下载</strong></a>
   ·
-  <a href="https://pan.quark.cn/s/8743e79e91f6"><strong>📦 网盘下载</strong></a>
+  <a href="https://pan.quark.cn/s/d3322c17e7b6"><strong>📦 网盘下载</strong></a>
   ·
   <a href="docs/user-guide.md">使用指南</a>
   ·
@@ -41,7 +41,7 @@
 
 > 不知道自己哪种 Mac？左上角苹果图标 → 关于本机 → 看「芯片」。
 >
-> 🇨🇳 **打不开 GitHub / 下载慢？用夸克网盘**（当前 v0.15.0）：<https://pan.quark.cn/s/8743e79e91f6>　·　🌐 也可上[官网](https://nomiaqm.com)自动识别系统下载。
+> 🇨🇳 **打不开 GitHub / 下载慢？用夸克网盘**（当前 v0.15.0）：<https://pan.quark.cn/s/d3322c17e7b6>　·　🌐 也可上[官网](https://nomiaqm.com)自动识别系统下载。
 
 <details>
 <summary><b>第一次打开提示「未知开发者 / 已损坏」？</b>（还没买签名证书，正常现象，点开看绕过方法）</summary>
