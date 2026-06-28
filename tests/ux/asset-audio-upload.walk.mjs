@@ -13,7 +13,11 @@ const repoRoot = process.cwd()
 const shotsDir = path.join(repoRoot, 'tests/ux/shots/asset-audio')
 fs.mkdirSync(shotsDir, { recursive: true })
 const AUDIO = path.join(repoRoot, '.tmp', 'probe-tone-3s.mp3')
-if (!fs.existsSync(AUDIO)) { console.log('缺 .tmp/probe-tone-3s.mp3，先用 ffmpeg 造一个'); process.exit(1) }
+// 回归 bug：.flac/.m4a 曾「上传成功却静默蒸发」(workspaceFileIndex 只认 mp3/wav)。这里一并喂进去验。
+const AUDIO_FLAC = path.join(repoRoot, '.tmp', 'probe-tone-3s.flac')
+const AUDIO_M4A = path.join(repoRoot, '.tmp', 'probe-tone-3s.m4a')
+const fixtures = [AUDIO, AUDIO_FLAC, AUDIO_M4A].filter((p) => fs.existsSync(p))
+if (!fixtures.length) { console.log('缺 .tmp/probe-tone-3s.{mp3,flac,m4a}，先用 ffmpeg 造（见文件头注释）'); process.exit(1) }
 
 const userData = path.join(repoRoot, '.tmp', 'nomi-asset-audio')
 fs.rmSync(userData, { recursive: true, force: true })
@@ -26,7 +30,9 @@ function check(name, ok, detail) {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
-const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data-dir=${userData}`], cwd: repoRoot, env: { ...process.env } })
+// NOMI_E2E=1：跳过 COOP/COEP cross-origin isolation。该 isolation(2026-06-27 为 ONNX SharedArrayBuffer 引入)
+// 会卡死 Playwright 的 CDP target 握手 → electron.launch 永远 timeout。仅走查时关,生产不受影响。
+const app = await electron.launch({ executablePath: require('electron'), args: ['.', `--user-data-dir=${userData}`], cwd: repoRoot, env: { ...process.env, NOMI_E2E: '1' } })
 let win = await app.firstWindow()
 const getWin = () => {
   const live = app.windows().filter((w) => !w.isClosed())
@@ -73,15 +79,16 @@ try {
   const accept = await getWin().locator('input[aria-label="素材文件选择器"]').getAttribute('accept').catch(() => null)
   const a = accept || ''
   check('accept 含音频显式扩展名(.mp3/.wav)', a.includes('.mp3') && a.includes('.wav'), `accept="${a}"`)
+  check('accept 含曾蒸发的音频格式(.flac/.m4a)', a.includes('.flac') && a.includes('.m4a'), `accept="${a}"`)
   check('accept 含视频显式扩展名(.mp4/.mov)', a.includes('.mp4') && a.includes('.mov'), `accept="${a}"`)
   await snap('asset-library-open')
 
-  // 喂真 mp3（绕原生对话框）→ 音频走项目文件导入
-  await getWin().locator('input[aria-label="素材文件选择器"]').setInputFiles(AUDIO).catch((e) => console.log('setInputFiles err', e.message))
-  await getWin().waitForTimeout(5000) // 落盘 + workspace 重拉
+  // 喂真音频（绕原生对话框）→ 音频走项目文件导入。一次喂 mp3+flac+m4a，验各格式都进库。
+  await getWin().locator('input[aria-label="素材文件选择器"]').setInputFiles(fixtures).catch((e) => console.log('setInputFiles err', e.message))
+  await getWin().waitForTimeout(6000) // 落盘 + workspace 重拉
   await snap('after-audio-upload')
 
-  // 切到「音频」tab，确认音频素材出现
+  // 切到「音频」tab，确认每个格式都出现（含曾静默蒸发的 .flac/.m4a）
   await clickText('[role="tab"]', '音频', 1200)
   await getWin().waitForTimeout(1200)
   const probe = await getWin().evaluate(() => {
@@ -92,7 +99,11 @@ try {
     const names = spans.filter((t) => /probe-tone/.test(t))
     return { found: badgeCount > 0 || names.length > 0, badgeCount, names }
   }).catch((e) => ({ found: false, why: e.message }))
-  check('上传的音频出现在「音频」tab', probe.found, `badges=${probe.badgeCount}, names=${JSON.stringify(probe.names)}`)
+  const names = probe.names || []
+  check('上传的音频出现在「音频」tab', probe.found, `badges=${probe.badgeCount}, names=${JSON.stringify(names)}`)
+  check('.mp3 进库', names.some((t) => t.endsWith('.mp3')), JSON.stringify(names))
+  check('.flac 进库（修复前会静默蒸发）', names.some((t) => t.endsWith('.flac')), JSON.stringify(names))
+  check('.m4a 进库（修复前会静默蒸发）', names.some((t) => t.endsWith('.m4a')), JSON.stringify(names))
   await snap('audio-tab')
 } catch (e) {
   console.log('WALK ERROR:', e.stack || e.message)

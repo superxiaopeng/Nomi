@@ -1,12 +1,5 @@
 import React from 'react'
-import {
-  IconCheck,
-  IconCopy,
-  IconDownload,
-  IconInfoCircle,
-  IconMaximize,
-  IconUpload,
-} from '@tabler/icons-react'
+import { IconCheck, IconCopy, IconDownload, IconInfoCircle, IconMaximize, IconUpload } from '@tabler/icons-react'
 import ProvenancePanel from './ProvenancePanel'
 import { resolveNodeRenderKind, isCardRenderKind } from './resolveRenderKind'
 import ShotMountBadges from './render/ShotMountBadges'
@@ -576,9 +569,15 @@ function BaseGenerationNodeImpl({
       {status === 'error' && node.error ? (
         <NodeErrorReport
           message={node.error}
-          onRetry={() => {
-            void (node.meta?.retryableImport === true ? retryLocalAssetImport(node.id) : confirmAndRunNode(node.id))
-          }}
+          onRetry={
+            isAssetKind && node.meta?.source === 'clipboard-url'
+              ? undefined
+              : () => {
+                  void (node.meta?.retryableImport === true
+                    ? retryLocalAssetImport(node.id)
+                    : confirmAndRunNode(node.id))
+                }
+          }
         />
       ) : null}
 
@@ -615,6 +614,9 @@ function BaseGenerationNodeImpl({
           // 棋盘格占位底纹只在「未生成」态出现；有结果后节点尺寸已贴合图片比例，
           // 不再露出底纹，避免图片外面套一层框。
           !hasResult && STRIPED_BG_CLASS,
+          isGenerating &&
+            node.progress?.phase === 'clipboard-import' &&
+            'ring-nomi-accent/50 [animation:_remove-bg-pulse_1.2s_ease-in-out_infinite]',
           // [DESIGN-CARDS-07] 卡片模式隐藏 preview div；C5 文本节点同理。
           (isCardKind || isTextKind) && 'hidden',
         )}
@@ -747,10 +749,7 @@ function BaseGenerationNodeImpl({
 
       {isGenerating && !isRemoveBackgroundPending ? <GeneratingOverlay /> : null}
       {showSideTimelineDrag ? (
-        <SideTimelineDragHandle
-          onAddAtPlayhead={handleAddToTimelineAtPlayhead}
-          onDragStart={handleTimelineDragStart}
-        />
+        <SideTimelineDragHandle onAddAtPlayhead={handleAddToTimelineAtPlayhead} onDragStart={handleTimelineDragStart} />
       ) : null}
 
       {/* composer：生成类节点 + **单选**时浮出。多选(框选)一律不挂——否则每个选中节点都弹自己的

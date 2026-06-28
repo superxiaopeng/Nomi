@@ -654,17 +654,25 @@ function buildContentSecurityPolicy(): string {
   ].join("; ");
 }
 
+// COOP/COEP 开 cross-origin isolation（ONNX 的 SharedArrayBuffer 需要），但它会让 Playwright 的
+// CDP target 握手卡死（_electron.launch / connectOverCDP 都连不上）——2026-06-27 起 R13 走查全挂的根因。
+// 仅 E2E 走查时（NOMI_E2E=1）跳过这两个头，让 Playwright 能附着；生产/正常运行不受影响。
+// 注：只关 isolation，CSP 仍照常注入（安全基线不降）。ONNX 多线程在 E2E 下退单线程，与走查无关。
+const SKIP_CROSS_ORIGIN_ISOLATION = process.env.NOMI_E2E === "1";
+
 function installContentSecurityPolicy(targetSession: Electron.Session): void {
   const csp = buildContentSecurityPolicy();
-  const crossOriginIsolationDisabled = lowMemoryMode || process.env.NOMI_DISABLE_CROSS_ORIGIN_ISOLATION === "1";
+  const crossOriginIsolationDisabled =
+    lowMemoryMode ||
+    SKIP_CROSS_ORIGIN_ISOLATION ||
+    process.env.NOMI_DISABLE_CROSS_ORIGIN_ISOLATION === "1";
   targetSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders: Record<string, string[]> = {
       ...details.responseHeaders,
       "Content-Security-Policy": [csp],
     };
     if (!crossOriginIsolationDisabled) {
-      // ONNX Runtime Web needs SharedArrayBuffer for multi-threaded inference.
-      // SharedArrayBuffer requires cross-origin isolation in Electron renderer.
+      // ONNX Runtime Web 需要 SharedArrayBuffer 才能多线程推理；SharedArrayBuffer 要求 renderer 跨源隔离。
       responseHeaders["Cross-Origin-Opener-Policy"] = ["same-origin"];
       responseHeaders["Cross-Origin-Embedder-Policy"] = ["require-corp"];
     }

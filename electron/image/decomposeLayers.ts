@@ -7,6 +7,7 @@ import { assertAndConsumeSpendGrant } from "../spendGrant";
 import { resolveLocalAsset } from "../catalog/assetLocalization";
 import { readNomiLocalAsset, postJsonForAssetUpload, postMultipartForAssetUpload } from "../assets/localAssetFile";
 import { requestJson } from "../vendor/vendorHttp";
+import { importRemoteAsset } from "../runtime";
 import {
   REPLICATE_VENDOR_SEED,
   REPLICATE_DECOMPOSE_PREDICTIONS_PATH,
@@ -19,10 +20,12 @@ export type DecomposeLayersPayload = {
   imageUrl?: string;
   numLayers?: number;
   grantId?: string;
+  projectId?: string;
 };
 
-// 返回远端图层直链（replicate.delivery，临时）。渲染层拿到后逐张 persistNodeImageFile 落地成 nomi-local
-// （同 removeBackground 套路），避免主进程耦合项目落地链路。
+// 图层在主进程就地落盘成 nomi-local（hardenedFetch 下载 replicate.delivery 临时直链 → 写进项目资产），
+// 渲染层拿到即可直接用、秒开白板，不再逐张走代理 fetch+落盘（那条慢到分钟级、无进度）。
+// 无 projectId 时兜底返回远端直链（渲染层自行落地，旧路径）。
 export type DecomposeLayersResult = { layers: string[] };
 
 function asString(v: unknown): string {
@@ -81,5 +84,25 @@ export async function decomposeLayers(payload: DecomposeLayersPayload): Promise<
 
   const remoteLayers = parseDecomposeOutput(res.output);
   if (remoteLayers.length === 0) throw new Error("拆解未返回任何图层");
-  return { layers: remoteLayers };
+
+  // 主进程就地落地：把临时直链下载进项目，返回 nomi-local（持久、同源、白板合成不污染画布）。
+  const projectId = asString(payload?.projectId);
+  if (!projectId) return { layers: remoteLayers };
+  const localized = await Promise.all(
+    remoteLayers.map(async (url, index) => {
+      try {
+        const asset = (await importRemoteAsset({
+          projectId,
+          url,
+          kind: "generated",
+          ownerNodeId: nodeId || null,
+          fileName: `decompose-${nodeId || "layer"}-${index}.png`,
+        })) as { data?: { url?: string } } | null;
+        return asString(asset?.data?.url) || url;
+      } catch {
+        return url; // 单张落地失败兜底用远端直链，不拖垮整体
+      }
+    }),
+  );
+  return { layers: localized };
 }
