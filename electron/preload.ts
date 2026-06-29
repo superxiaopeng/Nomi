@@ -170,7 +170,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
       }>,
     guessKinds: (payload: unknown) =>
       ipcRenderer.invoke("nomi:onboarding:guess-kinds", payload) as Promise<{
-        kinds: Record<string, "text" | "image" | "video">;
+        kinds: Record<string, "text" | "image" | "video" | "audio">;
       }>,
     testConnection: (payload: unknown) =>
       ipcRenderer.invoke("nomi:onboarding:test-connection", payload) as Promise<{

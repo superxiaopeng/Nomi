@@ -110,7 +110,7 @@ export function registerOnboardingIpc(): void {
   // 图片/视频/文本（单一真相源 guessModelKind），返回给 UI 预填「类型」下拉，用户可改。
   ipcMain.handle("nomi:onboarding:guess-kinds", async (_event, payload: Record<string, unknown>) => {
     const ids = Array.isArray(payload?.ids) ? (payload.ids as unknown[]).map((x) => String(x || "")) : [];
-    const kinds: Record<string, "text" | "image" | "video"> = {};
+    const kinds: Record<string, "text" | "image" | "video" | "audio"> = {};
     for (const id of ids) if (id) kinds[id] = guessModelKind(id);
     return { kinds };
   });
