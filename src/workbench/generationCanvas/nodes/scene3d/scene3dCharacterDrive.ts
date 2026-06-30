@@ -119,6 +119,19 @@ export function locomotionAnimationClip(locomotionClip: string | undefined): str
   return locomotionClip
 }
 
+// #4「走→蹲→走」录制：点静态动作（蹲/挥手）→ locomotionClip 置 ''（CharacterDriveController 冻结位移、
+// 显示静态姿势），录制器同刻打了一条 static-pose 关键帧。但「按 WASD 恢复走路」只把 locomotionClip 从 ''
+// 接回 walk/run（onLocomotionChange），**没有**往 pose track 打事件 → step-hold 下 squat 关键帧永久 hold
+// 到片尾（导出「蹲到底」）。这个纯谓词判断一次 locomotion 变化是否是「从静态动作恢复到走/跑」——是则录制器
+// 该补一条 base 关键帧（pose/presetId 皆缺省），让 frameMotionSource 在恢复时刻判回 locomotion（腿重新迈）。
+// 仅 '' → 非空 locomotion 才算恢复；walk↔run、→idle、首次进入（prev 非 '')都不补（不污染轨道）。
+export function shouldRecordLocomotionResume(
+  prevClip: string | undefined,
+  nextClip: string | undefined,
+): boolean {
+  return prevClip === '' && Boolean(nextClip)
+}
+
 // 把 header「速度」滑块(flySpeed，1–16) 线性映射到角色走位地面速度(米/秒)。
 // 滑块越高走得越快，**高档要越过 run 阈值(3.2)** 触发奔跑、低档保持走路；随滑块连续 derive，不钉死。
 // clamp 到滑块范围后归一化，再在「基速×低端缩放 ~ 基速×高端缩放」间线性插值。

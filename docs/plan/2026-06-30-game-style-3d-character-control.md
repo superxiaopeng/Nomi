@@ -87,3 +87,11 @@
 - **view-dependent 伪影**:粗渲染若穿模/悬空会被下游继承(呼应假人姿势校准记忆)→ N1 走位要复用现有几何自检(落地/避让)。
 - **Mixamo 冻结**:动作素材本地缓存,别在线依赖;备选 AccuRig。
 - **巨壳**:`Scene3DFullscreen.tsx` 已 777 行,新模式严禁内联进去(R9)。
+
+## 10. 可用性实测修复(2026-06-30,基于 `2026-06-30-game-3d-usability-findings.md`)
+
+3 路真机走查暴露的痛点,本轮治根因 + 真机抽帧验证:
+
+- **#3 录制相机不跟随角色(P0,已修)**:operate/录制态下 OrbitControls 轴心每帧跟随被操控角色实时世界位置(`scene3dViewControllers.tsx` 新增 `followObjectId`:算角色本帧移动增量,把 camera+orbit target 同步平移同一增量 → 取景偏移不变、角色钉在画面同一相对位,用户照旧可绕看/拉近)。仅 `!freeLook && followObjectId` 生效,退出即停(零回归)。验:`tests/ux/scene3d-camera-follow.walk.mjs`——走一长段 + 拖 orbit,角色质心 NDC x≈0 全程在框内(6/6)。
+- **#4「走→蹲→走」蹲到片尾(P1,已修)**:两处根因。① 生产者:录制中「按 WASD 从静态动作恢复走路」时往 pose track 补一条 base 关键帧(`shouldRecordLocomotionResume` 纯函数判定 + `useScene3DCharacterDrive` 包 `setLocomotionClip` + `useScene3DTakeRecorder.recordPoseResume`)→ poseTrack 落 `[base→squat→base]`。② 离屏渲染:从静态动作切回 locomotion 那一帧先 `resetMannequinSkeletonToRest` 清掉 walk clip 不驱动的骨上残留 squat 旋转(`Scene3DTrajectoryCapture` 按 `lastSource` 侦测 static→locomotion 转换),否则导出仍停在蹲姿。验:`tests/ux/scene3d-walk-squat-walk.walk.mjs`——抽帧人眼确认 起立走→蹲→再起立走(末帧不再蹲)。
+- **#5 possess 相机(WASD 飞相机录运镜):本轮未做,诚实标后续**。#3 已让「绕拍跟随」成立(角色不飞出框、可绕看),核心受挫点已解;#5 是另开「操控相机=WASD 飞 + 录相机轨迹」的新模式 + UI 入口,工程量大且与角色 possess 是平行的第二套心智,留独立切片做,避免半成品。

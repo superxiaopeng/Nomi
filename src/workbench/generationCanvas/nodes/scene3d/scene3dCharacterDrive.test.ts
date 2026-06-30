@@ -11,6 +11,7 @@ import {
   groundSpeedForFlySpeed,
   isArmLocomotionTrackName,
   locomotionAnimationClip,
+  shouldRecordLocomotionResume,
   CHARACTER_DRIVE_FLY_SPEED_MIN,
   CHARACTER_DRIVE_FLY_SPEED_MAX,
 } from './scene3dCharacterDrive'
@@ -251,5 +252,29 @@ describe('locomotionAnimationClip（#9 idle 不靠 clip）', () => {
   it('walk / run → 原 clip 名（交给 mixer 驱动腿）', () => {
     expect(locomotionAnimationClip('walk')).toBe('walk')
     expect(locomotionAnimationClip('run')).toBe('run')
+  })
+})
+
+describe('shouldRecordLocomotionResume（#4 走→蹲→走：恢复走路时补 base 关键帧）', () => {
+  it("从静态动作('')恢复到 walk/run → 该补 base 关键帧", () => {
+    expect(shouldRecordLocomotionResume('', 'walk')).toBe(true)
+    expect(shouldRecordLocomotionResume('', 'run')).toBe(true)
+    expect(shouldRecordLocomotionResume('', 'idle')).toBe(true)
+  })
+
+  it("从静态动作('')恢复但 next 仍是 '' → 不补（没真恢复）", () => {
+    expect(shouldRecordLocomotionResume('', '')).toBe(false)
+    expect(shouldRecordLocomotionResume('', undefined)).toBe(false)
+  })
+
+  it('walk↔run 桶切换、idle→walk（prev 非空）→ 不补（不是从静态动作恢复）', () => {
+    expect(shouldRecordLocomotionResume('walk', 'run')).toBe(false)
+    expect(shouldRecordLocomotionResume('run', 'walk')).toBe(false)
+    expect(shouldRecordLocomotionResume('idle', 'walk')).toBe(false)
+    expect(shouldRecordLocomotionResume('walk', '')).toBe(false)
+  })
+
+  it('首次进入（prev undefined）→ 不补', () => {
+    expect(shouldRecordLocomotionResume(undefined, 'walk')).toBe(false)
   })
 })
