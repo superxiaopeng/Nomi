@@ -37,7 +37,11 @@ try {
   win.on('pageerror', (e) => errors.push(String(e)))
   await win.waitForLoadState('domcontentloaded')
   await win.waitForTimeout(1800)
+  // 关开屏介绍（每次跑用全新 userData → splash 必出，会拦点击）。优先点「跳过」，兜底 Escape。
+  const splashSkip = win.locator('[data-splash-skip="true"]').first()
+  if ((await splashSkip.count()) > 0) await splashSkip.click().catch(() => {})
   await win.keyboard.press('Escape').catch(() => {})
+  await win.locator('.nomi-splash').first().waitFor({ state: 'detached', timeout: 6000 }).catch(() => {})
 
   // 开项目
   const card = win.locator('[data-project-card]').first()

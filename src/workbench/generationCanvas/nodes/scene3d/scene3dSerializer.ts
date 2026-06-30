@@ -6,6 +6,7 @@ import type {
   Scene3DGeometry,
   Scene3DLightType,
   Scene3DObject,
+  Scene3DPoseKeyframe,
   Scene3DState,
   Scene3DTrajectory,
   Scene3DTrajectoryBinding,
@@ -15,6 +16,7 @@ import type {
   Scene3DTrajectoryPoint,
   Scene3DVector3,
 } from './scene3dTypes'
+import { buildPoseTrack } from './scene3dPoseTrack'
 
 const GEOMETRIES = new Set<Scene3DGeometry>(['box', 'sphere', 'cylinder', 'plane'])
 const LIGHT_TYPES = new Set<Scene3DLightType>(['point', 'directional', 'spot'])
@@ -73,6 +75,24 @@ function poseValue(value: unknown): Record<string, Scene3DVector3> | undefined {
     return next
   }, {})
   return Object.keys(pose).length > 0 ? pose : undefined
+}
+
+function poseTrackValue(value: unknown): Scene3DPoseKeyframe[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const events = value.flatMap((raw) => {
+    const record = asRecord(raw)
+    const time = finiteNumber(record.time, Number.NaN)
+    if (!Number.isFinite(time) || time < 0) return []
+    return [{
+      time,
+      presetId: typeof record.presetId === 'string' ? record.presetId : undefined,
+      pose: poseValue(record.pose),
+    }]
+  })
+  if (events.length === 0) return undefined
+  // 经 buildPoseTrack 归一（排序 + 塌合 + clone），坏/乱序持久数据也收敛成 canonical form。
+  const track = buildPoseTrack(events)
+  return track.length > 0 ? track : undefined
 }
 
 function createScene3DId(prefix: string): string {
@@ -186,6 +206,7 @@ function normalizeObject(value: unknown, index: number): Scene3DObject | null {
     crowdColumns: Math.min(CROWD_MAX_AXIS, Math.max(1, finiteInteger(raw.crowdColumns, 1))),
     crowdSpacing: Math.min(10, Math.max(0.2, finiteNumber(raw.crowdSpacing, 1.2))),
     pose: poseValue(raw.pose),
+    poseTrack: poseTrackValue(raw.poseTrack),
     children: Array.isArray(raw.children) ? raw.children.filter((id): id is string => typeof id === 'string') : undefined,
   }
 }
@@ -413,6 +434,11 @@ export function cloneScene3DState(state: Scene3DState): Scene3DState {
       rotation: [...object.rotation],
       scale: [...object.scale],
       pose: object.pose ? Object.fromEntries(Object.entries(object.pose).map(([boneName, rotation]) => [boneName, [...rotation] as Scene3DVector3])) : undefined,
+      poseTrack: object.poseTrack ? object.poseTrack.map((keyframe) => ({
+        time: keyframe.time,
+        presetId: keyframe.presetId,
+        pose: keyframe.pose ? Object.fromEntries(Object.entries(keyframe.pose).map(([boneName, rotation]) => [boneName, [...rotation] as Scene3DVector3])) : undefined,
+      })) : undefined,
       children: object.children ? [...object.children] : undefined,
     })),
     cameras: state.cameras.map((camera) => ({

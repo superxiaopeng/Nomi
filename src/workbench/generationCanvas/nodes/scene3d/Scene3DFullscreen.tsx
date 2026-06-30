@@ -428,6 +428,13 @@ export default function Scene3DFullscreen({
     stateRef,
     onRecorded: handleRecordTake,
   })
+
+  // 点动作库：即时改假人姿势（S1）+ 若正在录 take，记一条带时间戳的动作事件（pose-over-time 生产者）。
+  // 录制器内部 no-op 非录制态，故非录制时纯走 applyActionPreset，零副作用。
+  const handleApplyActionPreset = React.useCallback((presetId: string) => {
+    characterDrive.applyActionPreset(presetId)
+    takeRecorder.recordPoseEvent(presetId)
+  }, [characterDrive, takeRecorder])
   const {
     selectTrajectoryForMode,
     selectSceneTrajectory,
@@ -734,7 +741,7 @@ export default function Scene3DFullscreen({
               onStart: takeRecorder.startRecording,
               onStop: takeRecorder.stopRecording,
             } : undefined}
-            onApplyPreset={characterDrive.applyActionPreset}
+            onApplyPreset={handleApplyActionPreset}
             onExitPossess={characterDrive.exitPossess}
             onAddObject={addObject}
             onAddCrowd={addCrowd}

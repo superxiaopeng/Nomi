@@ -14,6 +14,7 @@ import {
   cloneScene3DState,
 } from './scene3dSerializer'
 import { ROLE_COLOR_SEQUENCE } from './scene3dConstants'
+import { buildPoseTrack, type Scene3DPoseEvent } from './scene3dPoseTrack'
 import type {
   Scene3DState,
   Scene3DTrajectory,
@@ -128,6 +129,8 @@ export type RecordedTake = {
   possessedObjectId: string
   characterSamples: TakeSample[]
   cameraSamples: TakeSample[]
+  // 动作切换事件（time 已归一为录制起点起算的秒，与 binding/播放头同时钟）。缺省/单帧 = 全程同一姿势。
+  poseEvents?: Scene3DPoseEvent[]
   durationSeconds: number
 }
 
@@ -152,6 +155,11 @@ export function buildRecordedTakeScene(base: Scene3DState, take: RecordedTake): 
     `${character.name} 走位`,
   )
   if (!characterTrajectory) return null
+
+  // 动作随时间变化：把录制的切动作事件压成 pose 轨道挂到角色（≥2 个关键帧才挂——单帧=全程同姿势=老行为）。
+  // 离屏 stepper 据此在每个关键帧边界把假人骨架重摆到该时刻动作（pose-over-time），与位移轨迹同一时间线。
+  const poseTrack = buildPoseTrack(take.poseEvents ?? [])
+  character.poseTrack = poseTrack.length >= 2 ? poseTrack : undefined
 
   const trajectories: Scene3DTrajectory[] = [characterTrajectory]
   const bindings: Scene3DTrajectoryBinding[] = [
