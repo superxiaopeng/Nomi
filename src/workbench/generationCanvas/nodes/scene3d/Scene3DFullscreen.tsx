@@ -41,6 +41,7 @@ import {
 import { SceneObjectList } from './scene3dInspector'
 import { TrajectoryListPanel } from './scene3dTrajectoryListPanel'
 import { SceneContent } from './scene3dSceneContent'
+import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import { CharacterPossessButton, Scene3DBottomBar } from './scene3dCharacterActionBar'
 import { useScene3DCharacterDrive } from './useScene3DCharacterDrive'
 import { useScene3DTakeRecorder } from './useScene3DTakeRecorder'
@@ -629,7 +630,10 @@ export default function Scene3DFullscreen({
             dpr={[1, 2]}
             frameloop={trajectory.isPlaying || trajectory.timelineOpen || takeRecorder.isRecording ? 'always' : 'demand'}
             gl={{ antialias: true, preserveDrawingBuffer: false }}
-            onCreated={({ camera }) => applyEditorCameraPose(camera, initialEditorCameraRef.current)}
+            onCreated={({ camera, gl, invalidate }) => {
+              applyEditorCameraPose(camera, initialEditorCameraRef.current)
+              attachWebGLContextRecovery(gl.domElement, invalidate)
+            }}
             onPointerMissed={clearSelection}
           >
             <SceneContent

@@ -7,6 +7,7 @@ import { applySceneCameraPose, crowdCount } from './scene3dMath'
 import { SCENE3D_ASPECT_OPTIONS, SCENE3D_ASPECT_RATIOS } from './scene3dTypes'
 import type { Scene3DAspectRatio, Scene3DCamera, Scene3DObject, Scene3DState } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
+import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import {
   Scene3DMeshGeometry,
   ProceduralMannequin,
@@ -204,6 +205,7 @@ export function CameraPreview({
             dpr={[1, 1.5]}
             frameloop="demand"
             gl={{ antialias: true, preserveDrawingBuffer: false }}
+            onCreated={({ gl, invalidate }) => attachWebGLContextRecovery(gl.domElement, invalidate)}
           >
             <CameraPreviewScene
               state={state}
