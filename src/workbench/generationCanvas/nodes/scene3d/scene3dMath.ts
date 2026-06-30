@@ -273,6 +273,20 @@ export function rememberMannequinRestPose(root: THREE.Object3D): void {
   })
 }
 
+// 把所有骨复位到 bind rest（仅清旋转，不叠加任何 pose offset）。
+// 离屏从静态动作（如蹲）切回 locomotion 时调一次：mixer 的 walk clip 只驱动它 track 覆盖的骨，
+// squat 残留在「walk 不动的骨」（脊/头/部分腿链终端）上会让导出停在蹲姿。先 reset 清掉残留，
+// 再让 mixer 在干净 rest 上叠加迈腿，确保「蹲→走」真的站起来走（治 #4 离屏侧根因）。
+export function resetMannequinSkeletonToRest(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Bone)) return
+    const restRotation = object.userData[MANNEQUIN_REST_ROTATION_KEY] as Scene3DVector3 | undefined
+    if (!restRotation) return
+    object.rotation.set(restRotation[0], restRotation[1], restRotation[2])
+  })
+  root.updateMatrixWorld(true)
+}
+
 export function applyMannequinSkeletonPose(root: THREE.Object3D, pose?: Record<string, Scene3DVector3>): void {
   root.traverse((object) => {
     if (!(object instanceof THREE.Bone)) return

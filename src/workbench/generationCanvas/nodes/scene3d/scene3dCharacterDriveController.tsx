@@ -165,9 +165,8 @@ export function CharacterDriveController({
       }
     }
 
-    // TODO(S1 可选项·相机跟随未做)：操控态下让相机平滑跟在角色身后/上方。S1 暂不做——
-    // 当前 viewLocked=true 下 OrbitControls 仍可用，用户可手动绕看角色；自动跟随涉及与 OrbitControls
-    // target/damping 的协调，留到后续切片，避免与现有相机链路抢控制权（不动项 R5）。
+    // 相机跟随由 Scene3DControls 的 followObjectId useFrame 负责（#3）：orbit 轴心+相机每帧随本 group
+    // 世界位置同步平移，角色不飞出框，用户照旧可绕看/拉近。本控制器只管直驱 group，不碰相机链路。
 
     // 直驱 group（贴地：y 锁在落地时的基准）。
     if (group) {

@@ -255,6 +255,7 @@ export function SceneContent({
         speed={flySpeed}
         target={state.editorCamera.target}
         keyboardDisabled={Boolean(possessedObject)}
+        followObjectId={possessedObject?.id ?? null}
         navigationLockedRef={navigationLockedRef}
         onClearSelection={() => onSelect(null)}
         onWheelNavigation={onWheelNavigation}

@@ -405,6 +405,7 @@ export default function Scene3DFullscreen({
     })
   }, [patchCamera, readOnly, selectedCamera, trajectory.activeTrajectoryIds, trajectory.playheadRef])
 
+  const recordPoseResumeRef = React.useRef<() => void>(() => {}) // #4 ref 转发破环 drive↔recorder 初始化先后
   const characterDrive = useScene3DCharacterDrive({
     objects: state.objects,
     selection,
@@ -415,11 +416,11 @@ export default function Scene3DFullscreen({
     setFocusId,
     exitTrajectoryMode,
     exitCameraViewEdit,
+    onLocomotionResume: React.useCallback(() => recordPoseResumeRef.current(), []),
   })
 
   const handleRecordTake = React.useCallback((recordedState: Scene3DState) => {
-    // 停止时已即时 toast「已停止录制，正在生成参考视频…」（useScene3DTakeRecorder），这里不重复弹；
-    // 出片状态由画布「录制走位参考」节点徽标接力（#1 / #11 同一条状态链）。
+    // 停止已即时 toast（useScene3DTakeRecorder）；出片态由画布「录制走位参考」节点徽标接力（#1/#11 同链）。
     onRecordTake?.(recordedState)
     characterDrive.exitPossess()
   }, [characterDrive, onRecordTake])
@@ -430,6 +431,7 @@ export default function Scene3DFullscreen({
     stateRef,
     onRecorded: handleRecordTake,
   })
+  recordPoseResumeRef.current = takeRecorder.recordPoseResume
 
   // 点动作库：即时改假人姿势（S1）+ 若正在录 take，记一条带时间戳的动作事件（pose-over-time 生产者）。
   // 录制器内部 no-op 非录制态，故非录制时纯走 applyActionPreset，零副作用。
