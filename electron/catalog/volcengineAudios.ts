@@ -18,9 +18,7 @@ const TTS_CREATE: HttpOperation = {
   path: "/api/v3/tts/unidirectional",
   headers: { "X-Api-Resource-Id": "seed-tts-2.0" },
   audioResponse: "ndjson-base64",
-  // headless/MCP 兜底：缺 voice → audioTaskRunner 抛「未选择音色」。值=档案默认音色
-  // （见 src/config/modelArchetypes/doubaoTtsArchetype.ts）。UI 路已填故零影响。
-  defaultParams: { voice: "zh_female_vv_uranus_bigtts" },
+  // voice 等档案默认由 archetypeWireDefaults 桥接兜底（runtime.ts，单一真相源=档案 doubaoTtsArchetype.ts）。
 };
 
 export type VolcengineAudioModel = {

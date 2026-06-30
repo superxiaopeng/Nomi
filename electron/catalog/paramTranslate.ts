@@ -101,28 +101,31 @@ function agnesVideoDims(aspect: string | undefined, res: string | undefined): [n
   return a >= b ? [longEdge, short] : [short, longEdge];
 }
 
-export function agnesVideoWidth(values: Array<string | undefined>): string | undefined {
+// ⚠️ 返回**数字**(非字符串)：AGNES 是 Go 后端,width/height/num_frames 是严格 int——发字符串
+// "1280" 会 400(cannot unmarshal string into int,2026-06-30 live 实测)。整 token 模板
+// `"{{request.params.num_frames}}"` 保留原值类型 → 存数字即发整数。
+export function agnesVideoWidth(values: Array<string | undefined>): number | undefined {
   const dims = agnesVideoDims(values[0], values[1]);
-  return dims ? String(dims[0]) : undefined;
+  return dims ? dims[0] : undefined;
 }
 
-export function agnesVideoHeight(values: Array<string | undefined>): string | undefined {
+export function agnesVideoHeight(values: Array<string | undefined>): number | undefined {
   const dims = agnesVideoDims(values[0], values[1]);
-  return dims ? String(dims[1]) : undefined;
+  return dims ? dims[1] : undefined;
 }
 
-/** 时长(秒) → num_frames（@24fps，贴最近 8n+1，clamp 9~441）。 */
-export function agnesVideoNumFrames(values: Array<string | undefined>): string | undefined {
+/** 时长(秒) → num_frames（@24fps，贴最近 8n+1，clamp 9~441）。返回数字(AGNES int,见上)。 */
+export function agnesVideoNumFrames(values: Array<string | undefined>): number | undefined {
   const seconds = Number((values[0] || "").trim());
   if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
   const target = seconds * 24;
   const n = Math.max(1, Math.round((target - 1) / 8));
-  const frames = Math.min(441, 8 * n + 1);
-  return String(frames);
+  return Math.min(441, 8 * n + 1);
 }
 
-/** 命名转换注册表。新增一种转换在此登记，op 用其 id 引用。 */
-export const PARAM_TRANSFORMS: Record<string, (values: Array<string | undefined>) => string | undefined> = {
+/** 命名转换注册表。新增一种转换在此登记，op 用其 id 引用。值转换可返回 string 或 number
+ *  （number 用于严格类型的 wire 字段,如 AGNES Go 后端的 int width/height/num_frames）。 */
+export const PARAM_TRANSFORMS: Record<string, (values: Array<string | undefined>) => string | number | undefined> = {
   ratioResToOpenAiSize,
   toLowerCase,
   agnesVideoWidth,

@@ -8,8 +8,9 @@ import React, { Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Mannequin, MannequinCrowd, MannequinAssetBoundary, ProceduralMannequin } from './scene3dObjects'
-import { captureScene, applySceneCameraPose, aspectDimensions, capCameraMoveDimensions } from './scene3dMath'
+import { captureScene, applySceneCameraPose, aspectDimensions, capCameraMoveDimensions, applyMannequinSkeletonPose, groundMannequinModel } from './scene3dMath'
 import { cameraWithPlaybackPosition, objectWithPlaybackPose } from './scene3dPlayback'
+import { samplePoseKeyframe, poseKeyframeKey } from './scene3dPoseTrack'
 import { frameTimes } from './cameraMoveSchedule'
 import type { Scene3DState, Scene3DObject } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
@@ -47,6 +48,27 @@ function TrajectoryObjects({ objects }: { objects: Scene3DObject[] }): JSX.Eleme
   )
 }
 
+// 在时刻 t 把假人骨架摆到 pose-over-time 当前关键帧（仅边界变化时重摆，imperatively，不靠 React 重渲染）。
+// child = 包裹该对象的 group；child.children[0] = Mannequin 挂载的骨架 root（normalizeMannequinModel 产物，
+// 即 Mannequin 组件里 applyMannequinSkeletonPose 的同一 root）。无 poseTrack / 非假人 → 不动（老行为）。
+function applyPoseOverTime(
+  object: Scene3DObject,
+  t: number,
+  child: THREE.Object3D,
+  appliedPoseKey: Map<string, string>,
+): void {
+  if (object.type !== 'mannequin' || !object.poseTrack || object.poseTrack.length === 0) return
+  const keyframe = samplePoseKeyframe(object.poseTrack, t)
+  const key = poseKeyframeKey(keyframe)
+  if (appliedPoseKey.get(object.id) === key) return
+  const mannequinRoot = child.children[0]
+  if (!(mannequinRoot instanceof THREE.Group)) return
+  // keyframe 缺省（t 早于首帧）→ 落回静态基准 object.pose。
+  applyMannequinSkeletonPose(mannequinRoot, keyframe ? keyframe.pose : object.pose)
+  groundMannequinModel(mannequinRoot)
+  appliedPoseKey.set(object.id, key)
+}
+
 function cameraBindingTimes(state: Scene3DState, frameCount: number): number[] {
   const camera = state.cameras[0]
   const binding = camera
@@ -79,6 +101,9 @@ function TrajectoryFrameStepper({
   const framesRef = React.useRef<string[]>([])
   const times = React.useMemo(() => cameraBindingTimes(state, frameCount), [state, frameCount])
   const objectGroupRef = React.useRef<THREE.Group>(null)
+  // pose-over-time：每个假人「上次套用的关键帧 key」。step-hold 下只在动作切换边界重摆骨架，
+  // 不每帧重摆（groundMannequinModel 含全顶点遍历，每帧跑会掉帧；其设计本就是「仅姿势变化时跑一次」）。
+  const appliedPoseKeyRef = React.useRef<Map<string, string>>(new Map())
 
   useFrame(() => {
     if (firedRef.current) return
@@ -108,6 +133,7 @@ function TrajectoryFrameStepper({
         child.position.set(posed.position[0], posed.position[1], posed.position[2])
         child.rotation.set(posed.rotation[0], posed.rotation[1], posed.rotation[2])
         child.visible = posed.visible
+        applyPoseOverTime(object, t, child, appliedPoseKeyRef.current)
       })
       group.updateMatrixWorld(true)
     }

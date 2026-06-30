@@ -12,6 +12,7 @@ import type { WorkbenchProjectPersistenceService } from "./project/projectPersis
 import { useWorkspaceEvents } from "./useWorkspaceEvents";
 import { useWorkbenchStore, type WorkspaceMode } from "./workbenchStore";
 import { swapGenerationAiProject } from "./generationCanvas/store/generationAiConversation";
+import { useGenerationCanvasStore } from "./generationCanvas/store/generationCanvasStore";
 import { flushConversationsNow, initConversationPersistence, loadProjectConversations } from "./ai/conversationPersistence";
 import { initReviewEventBridge } from "./generationCanvas/reviewEventBridge";
 import { setCanvasEventProjectIdProvider } from "./generationCanvas/events/canvasEventEmitter";
@@ -119,8 +120,9 @@ export default function NomiStudioApp(): JSX.Element {
     const { projects, refreshProjects } = useLocalProjects();
     const [activeProject, setActiveProject] =
         React.useState<LocalProjectSummary | null>(null);
-    const [generationAiCollapsed, setGenerationAiCollapsed] =
-        React.useState(true);
+    const generationAiCollapsed = useGenerationCanvasStore(
+        (state) => state.generationAiCollapsed,
+    );
     const [modelCatalogOpened, setModelCatalogOpened] = React.useState(false);
     const [assetLibraryOpened, setAssetLibraryOpened] = React.useState(false);
     const [promptLibraryOpened, setPromptLibraryOpened] = React.useState(false);
@@ -695,10 +697,7 @@ export default function NomiStudioApp(): JSX.Element {
                 }
                 generationAi={
                     <React.Suspense fallback={null}>
-                        <CanvasAssistantEntry
-                            defaultCollapsed
-                            onCollapsedChange={setGenerationAiCollapsed}
-                        />
+                        <CanvasAssistantEntry defaultCollapsed />
                     </React.Suspense>
                 }
                 projectId={activeProject?.id ?? null}

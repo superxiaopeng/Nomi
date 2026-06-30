@@ -291,6 +291,9 @@ async function createWindow(options: { bounds?: Rectangle; maximize?: boolean; r
     minHeight: 720,
     backgroundColor: "#f6f3ee",
     title: "Nomi",
+    // Windows：去原生标题栏，改用渲染层自绘 windowbar（WindowControls）。
+    // macOS/Linux：保留原生窗口 chrome（红绿灯/拖拽/缩放全交系统，零回归）。
+    frame: process.platform !== "win32",
     icon: path.join(__dirname, "../build/icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -303,6 +306,10 @@ async function createWindow(options: { bounds?: Rectangle; maximize?: boolean; r
   mainWindow.on("closed", () => {
     if (mainWindowRef === mainWindow) mainWindowRef = null;
   });
+
+  // Windows 自绘标题栏需要知道最大化态来切「最大化/还原」图标。窗口级监听随窗口销毁回收（无泄漏）。
+  mainWindow.on("maximize", () => mainWindow.webContents.send("nomi:window:maximized", true));
+  mainWindow.on("unmaximize", () => mainWindow.webContents.send("nomi:window:maximized", false));
 
   // External http(s) links (e.g. the "get your API key" link → provider console)
   // open in the user's real browser, never as a new in-app Electron window.
@@ -421,6 +428,16 @@ function registerIpc(): void {
   const selectedWorkspaceRoots = new Set<string>();
   // 渲染层崩溃（RootErrorBoundary）也落到同一崩溃日志（P0-8）。
   ipcMain.on("nomi:log:renderer-crash", (_event, message: unknown) => logCrash("renderer", String(message)));
+  // 窗口控制（Windows 自绘标题栏）：只注册一次，作用于发起请求的那个窗口（fromWebContents），
+  // 而非闭包捕获某个窗口实例——后者会在第二次 createWindow（重开库/activate）时重复注册 handle 抛错、崩窗。
+  ipcMain.handle("nomi:window:minimize", (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());
+  ipcMain.handle("nomi:window:maximize", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.handle("nomi:window:close", (event) => BrowserWindow.fromWebContents(event.sender)?.close());
   registerSyncIpc("nomi:projects:list", listProjects);
   ipcMain.handle("nomi:projects:list-async", () => listProjects());
   registerSyncIpc("nomi:projects:create", (record: unknown) => {

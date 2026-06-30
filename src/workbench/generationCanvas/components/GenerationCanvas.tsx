@@ -1,6 +1,6 @@
 import React from 'react'
-import { IconFolderPlus, IconLayoutGrid, IconPlayerPlay, IconX } from '@tabler/icons-react'
-import { WorkbenchButton, WorkbenchIconButton } from '../../../design'
+import { IconFolderPlus, IconPlayerPlay, IconX } from '@tabler/icons-react'
+import { WorkbenchIconButton } from '../../../design'
 import { toast } from '../../../ui/toast'
 import { cn } from '../../../utils/cn'
 import CanvasToolbar, { NodeAddMenu } from './CanvasToolbar'
@@ -21,7 +21,7 @@ import { useCanvasShortcuts } from './useCanvasShortcuts'
 import { useCanvasPointerInteractions } from './useCanvasPointerInteractions'
 import { useDragToConnect } from './useDragToConnect'
 import { CanvasEmptyState } from './CanvasEmptyState'
-import { CanvasMinimap } from './CanvasMinimap'
+import { CanvasNavigationStack } from './CanvasNavigationStack'
 import { CanvasGestureHint } from './CanvasGestureHint'
 import { useNodeAppearTracking } from './useNodeAppearTracking'
 import { useTidyCanvas } from './useTidyCanvas'
@@ -156,6 +156,7 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
   const activeEdgeId = activeEdge?.id ?? null
   const [focusFlashNodeId, setFocusFlashNodeId] = React.useState<string | null>(null)
   const [pendingFocusNodeId, setPendingFocusNodeId] = React.useState<string | null>(null)
+  const [minimapVisible, setMinimapVisible] = React.useState(true)
   const focusFlashTimerRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
@@ -535,6 +536,16 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     setViewportTransform(z, { x: stageSize.width / 2 - point.x * z, y: stageSize.height / 2 - point.y * z })
   }, [setViewportTransform, stageSize.width, stageSize.height, zoomRef])
 
+  // 缩放条拖动：以画布中心为锚点缩放（无 rect 时退化为原地缩放，不丢手势）。
+  const handleZoomTo = React.useCallback((nextZoom: number) => {
+    const rect = stageRef.current?.getBoundingClientRect()
+    if (!rect) {
+      setViewportTransform(nextZoom, offsetRef.current)
+      return
+    }
+    zoomAtStagePoint(nextZoom, { x: rect.width / 2, y: rect.height / 2 })
+  }, [offsetRef, setViewportTransform, stageRef, zoomAtStagePoint])
+
   // 项目/分类首次加载时自动适应视图（含「历史视口框不住任何节点」的自愈式适应，
   // 防止图都在视口外、用户误以为「图消失」）。逻辑抽到 useAutoFitOnLoad（防巨壳）。
   useAutoFitOnLoad({ nodes, activeCategoryId, categoryViewports, fitView, stageRef, zoomRef, offsetRef })
@@ -735,58 +746,29 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
             />
           ) : null}
         </div>
-        {hasBatchPlanPreview ? (
-          <React.Suspense fallback={null}>
-            <BatchPlanOverlay />
-          </React.Suspense>
-        ) : null}
-        <div
-          className={cn(
-            'generation-canvas-v2__zoom-bar',
-            'absolute left-4 bottom-6 z-[8] inline-flex items-center gap-[2px]',
-            'min-h-9 p-1 border border-workbench-border rounded-nomi',
-            'bg-nomi-paper shadow-workbench-sm',
-          )}
-          aria-label="画布缩放"
-        >
-          <WorkbenchButton aria-label="适应视图" title={nodes.length === 0 ? '画布为空' : '适应视图'} disabled={nodes.length === 0} onClick={() => fitView(true)}>⌖</WorkbenchButton>
-          <WorkbenchButton
-            aria-label="重置视图"
-            title="重置视图"
-            onClick={() => animateViewportTo(1, { x: 0, y: 0 }, 200)}
-          >▦</WorkbenchButton>
-          <input
-            className="w-[78px] accent-workbench-accent"
-            type="range"
-            min="20"
-            max="300"
-            value={zoomPercent}
-            aria-label="缩放比例"
-            onChange={(event) => {
-              const nextZoom = Number(event.target.value) / 100
-              const rect = stageRef.current?.getBoundingClientRect()
-              if (!rect) {
-                setViewportTransform(nextZoom, offsetRef.current)
-                return
-              }
-              zoomAtStagePoint(nextZoom, { x: rect.width / 2, y: rect.height / 2 })
-            }}
-          />
-          {!readOnly ? (
-            <WorkbenchButton aria-label="整理画布" title="整理画布（散乱时一键收纳 · ⌘Z 撤销）" onClick={() => tidy(stageSize.width / Math.max(1, stageSize.height))}>
-              <IconLayoutGrid size={15} stroke={1.8} aria-hidden="true" />
-            </WorkbenchButton>
-          ) : null}
-          <WorkbenchButton aria-label="画布帮助" title="画布帮助" onClick={() => toast('滚轮/双指 平移 · ⌘/Ctrl+滚轮 或 捏合 缩放 · 拖空白 框选 · 空格/中键/右键拖 平移 · Delete 删除', 'info')}>?</WorkbenchButton>
-        </div>
         {!readOnly ? <CanvasGestureHint /> : null}
-        <CanvasMinimap
+        <CanvasNavigationStack
+          readOnly={readOnly}
           nodes={nodes}
           selectedIds={selectedSet}
           zoom={zoom}
+          zoomPercent={zoomPercent}
           offset={offset}
           stageSize={stageSize}
+          minimapVisible={minimapVisible}
+          onToggleMinimap={() => setMinimapVisible((visible) => !visible)}
           onJumpToCanvasPoint={handleMinimapJump}
+          onFitView={() => fitView(true)}
+          onResetView={() => animateViewportTo(1, { x: 0, y: 0 }, 200)}
+          onTidy={() => tidy(stageSize.width / Math.max(1, stageSize.height))}
+          onZoomTo={handleZoomTo}
+          batchPlanOverlay={
+            hasBatchPlanPreview ? (
+              <React.Suspense fallback={null}>
+                <BatchPlanOverlay />
+              </React.Suspense>
+            ) : null
+          }
         />
       </div>
     </section>

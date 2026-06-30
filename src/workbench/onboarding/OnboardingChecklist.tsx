@@ -11,7 +11,8 @@
  *
  * 入口消失的三条退出路：① 4/4 全做完；② 用户点「不再提示」；③ 首次显示满 2 天仍未
  * 完成 → 自动永久关闭。后两条写 nomi:checklist-dismissed，关了不再回来（onboardingState）。
- * 打勾单调持久（localStorage）。渲染在 NomiAppBar 内（React 树内，保 --nomi-* token）。
+ * 打勾单调持久（localStorage）。挂载位置按平台分流：win32 渲染在 WorkbenchShell 自绘标题栏内，
+ * 非 win32（mac/Linux）渲染在 NomiAppBar 右簇内——两边都在 React 树内，保 --nomi-* token。
  */
 import React from 'react'
 import { IconCheck, IconChevronDown, IconListCheck } from '@tabler/icons-react'
@@ -166,7 +167,7 @@ export function OnboardingChecklist(): JSX.Element | null {
         aria-label={`上手 4 步，已完成 ${doneCount} / ${ALL_KEYS.length}`}
         aria-expanded={open}
         className={cn(
-          'inline-flex items-center gap-1.5 h-8 px-2.5 cursor-pointer font-inherit',
+          'inline-flex items-center gap-1.5 h-7 px-2.5 cursor-pointer font-inherit',
           'rounded-nomi-sm border border-transparent bg-transparent',
           'text-body-sm text-nomi-ink-80 transition-[background,color] duration-[var(--nomi-transition-fast)]',
           'hover:bg-nomi-ink-05 hover:text-nomi-ink',
@@ -186,7 +187,7 @@ export function OnboardingChecklist(): JSX.Element | null {
           aria-label="上手 4 步"
           style={{ top: anchor.top, right: anchor.right }}
           className={cn(
-            'fixed z-[60] w-64 overflow-hidden',
+            'fixed z-[180] w-64 overflow-hidden',
             'rounded-nomi border border-nomi-line bg-nomi-paper shadow-nomi-lg',
           )}
         >

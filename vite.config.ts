@@ -211,10 +211,15 @@ export default defineConfig(async ({ command, mode }) => {
       port: 5273,
       host: true,
       cors: true,
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
-      },
+      // COOP/COEP 跨源隔离默认关：它会卡死 Playwright CDP 握手（R13 走查全挂的真根因）。
+      // 仅 ONNX 多线程推理需要时显式开 NOMI_DEV_CROSS_ORIGIN_ISOLATION=1。
+      headers:
+        process.env.NOMI_DEV_CROSS_ORIGIN_ISOLATION === '1'
+          ? {
+              'Cross-Origin-Opener-Policy': 'same-origin',
+              'Cross-Origin-Embedder-Policy': 'require-corp',
+            }
+          : undefined,
       hmr: process.env.NOMI_DISABLE_VITE_HMR === '1' ? false : undefined,
       fs: {
         allow: [resolve(__dirname)],

@@ -113,24 +113,25 @@ describe("Agnes 视频（异步 create→poll，形状锁 + 两个 quirk）", ()
 });
 
 describe("Agnes 视频 paramMap 派生（D1：比例+清晰度+时长 → width/height/num_frames）", () => {
-  it("transform：16:9 @720p → 1280×720；9:16 @720p → 720×1280；1:1 @1080p → 1080×1080", () => {
-    expect([agnesVideoWidth(["16:9", "720p"]), agnesVideoHeight(["16:9", "720p"])]).toEqual(["1280", "720"]);
-    expect([agnesVideoWidth(["9:16", "720p"]), agnesVideoHeight(["9:16", "720p"])]).toEqual(["720", "1280"]);
-    expect([agnesVideoWidth(["1:1", "1080p"]), agnesVideoHeight(["1:1", "1080p"])]).toEqual(["1080", "1080"]);
+  // ⚠️ 返回**数字**：AGNES Go 后端 int 严格(发字符串 400,2026-06-30 live 实测)。
+  it("transform：16:9 @720p → 1280×720；9:16 @720p → 720×1280；1:1 @1080p → 1080×1080（数字）", () => {
+    expect([agnesVideoWidth(["16:9", "720p"]), agnesVideoHeight(["16:9", "720p"])]).toEqual([1280, 720]);
+    expect([agnesVideoWidth(["9:16", "720p"]), agnesVideoHeight(["9:16", "720p"])]).toEqual([720, 1280]);
+    expect([agnesVideoWidth(["1:1", "1080p"]), agnesVideoHeight(["1:1", "1080p"])]).toEqual([1080, 1080]);
   });
 
-  it("transform：时长→num_frames 贴最近 8n+1（5s→121，10s→241，clamp ≤441）", () => {
-    expect(agnesVideoNumFrames(["5"])).toBe("121"); // 5×24=120 → 8×15+1
-    expect(agnesVideoNumFrames(["10"])).toBe("241");
-    expect(agnesVideoNumFrames(["30"])).toBe("441"); // clamp 上限
+  it("transform：时长→num_frames 贴最近 8n+1（5s→121，10s→241，clamp ≤441，数字）", () => {
+    expect(agnesVideoNumFrames(["5"])).toBe(121); // 5×24=120 → 8×15+1
+    expect(agnesVideoNumFrames(["10"])).toBe(241);
+    expect(agnesVideoNumFrames(["30"])).toBe(441); // clamp 上限
     expect(((Number(agnesVideoNumFrames(["3"])) - 1) % 8)).toBe(0); // 始终 8n+1
   });
 
-  it("applyParamMap 套到 create.paramMap：注入 width/height/num_frames，原 canonical 键保留", () => {
+  it("applyParamMap 套到 create.paramMap：注入数字 width/height/num_frames，原 canonical 键保留", () => {
     const paramMap = AGNES_VIDEO_MODELS[0].mappings[0].create.paramMap;
     const out = applyParamMap(paramMap, { aspect_ratio: "16:9", resolution: "1080p", duration: "5" });
-    expect(out.width).toBe("1920");
-    expect(out.height).toBe("1080");
-    expect(out.num_frames).toBe("121");
+    expect(out.width).toBe(1920);
+    expect(out.height).toBe(1080);
+    expect(out.num_frames).toBe(121);
   });
 });

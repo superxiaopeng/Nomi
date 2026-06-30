@@ -132,6 +132,17 @@ function attachCameraMoveToTarget(targetNodeId: string, mp4Url: string, move: Ca
 }
 
 export function CameraMoveCaptureHost(): JSX.Element | null {
+  // E2E 专用桥：仅当 renderer localStorage['__nomiE2E']==='1' 时把画布 store 挂到 window，
+  // 供隔离走查在页面上下文里读写画布（如把相机轨迹改成假人走位再触发离屏渲染）。生产从不置该标志 → 永不暴露。
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage?.getItem('__nomiE2E') === '1') {
+        ;(window as unknown as { __nomiCanvasStore?: unknown }).__nomiCanvasStore = useGenerationCanvasStore
+      }
+    } catch {
+      // localStorage 不可用 → 跳过
+    }
+  }, [])
   const pendingNode = useGenerationCanvasStore((state) =>
     state.nodes.find((node) => node.kind === 'scene3d' && readCameraMove(node) !== null) ?? null,
   )

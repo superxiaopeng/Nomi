@@ -1,5 +1,12 @@
 import React from 'react'
-import { IconCategory, IconFolder, IconPlus, IconSearch } from '@tabler/icons-react'
+import {
+  IconFolder,
+  IconFolderSearch,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconPlus,
+  IconTags,
+} from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
 import { type ProjectCategory } from '../project/projectCategories'
 import { useWorkbenchStore } from '../workbenchStore'
@@ -53,10 +60,11 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
           <button
             type="button"
             onClick={toggle}
-            className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption"
+            className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm"
             aria-label="展开侧栏"
+            title="展开侧栏"
           >
-            ›
+            <IconLayoutSidebarLeftExpand size={16} stroke={1.5} />
           </button>
         </div>
       ) : (
@@ -67,34 +75,38 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
               <button
                 type="button"
                 onClick={() => setTab('find')}
+                title="找素材"
                 className={cn(
                   'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
                   tab === 'find' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
                 )}
               >
-                <IconSearch size={14} stroke={1.5} />找
+                <IconFolderSearch size={14} stroke={1.7} />
+                {tab !== 'find' && '找'}
               </button>
               <button
                 type="button"
                 onClick={() => setTab('categories')}
+                title="分类"
                 className={cn(
                   'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
                   tab === 'categories' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
                 )}
               >
-                <IconCategory size={14} stroke={1.5} />
-                分类
+                <IconTags size={14} stroke={1.7} />
+                {tab !== 'categories' && '分类'}
               </button>
               <button
                 type="button"
                 onClick={() => setTab('files')}
+                title="文件"
                 className={cn(
                   'flex items-center gap-1 px-2 py-1 text-micro rounded-nomi-sm',
                   tab === 'files' ? 'bg-nomi-paper text-nomi-ink' : 'text-nomi-ink-40 hover:text-nomi-ink-60',
                 )}
               >
-                <IconFolder size={14} stroke={1.5} />
-                文件
+                <IconFolder size={14} stroke={1.7} />
+                {tab !== 'files' && '文件'}
               </button>
             </div>
             <button
@@ -104,17 +116,18 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
               aria-label="新建分类"
               title="新建一个顶层分类"
             >
-              <IconPlus size={16} stroke={1.5} />
+              <IconPlus size={16} stroke={1.7} />
             </button>
           </div>
           <div className="flex justify-end">
             <button
               type="button"
               onClick={toggle}
-              className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm text-caption"
+              className="text-nomi-ink-40 hover:text-nomi-ink p-1 rounded-nomi-sm"
               aria-label="收起侧栏"
+              title="收起侧栏"
             >
-              ‹
+              <IconLayoutSidebarLeftCollapse size={16} stroke={1.5} />
             </button>
           </div>
         </div>
@@ -131,7 +144,7 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
             aria-label="展开找素材面板"
             title="找素材"
           >
-            <IconSearch size={16} stroke={1.5} />
+            <IconFolderSearch size={16} stroke={1.7} />
           </button>
           <button
             type="button"
@@ -143,7 +156,7 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
             aria-label="展开分类面板"
             title="分类"
           >
-            <IconCategory size={16} stroke={1.5} />
+            <IconTags size={16} stroke={1.7} />
           </button>
           <button
             type="button"
@@ -155,7 +168,7 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
             aria-label="展开文件面板"
             title="文件"
           >
-            <IconFolder size={16} stroke={1.5} />
+            <IconFolder size={16} stroke={1.7} />
           </button>
         </div>
       ) : tab === 'find' ? (

@@ -6,6 +6,7 @@
 // params 的坑，都只在"真实参数构建"里暴露，埋在 2500 行 runtime 里既测不到也容易回归。
 import { firstString, type JsonRecord } from "../jsonUtils";
 import { referenceInputParams } from "./archetypeInput";
+import { ARCHETYPE_WIRE_DEFAULTS } from "./archetypeWireDefaults.generated";
 
 /** taskTemplateParams 实际用到的 TaskRequest 子集（结构化，避免与 runtime 的 TaskRequest 循环依赖）。 */
 export type TaskParamsInput = {
@@ -42,6 +43,23 @@ export function applyWireDefaults(
 ): Record<string, unknown> | undefined {
   if (!defaultParams) return extras;
   return { ...defaultParams, ...(extras || {}) };
+}
+
+/**
+ * headless/MCP 两道缺参兜底（既有值优先）：① 档案参数默认值（单一真相源，按 archetypeId+taskKind 桥接自
+ * src/config，vendorParams 覆盖优先、回退通用 "*"；补 model 变体/duration(int)/比例/清晰度/voice/size）；
+ * ② mapping 级 defaultParams（仅非档案派生的兜底）。逻辑收口在此 → runtime 一行调用，不喂巨壳。
+ */
+export function applyHeadlessParamDefaults(
+  extras: Record<string, unknown> | undefined,
+  archetypeId: string | undefined,
+  taskKind: string,
+  vendorKey: string,
+  mappingDefaults: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const perKind = archetypeId ? ARCHETYPE_WIRE_DEFAULTS[archetypeId]?.[taskKind] : undefined;
+  const archetypeDefaults = perKind ? (perKind[vendorKey] ?? perKind["*"]) : undefined;
+  return applyWireDefaults(applyWireDefaults(extras, archetypeDefaults), mappingDefaults);
 }
 
 export function taskTemplateParams(request: TaskParamsInput): JsonRecord {

@@ -83,6 +83,13 @@ export type DesktopUpdateEvent =
 
 export type DesktopBridge = {
   platform: string
+  /** 窗口控制（Windows 自绘标题栏用；mac 原生 chrome 时不调用）。老 preload 可能无此口。 */
+  window?: {
+    minimize: () => Promise<void>
+    maximize: () => Promise<void>
+    close: () => Promise<void>
+    onMaximized: (cb: (maximized: boolean) => void) => () => void
+  }
   app?: {
     reopenLibraryWindow: () => void
     hardReloadWindow?: () => void

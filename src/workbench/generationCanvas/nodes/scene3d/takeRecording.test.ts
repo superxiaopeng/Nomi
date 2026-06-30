@@ -186,4 +186,47 @@ describe('buildRecordedTakeScene', () => {
     const { state } = baseSceneWithCharacter()
     expect(buildRecordedTakeScene(state, take('nonexistent-id'))).toBeNull()
   })
+
+  const squat = { mixamorigSpine: [10, 0, 0] as [number, number, number] }
+  const wave = { mixamorigRightArm: [-40, 0, 0] as [number, number, number] }
+
+  it('attaches a poseTrack to the character when actions were switched during recording', () => {
+    const { state, characterId } = baseSceneWithCharacter()
+    const scene = buildRecordedTakeScene(state, take(characterId, {
+      poseEvents: [
+        { time: 0, presetId: 'walk', pose: undefined },
+        { time: 1.5, presetId: 'squat', pose: squat },
+        { time: 3, presetId: 'wave', pose: wave },
+      ],
+    }))
+    const character = scene!.objects.find((o) => o.id === characterId)
+    expect(character!.poseTrack?.map((k) => [k.time, k.presetId])).toEqual([
+      [0, 'walk'], [1.5, 'squat'], [3, 'wave'],
+    ])
+  })
+
+  it('no poseTrack when only the seed keyframe (never switched action → static pose, old behavior)', () => {
+    const { state, characterId } = baseSceneWithCharacter()
+    const scene = buildRecordedTakeScene(state, take(characterId, {
+      poseEvents: [{ time: 0, presetId: undefined, pose: squat }],
+    }))
+    expect(scene!.objects.find((o) => o.id === characterId)!.poseTrack).toBeUndefined()
+  })
+
+  it('no poseTrack when poseEvents omitted entirely (backward compatible)', () => {
+    const { state, characterId } = baseSceneWithCharacter()
+    const scene = buildRecordedTakeScene(state, take(characterId))
+    expect(scene!.objects.find((o) => o.id === characterId)!.poseTrack).toBeUndefined()
+  })
+
+  it('collapses a switch back to the same starting pose (seed == first action → no track)', () => {
+    const { state, characterId } = baseSceneWithCharacter()
+    const scene = buildRecordedTakeScene(state, take(characterId, {
+      poseEvents: [
+        { time: 0, presetId: 'squat', pose: squat },
+        { time: 2, presetId: 'squat', pose: squat },
+      ],
+    }))
+    expect(scene!.objects.find((o) => o.id === characterId)!.poseTrack).toBeUndefined()
+  })
 })

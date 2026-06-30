@@ -11,6 +11,7 @@ import { CAMERA_DEFAULT_TARGET, UNGROUPED_TRAJECTORY_GROUP_ID } from './scene3dC
 import { buildTrajectoryCurve, clampRatio, remapTrajectoryTimeRatio, wrapRatio } from './trajectory/trajectoryUtils'
 import { cameraLookAtRotation, eulerToArray, vectorToArray } from './scene3dMath'
 import { objectVisualHalfHeight } from './scene3dCrowd'
+import { samplePoseKeyframe } from './scene3dPoseTrack'
 
 export function trajectoryIdsForPlaybackGroup(state: Scene3DState, groupId: string | null): Set<string> | null {
   if (!groupId) return null
@@ -151,18 +152,28 @@ export function playbackCameraAtPlayhead(
   return activeCamera
 }
 
+// 时刻 t 该对象生效的 pose-over-time 姿势。无 poseTrack / t 早于首帧 → 落回静态 object.pose（老行为）。
+// 与轨迹采样独立：站着原地切动作（无轨迹绑定）也要随时间变 pose。
+function objectPoseAtPlayhead(object: Scene3DObject, playheadSeconds: number): Scene3DObject {
+  if (!object.poseTrack || object.poseTrack.length === 0) return object
+  const keyframe = samplePoseKeyframe(object.poseTrack, playheadSeconds)
+  if (!keyframe) return object
+  return { ...object, pose: keyframe.pose }
+}
+
 export function objectWithPlaybackPose(
   state: Pick<Scene3DState, 'trajectories' | 'trajectoryBindings'>,
   object: Scene3DObject,
   playheadSeconds: number,
   activeTrajectoryIds: ReadonlySet<string> | null = null,
 ): Scene3DObject {
+  const posed = objectPoseAtPlayhead(object, playheadSeconds)
   const sample = sceneObjectTrajectorySample(state, object.id, playheadSeconds, activeTrajectoryIds)
-  if (!sample) return object
+  if (!sample) return posed
   const position = sample.position.clone().add(new THREE.Vector3(0, objectVisualHalfHeight(object), 0))
   const nextObject = {
-    ...object,
-    visible: object.visible && sample.visible,
+    ...posed,
+    visible: posed.visible && sample.visible,
     position: vectorToArray(position),
   }
   if (!sample.tangent) return nextObject

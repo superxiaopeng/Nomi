@@ -27,7 +27,18 @@ export type Scene3DObject = {
   crowdColumns?: number
   crowdSpacing?: number
   pose?: Record<string, Scene3DVector3>
+  // 动作随时间变化的轨道（录 take 用）。空/缺省 = 老行为（静态 pose）。
+  // time 为绝对场景时间轴秒，与 trajectoryBinding.startTime/播放头同一时钟。
+  poseTrack?: Scene3DPoseKeyframe[]
   children?: string[]
+}
+
+// pose-over-time 单帧：在时刻 time 把该假人切到 pose（presetId 仅留痕/UI 高亮）。
+// pose 缺省 = 站立/rest。自包含（采样不依赖预设常量查表）。
+export type Scene3DPoseKeyframe = {
+  time: number
+  presetId?: string
+  pose?: Record<string, Scene3DVector3>
 }
 
 export type Scene3DCamera = {
