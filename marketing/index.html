@@ -832,6 +832,27 @@
   }
   .eq-foot .em { color: var(--coral); font-style: italic; }
 
+  /* ---------- Community ---------- */
+  .community { padding: 100px 0; border-top: 1px solid var(--rule); }
+  .comm-grid { display: grid; grid-template-columns: 1fr auto; gap: 56px; align-items: center; }
+  .comm-h { font-size: clamp(30px, 4.4vw, 48px); line-height: 1.06; letter-spacing: -0.02em; color: var(--ink); margin-top: 18px; }
+  .comm-h .it { font-style: italic; font-family: Georgia, "Times New Roman", serif; color: var(--coral); }
+  .comm-sub { margin-top: 18px; font-size: 15px; line-height: 1.65; color: var(--ink-2); max-width: 460px; }
+  .comm-note {
+    margin-top: 20px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px;
+    background: var(--paper-2); font-size: 13px; line-height: 1.6; color: var(--ink-2); max-width: 460px;
+  }
+  .comm-note strong { color: var(--ink); font-weight: 600; }
+  .comm-qr {
+    display: flex; flex-direction: column; align-items: center; gap: 12px; flex: none;
+    padding: 22px; border: 1px solid var(--rule); border-radius: 16px; background: var(--paper);
+  }
+  .comm-qr img { display: block; width: 200px; height: auto; border-radius: 8px; }
+  .comm-qr-cap {
+    font-family: "Inter", sans-serif; font-size: 12px; letter-spacing: 0.08em; color: var(--muted);
+  }
+  @media (max-width: 860px) { .comm-grid { grid-template-columns: 1fr; gap: 32px; justify-items: start; } }
+
   /* ---------- Open Source CTA ---------- */
   .opensource {
     padding: 140px 0 100px;
@@ -970,6 +991,7 @@
       <a href="#showcase">界面</a>
       <a href="#philosophy">理念</a>
       <a href="#download">下载</a>
+      <a href="#community">社群</a>
       <a href="#opensource">开源</a>
       <a href="https://github.com/aqm857886159/Nomi" target="_blank" rel="noopener noreferrer" class="cta">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55v-1.93c-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.77 2.7 1.26 3.36.96.1-.74.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.19a10.93 10.93 0 0 1 5.74 0c2.2-1.5 3.16-1.19 3.16-1.19.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.39-5.27 5.68.42.36.79 1.06.79 2.14v3.17c0 .31.2.66.79.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
@@ -1323,6 +1345,24 @@
   </div>
 </section>
 
+<!-- ============ COMMUNITY ============ -->
+<section id="community" class="community">
+  <div class="wrap">
+    <div class="comm-grid">
+      <div class="comm-text">
+        <div class="dl-eyebrow">/ 04.7 · 加入用户群</div>
+        <h2 class="comm-h"><span class="it">进群</span>，<br>一起把 Nomi 做好。</h2>
+        <p class="comm-sub">正在招种子用户——扫右边的码进「nomi 画布群」：反馈直达、更新和新功能第一时间收到，也能看别人怎么用 Nomi。</p>
+        <div class="comm-note">群二维码 <strong>7 月 5 日前有效</strong>；过期或扫不进，加作者微信 <strong>TZ857886159</strong>（长期有效）拉你进群。</div>
+      </div>
+      <div class="comm-qr">
+        <img src="assets/group-wechat.png" alt="nomi 画布群微信二维码" width="200" loading="lazy">
+        <div class="comm-qr-cap">微信扫码进群</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ OPEN SOURCE CTA ============ -->
 <section id="opensource" class="opensource">
   <div class="wrap">
@@ -1389,6 +1429,7 @@
           <li><a href="#features">特性</a></li>
           <li><a href="#showcase">界面预览</a></li>
           <li><a href="#download">下载</a></li>
+          <li><a href="#community">用户群</a></li>
         </ul>
       </div>
       <div>
