@@ -11,9 +11,11 @@ const bool = (key: string, label: string, defaultValue = true): ModelParameterCo
 const t2iMode = (params: ModelParameterControl[]): ArchetypeMode => ({
   id: "text", intent: "text", vendorTerm: "文生图", hint: "文字描述生成图片", promptRequired: true, slots: [], params, transportTaskKind: "text_to_image",
 });
-const editMode = (params: ModelParameterControl[]): ArchetypeMode => ({
-  id: "edit", intent: "edit", vendorTerm: "改图", hint: "上传/连接一张图编辑", promptRequired: true,
-  slots: [{ kind: "image_ref", label: "原图", min: 1, max: 1, inputKey: "imageUrls" }], params, transportTaskKind: "image_edit",
+// maxImages：改图参考图上限。默认 1（保守，RunningHub 各端点上限多数 SPA 文档抓不到、未验证）；
+// 仅对 firsthand 拿到契约的端点放宽（Qwen-Image edit = 1–3 图，api-448184489 逐字验过）。
+const editMode = (params: ModelParameterControl[], maxImages = 1): ArchetypeMode => ({
+  id: "edit", intent: "edit", vendorTerm: "改图", hint: maxImages > 1 ? "上传/连接图编辑（多图主体融合）" : "上传/连接一张图编辑", promptRequired: true,
+  slots: [{ kind: "image_ref", label: "原图", min: 1, max: maxImages, inputKey: "imageUrls" }], params, transportTaskKind: "image_edit",
 });
 
 const SEEDREAM_PARAMS = [sel("resolution", "清晰度", ["2k", "4k"], "2k")];
@@ -43,7 +45,7 @@ const QWEN_E_PARAMS = [sel("size", "尺寸", ["1024*1024", "1536*1536", "768*115
 export const RH_QWEN_IMAGE_ARCHETYPE: ModelArchetype = {
   id: "rh-qwen-image-2.0", family: "qwen-image", label: "Qwen-Image 2.0 (RunningHub)", kind: "image", defaultModeId: "text", transportTaskKind: "text_to_image",
   identifierPatterns: ["rh-qwen-image-2.0"], // 唯一 id：避与旧 apimart qwen-image-2.0 档案末段撞
-  modes: [t2iMode(QWEN_T_PARAMS), editMode(QWEN_E_PARAMS)],
+  modes: [t2iMode(QWEN_T_PARAMS), editMode(QWEN_E_PARAMS, 3)], // edit 1–3 图（firsthand api-448184489 验证）
 };
 
 export const RUNNINGHUB_IMAGE_ARCHETYPES = [RH_SEEDREAM_ARCHETYPE, RH_NANO_BANANA_ARCHETYPE, RH_GPT_IMAGE_2_ARCHETYPE, RH_QWEN_IMAGE_ARCHETYPE];
