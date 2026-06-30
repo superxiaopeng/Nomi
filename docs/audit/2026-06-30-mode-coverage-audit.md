@@ -16,7 +16,17 @@
 | **A2 ✅已做** | **火山 Seedream** | **图生图/改图 i2i**（image 字段数组 + sequential_image_generation）| **真机验证字段契约**（5.0 lite + image:[url] → 服务端识别并下载）+ 已补 edit mode + image_edit mapping |
 | **A3 ✅已做** | **kie GPT Image 2** | i2i 参考图上限 4→16 | docs.kie.ai 实证两家都 16，旧值 4 是被证伪的保守猜测，已抬到 16 |
 | A1 ⏳待 agnes 真机验 | **Agnes Video V2.0** | **多图视频 + 关键帧动画**（extra_body.image 数组 / extra_body.mode:"keyframes"）| doc 铁证，但 extra_body 嵌套 + i2v 共享 mapping 的空 extra_body 容忍度需 agnes 真机验（异步多图）才安全上，不盲发 |
-| A4 ⏳gated | **RunningHub Qwen edit** 1→3 | firsthand 实证，但 RunningHub 标准模型全被企业key闸挡着、当前零用户影响，待企业 key 一起做 |
+| **A4 ✅已做** | **RunningHub Qwen edit** 1→3 | firsthand api-448184489 验证，已放宽（editMode 加 maxImages 参，仅 Qwen 放到 3，其余仍 max:1 因 RunningHub 端上限 SPA 抓不到·未验证）|
+
+### RunningHub 企业 key 真机验证结论（2026-06-30，用户提供企业 key 探测）
+- **errorCode 1014 企业闸消失**；图片模型（Seedance/Seedream4.5/NanoBanana/GPTImage2/Qwen2.0）**真提交回 taskId**
+  → 证实**我们的路径 + 扁平 body 全部正确**（agent 据搜索索引怀疑的「节点编码/路径错」红旗彻底排除；
+  裸 /qwen-image-2.0/ 返 1001 Invalid URL 反证 /alibaba/ 前缀对）。
+- 视频模型 Kling/Wan 返 605「余额不足」、Veo 返 1620「活动会员金额不支持 API 调用」→ **账号需充值**（账号侧）；
+  连带修：605/1620 余额错误的人话分类（detectBalance → 余额不足提示，commit 226f43d7）。
+- **未补的 RunningHub 视频模式缺口**（可灵 multi_shots / Wan reference-to-video / Hailuo pro / HiTem multi-image）：
+  字段契约在 per-model SPA 文档页（WebFetch 抓不到）+ 视频模型被余额挡住读不到 1007 字段错 → **不瞎编字段名**，
+  留此待 SPA 文档可达或账号充值后真机一发。用户拍板：现有接入已验证够，不充值不强补。
 
 ### B 档·doc 实证但需真机验证端点/字段，或改动较大 → 验证后做
 | # | 模型 | 缺的模式 | 卡点 |
