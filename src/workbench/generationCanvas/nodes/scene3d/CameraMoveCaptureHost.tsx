@@ -10,6 +10,11 @@ import { useGenerationCanvasStore } from '../../store/generationCanvasStore'
 import { normalizeScene3DState } from './scene3dSerializer'
 import { persistCameraMoveVideo } from './cameraMoveVideo'
 import { Scene3DTrajectoryCapture, type CameraMoveCaptureResult } from './Scene3DTrajectoryCapture'
+import {
+  decideCameraMoveRetry,
+  DEFAULT_CAMERA_MOVE_RETRY,
+  type CameraMoveCaptureOutcome,
+} from './cameraMoveCaptureRetry'
 import type { GenerationCanvasNode } from '../../model/generationCanvasTypes'
 import { archetypeForNode, findVideoRefMode } from '../../agent/referenceEdgeCapability'
 import { applyArchetypeModeSwitch, readArchetypeArray } from '../controls/archetypeMeta'
@@ -34,6 +39,23 @@ export type CameraMoveVideoResult = {
 }
 
 const DEFAULT_FPS = 24 // Seedance 参考视频要求 23.8–60 FPS（12fps 会被 InvalidParameter.FpsTooLow 拒）
+
+/**
+ * E2E 专用：强制前 N 次尝试失败（模拟离屏上下文丢失导致的空结果），验证重试兜底真会重来出片。
+ * 仅当 renderer localStorage['__nomiForceCameraMoveFail']=N（正整数）时生效；生产从不置该标志 → 永不触发。
+ * 返回被强制失败后的 outcome（'null'）；否则原样返回真实 outcome。
+ */
+function coerceOutcomeForE2E(attempt: number, outcome: CameraMoveCaptureOutcome): CameraMoveCaptureOutcome {
+  try {
+    if (typeof window === 'undefined') return outcome
+    const raw = window.localStorage?.getItem('__nomiForceCameraMoveFail')
+    const n = raw ? Number(raw) : 0
+    if (Number.isFinite(n) && n > 0 && attempt <= n) return 'null'
+  } catch {
+    // localStorage 不可用 → 不干预
+  }
+  return outcome
+}
 const DEFAULT_FRAME_COUNT = 120 // 缺时长时的兜底：5s @ 24fps
 const MIN_FRAME_COUNT = 2
 const MAX_FRAME_COUNT = 240
@@ -131,6 +153,40 @@ function attachCameraMoveToTarget(targetNodeId: string, mp4Url: string, move: Ca
   store.updateNode(targetNodeId, { meta: { ...meta, cameraMoveAttached: true }, prompt })
 }
 
+/** 把成功产物写回 scene3d 节点 meta + 喂入目标镜头。清标志留给调用方（重试期间不清）。 */
+async function persistAndAttach(
+  nodeId: string,
+  fps: number,
+  capture: CameraMoveCaptureResult,
+): Promise<boolean> {
+  const store = useGenerationCanvasStore.getState()
+  const node = store.nodes.find((candidate) => candidate.id === nodeId)
+  if (!node) return false
+  const config = readCameraMove(node)
+  const persisted = await persistCameraMoveVideo(capture.frames, nodeId, capture.title, fps)
+  if (!persisted.url) return false
+  const videoResult: CameraMoveVideoResult = {
+    url: persisted.url,
+    assetId: persisted.assetId,
+    fps,
+    targetNodeId: config?.targetNodeId,
+    createdAt: Date.now(),
+  }
+  // S2 接缝：把运镜小片结果写回 scene3d 节点 meta（产物留痕，便于复用/调试）。
+  const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
+  useGenerationCanvasStore.getState().updateNode(nodeId, {
+    meta: {
+      ...(current?.meta || node.meta || {}),
+      cameraMoveVideo: videoResult,
+    },
+  })
+  // S3 喂入：把 mp4 喂给目标镜头视频节点（有 video_ref 槽则切模式+填参考视频，否则降级 prompt 地板）。
+  if (config?.targetNodeId) {
+    attachCameraMoveToTarget(config.targetNodeId, persisted.url, config.move)
+  }
+  return true
+}
+
 export function CameraMoveCaptureHost(): JSX.Element | null {
   // E2E 专用桥：仅当 renderer localStorage['__nomiE2E']==='1' 时把画布 store 挂到 window，
   // 供隔离走查在页面上下文里读写画布（如把相机轨迹改成假人走位再触发离屏渲染）。生产从不置该标志 → 永不暴露。
@@ -146,67 +202,102 @@ export function CameraMoveCaptureHost(): JSX.Element | null {
   const pendingNode = useGenerationCanvasStore((state) =>
     state.nodes.find((node) => node.kind === 'scene3d' && readCameraMove(node) !== null) ?? null,
   )
-  const processingRef = React.useRef<string | null>(null)
+  // 正在处理的节点 id + 该节点当前的尝试轮次（1=首次；每次重试 +1）。
+  // attempt 也当挂载 key：变一次就整棵 Scene3DTrajectoryCapture 卸载重挂（离屏 Canvas 全新、上下文腾出）。
+  const [processing, setProcessing] = React.useState<{ nodeId: string; attempt: number } | null>(null)
+  // 单次尝试的看门狗：捕获循环若被上下文丢失停死（onResult 永不回调），到点判 'timeout' 走重试。
+  const watchdogRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settledRef = React.useRef(false)
+  // 当前轮的 fps，供 watchdog 回调（timeout 无 onResult 参数）读取。
+  const currentFpsRef = React.useRef(DEFAULT_FPS)
 
-  const handleResult = React.useCallback(
-    async (nodeId: string, fps: number, capture: CameraMoveCaptureResult | null) => {
-      const store = useGenerationCanvasStore.getState()
-      const node = store.nodes.find((candidate) => candidate.id === nodeId)
-      const config = node ? readCameraMove(node) : null
-      const clearFlag = () => {
-        const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
-        if (!current) return
-        const meta = { ...(current.meta || {}) }
-        delete (meta as Record<string, unknown>).cameraMoveAutoCapture
-        useGenerationCanvasStore.getState().updateNode(nodeId, { meta })
-      }
-      try {
-        if (!node || !capture) return
-        const persisted = await persistCameraMoveVideo(capture.frames, nodeId, capture.title, fps)
-        if (!persisted.url) return
-        const videoResult: CameraMoveVideoResult = {
-          url: persisted.url,
-          assetId: persisted.assetId,
-          fps,
-          targetNodeId: config?.targetNodeId,
-          createdAt: Date.now(),
+  const clearTimers = React.useCallback(() => {
+    if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null }
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+  }, [])
+
+  const clearFlag = React.useCallback((nodeId: string) => {
+    const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
+    if (!current) return
+    const meta = { ...(current.meta || {}) }
+    delete (meta as Record<string, unknown>).cameraMoveAutoCapture
+    useGenerationCanvasStore.getState().updateNode(nodeId, { meta })
+  }, [])
+
+  // 某次尝试的结局（ok / null / timeout）→ 纯逻辑决定 done / retry / giveUp。
+  // 关键：只有 done 或 giveUp 才清 cameraMoveAutoCapture 标志；retry 期间**保留标志**，
+  // 靠换 attempt(=挂载 key) 让离屏捕获器整棵重挂重来（一次瞬态上下文丢失不判死）。
+  const settleAttempt = React.useCallback(
+    (nodeId: string, attempt: number, fps: number, outcome: CameraMoveCaptureOutcome, capture: CameraMoveCaptureResult | null) => {
+      if (settledRef.current) return // 同一轮 watchdog 与 onResult 竞态：先到者定结局，后到者忽略。
+      settledRef.current = true
+      clearTimers()
+      // E2E 故障注入：强制前 N 次失败，验证重试兜底真会重来出片（生产 no-op）。
+      const effectiveOutcome = coerceOutcomeForE2E(attempt, outcome)
+      void (async () => {
+        let done = effectiveOutcome === 'ok'
+        if (effectiveOutcome === 'ok' && capture) {
+          try {
+            done = await persistAndAttach(nodeId, fps, capture)
+          } catch {
+            done = false // 落盘/喂入抛错也当失败，走重试兜底。
+          }
         }
-        // S2 接缝：把运镜小片结果写回 scene3d 节点 meta（产物留痕，便于复用/调试）。
-        const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === nodeId)
-        store.updateNode(nodeId, {
-          meta: {
-            ...(current?.meta || node.meta || {}),
-            cameraMoveVideo: videoResult,
-          },
-        })
-        // S3 喂入：把 mp4 喂给目标镜头视频节点（有 video_ref 槽则切模式+填参考视频，否则降级 prompt 地板）。
-        if (config?.targetNodeId) {
-          attachCameraMoveToTarget(config.targetNodeId, persisted.url, config.move)
+        const decision = decideCameraMoveRetry(done ? 'ok' : (effectiveOutcome === 'ok' ? 'null' : effectiveOutcome), attempt, DEFAULT_CAMERA_MOVE_RETRY)
+        if (decision.kind === 'retry') {
+          // 保留标志：延迟后 +attempt 触发整棵重挂（上下文腾出配额后重采）。
+          retryTimerRef.current = setTimeout(() => {
+            setProcessing((prev) => (prev && prev.nodeId === nodeId ? { nodeId, attempt: decision.nextAttempt } : prev))
+          }, decision.delayMs)
+          return
         }
-      } finally {
-        clearFlag()
-        processingRef.current = null
-      }
+        // done 或 giveUp：清标志（giveUp 也清，否则永远卡着重挂），放开处理位。
+        clearFlag(nodeId)
+        setProcessing(null)
+      })()
     },
-    [],
+    [clearTimers, clearFlag],
   )
 
-  if (!pendingNode) return null
-  if (processingRef.current && processingRef.current !== pendingNode.id) return null
-  processingRef.current = pendingNode.id
+  // 认领待处理节点：无人处理时锁定它并从第 1 轮起。已在处理别的节点则不抢。
+  React.useEffect(() => {
+    if (!pendingNode) {
+      if (processing) { clearTimers(); setProcessing(null) }
+      return
+    }
+    if (!processing) setProcessing({ nodeId: pendingNode.id, attempt: 1 })
+  }, [pendingNode, processing, clearTimers])
+
+  // 每轮尝试开始时装看门狗：到 attemptTimeoutMs 仍无 onResult → 判 timeout 走重试（治「循环停死不回调」）。
+  React.useEffect(() => {
+    if (!processing) return
+    settledRef.current = false
+    watchdogRef.current = setTimeout(() => {
+      settleAttempt(processing.nodeId, processing.attempt, currentFpsRef.current, 'timeout', null)
+    }, DEFAULT_CAMERA_MOVE_RETRY.attemptTimeoutMs)
+    return () => { if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null } }
+  }, [processing, settleAttempt])
+
+  React.useEffect(() => () => clearTimers(), [clearTimers])
+
+  if (!pendingNode || !processing || processing.nodeId !== pendingNode.id) return null
   const config = readCameraMove(pendingNode)
   const state = normalizeScene3DState(pendingNode.meta?.scene3dState)
   const nodeId = pendingNode.id
   const fps = clampFps(config?.fps)
+  currentFpsRef.current = fps
   // P3-C 缺 frameCount 时按轨迹时长 derive(round(duration*fps)),别用固定 48。
   const frameCount = clampFrameCount(config?.frameCount, deriveFrameCountFromScene(state, fps))
   return (
     <Scene3DTrajectoryCapture
+      // attempt 作 key：重试即整棵卸载重挂（离屏 Canvas 全新、WebGL 上下文腾出后重采）。
+      key={`${nodeId}:${processing.attempt}`}
       state={state}
       frameCount={frameCount}
       fps={fps}
       title="运镜参考"
-      onResult={(result) => { void handleResult(nodeId, fps, result) }}
+      onResult={(result) => settleAttempt(nodeId, processing.attempt, fps, result ? 'ok' : 'null', result)}
     />
   )
 }

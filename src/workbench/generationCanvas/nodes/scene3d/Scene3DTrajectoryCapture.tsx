@@ -16,6 +16,7 @@ import { locomotionAnimationClip } from './scene3dCharacterDrive'
 import { frameTimes } from './cameraMoveSchedule'
 import type { Scene3DState, Scene3DObject } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
+import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 
 export type CameraMoveCaptureResult = {
   frames: string[]
@@ -264,7 +265,15 @@ export function Scene3DTrajectoryCapture({
 }): JSX.Element {
   return (
     <div aria-hidden style={{ position: 'absolute', left: -10000, top: 0, width: 480, height: 270, opacity: 0, pointerEvents: 'none' }}>
-      <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [4, 2.4, 5], fov: 45 }}>
+      <Canvas
+        gl={{ preserveDrawingBuffer: true, antialias: true }}
+        camera={{ position: [4, 2.4, 5], fov: 45 }}
+        // 离屏出片的命门：一次 WebGL 上下文丢失（多 Electron 抢 context 配额）浏览器默认不补发 restore，
+        // useFrame 停死 → mp4 永久失败（用户真机 30× Context Lost）。preventDefault 让浏览器补发 restore、
+        // restored 后 invalidate 续画（复用编辑器/预览同一套 attachWebGLContextRecovery，不造第二套）。
+        // Host 侧还有超时/null 重试兜底，双保险。
+        onCreated={({ gl, invalidate }) => attachWebGLContextRecovery(gl.domElement, invalidate)}
+      >
         <Scene3DEnvironmentLayer environment={state.environment} ambientIntensity={0.7} />
         <directionalLight position={[4, 6, 5]} intensity={1.1} />
         <directionalLight position={[-4, 3, -3]} intensity={0.4} />
