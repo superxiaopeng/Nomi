@@ -4,7 +4,7 @@
 
 import { MANNEQUIN_POSE_PRESETS } from './scene3dConstants'
 
-// 动作 = 已校准的 12 个预设 id（[[scene3d-pose-calibration]]）。
+// 动作 = 已校准的预设 id（[[scene3d-pose-calibration]]）。
 export const STAGING_POSE_IDS = MANNEQUIN_POSE_PRESETS.map((preset) => preset.id)
 export type StagingPoseId = string
 

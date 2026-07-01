@@ -53,4 +53,6 @@ export const STAGING_TEST_CASES: StagingTestCase[] = [
   // ── E. 机位 / 人群 ──
   { id: '29-cheer-crowd', expect: '主角双臂欢呼 + 背景人群', check: `${ANATOMY}；主角姿势清晰、人群在后不挤主角`, spec: { characters: [{ pose: 'cheer' }], camera: { angle: 'front', height: 'eye', shot: 'wide' }, crowd: { rows: 2, columns: 5 } } },
   { id: '30-run-low', expect: '1 人奔跑，低机位仰拍强化动势', check: `${ANATOMY}；仰拍下仍前倾奔跑、不应后仰`, spec: { characters: [{ pose: 'run' }], camera: { angle: 'three-quarter', height: 'low', shot: 'wide' } } },
+  // 游戏式操控 C 键的半蹲（crouch，区别于 06-squat 深蹲）：多视角校准 + 落地回归。
+  { id: '31-crouch', expect: '1 人半蹲（游戏式下蹲）：髋膝半屈、上身基本直立、脚掌踩平、重心稳、随时能起身走', check: `${ANATOMY}；上身不应像深蹲那样大幅前倾压膝、不应整体后仰、脚跟不应悬空、两腿不应穿插`, spec: { characters: [{ pose: 'crouch' }], camera: { angle: 'three-quarter', height: 'eye', shot: 'wide' } } },
 ]

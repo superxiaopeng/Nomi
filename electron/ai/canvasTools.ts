@@ -111,7 +111,7 @@ export const storyboardPlanParamsSchema = z.object({
 })
 
 // ── 站位参考 schema（create_staging_reference 的参数；镜像渲染层 stagingBuilder 的 StagingSpec，
-// 进程隔离故两处各一份，与 storyboardPlan 同例。pose 枚举=已校准的 12 预设 id）。──
+// 进程隔离故两处各一份，与 storyboardPlan 同例。pose 枚举=已校准的预设 id）。──
 export const stagingReferenceParamsSchema = z.object({
   shotClientId: z
     .string()
@@ -125,11 +125,11 @@ export const stagingReferenceParamsSchema = z.object({
         name: z.string().optional().describe("Character label, e.g. '林夏' / '角色A'."),
         pose: z
           .enum([
-            "standing", "t-pose", "walk", "run", "sit", "squat",
+            "standing", "t-pose", "walk", "run", "sit", "squat", "crouch",
             "single-knee", "double-knee", "hands-on-hips", "point", "wave", "cheer",
           ])
           .optional()
-          .describe("Body pose preset (default standing). single-knee=proposal kneel, hands-on-hips, point, wave, cheer=arms up."),
+          .describe("Body pose preset (default standing). squat=deep squat, crouch=upright half-crouch, single-knee=proposal kneel, hands-on-hips, point, wave, cheer=arms up."),
         facing: z
           .enum(["toward", "away", "camera", "left", "right"])
           .optional()
@@ -201,7 +201,7 @@ export const cameraMoveParamsSchema = z.object({
     .describe("Framing of the move (wide / medium / close). Default medium."),
   subjectPose: z
     .enum([
-      "standing", "t-pose", "walk", "run", "sit", "squat",
+      "standing", "t-pose", "walk", "run", "sit", "squat", "crouch",
       "single-knee", "double-knee", "hands-on-hips", "point", "wave", "cheer",
     ])
     .optional()

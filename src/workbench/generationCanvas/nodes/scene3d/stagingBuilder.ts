@@ -216,7 +216,9 @@ const POSE_ALIASES: Record<string, string> = {
   kneel: 'single-knee', kneeling: 'single-knee', 'one-knee': 'single-knee', propose: 'single-knee', proposal: 'single-knee',
   'both-knees': 'double-knee', 'two-knees': 'double-knee',
   sitting: 'sit', seated: 'sit',
-  crouch: 'squat', crouching: 'squat', squatting: 'squat',
+  // 'crouch' 现在是独立预设（游戏式半蹲），由上面 KNOWN_POSE_IDS 精确命中，不再走别名到深蹲。
+  // 「crouching」按半蹲、「squatting」按深蹲——两个词各归其真身（P4 语义不混）。
+  crouching: 'crouch', squatting: 'squat',
   stand: 'standing', idle: 'standing',
   walking: 'walk', running: 'run', sprint: 'run',
   pointing: 'point', waving: 'wave', 'raise-hand': 'wave', cheering: 'cheer', celebrate: 'cheer',

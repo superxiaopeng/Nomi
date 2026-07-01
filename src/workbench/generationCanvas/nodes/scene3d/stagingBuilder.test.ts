@@ -70,13 +70,15 @@ describe('buildStagingScene', () => {
 describe('运行时自检(F3)：姿势 id 解析', () => {
   it('词表 id 原样通过、无 pose=站立(合法,无 note)', () => {
     expect(resolveStagingPose('single-knee')).toEqual({ id: 'single-knee' })
+    expect(resolveStagingPose('crouch')).toEqual({ id: 'crouch' }) // 半蹲现为独立预设,精确命中不再别名到深蹲
     expect(resolveStagingPose(undefined)).toEqual({})
     expect(resolveStagingPose('')).toEqual({})
   })
   it('别名/近似归一到词表 id 并带 note(治静默落站立)', () => {
     expect(resolveStagingPose('kneel').id).toBe('single-knee')
     expect(resolveStagingPose('sitting').id).toBe('sit')
-    expect(resolveStagingPose('crouch').id).toBe('squat')
+    expect(resolveStagingPose('squatting').id).toBe('squat') // 「深蹲」词归深蹲
+    expect(resolveStagingPose('crouching').id).toBe('crouch') // 「半蹲」词归半蹲(不再混到深蹲)
     expect(resolveStagingPose('Kneeling').id).toBe('single-knee') // 大小写无关
     expect(resolveStagingPose('hands on hips').id).toBe('hands-on-hips') // 空格归一
     expect(resolveStagingPose('kneel').note).toBeTruthy()

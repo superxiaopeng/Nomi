@@ -389,6 +389,26 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
     }),
   },
   {
+    // 游戏式操控 C 键专用「半蹲」（区别于上面的点击式深蹲 squat，两者是不同动作，P1/P4 各有一份数据源）。
+    // 目标：髋/膝屈到大约一半、上身**基本直立**、脚掌**踩平**、重心稳、看着「随时能走/起身」——不是压在膝上的深蹲。
+    // 多视角截图 + 独立 VLM 审查校准（tests/ux/staging-pose-shots.walk.mjs CASES=31-crouch）得到的关键规律：
+    //  ① 上身直立要靠脊柱**后仰**(Spine −8)抵消屈髋带来的前倾——只给正前倾会整体折成「深鞠躬」(VLM 抓到过)；
+    //  ② 膝屈(Leg 78) 明显大于髋屈(UpLeg 46)：把重心压低而不是把臀往后坐；
+    //  ③ 膝一弯小腿前倾，脚必须大幅**背屈**(Foot −34，脚轴向 +跖屈/−背屈)才能整只脚掌踩平——背屈不够就踮脚尖(VLM 抓到过)；
+    //  ④ Hips 不动（它是骨架根，动了整体歪身，蹲会变成坐/后仰）。蒙皮最低点自动落地(scene3dMath)。
+    id: 'crouch',
+    label: '半蹲',
+    pose: makePoseOffset({
+      mixamorigSpine: [-8, 0, 0],
+      mixamorigLeftUpLeg: [46, 5, 0],
+      mixamorigRightUpLeg: [46, -5, 0],
+      mixamorigLeftLeg: [78, 0, 0],
+      mixamorigRightLeg: [78, 0, 0],
+      mixamorigLeftFoot: [-34, 0, 0],
+      mixamorigRightFoot: [-34, 0, 0],
+    }),
+  },
+  {
     id: 'single-knee',
     label: '单膝跪',
     // 前腿(左)：大腿水平、小腿垂直、脚掌踩平(foot +15)。后腿(右)：大腿略后、膝着地、小腿向后贴地、

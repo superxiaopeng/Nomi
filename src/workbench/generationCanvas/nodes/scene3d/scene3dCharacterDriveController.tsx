@@ -27,8 +27,10 @@ import {
 import { LOCOMOTION_CLIP_IDLE } from './scene3dConstants'
 import type { Scene3DObject } from './scene3dTypes'
 
-// #C 下蹲复用现成的 squat 静态姿势预设（不新造姿势数据，同 ACTION_LIBRARY 的 squat 按钮共享同一份数据源，P1）。
-const CROUCH_POSE_PRESET = MANNEQUIN_POSE_PRESETS.find((preset) => preset.id === 'squat')
+// #C 游戏式操控 C 键下蹲用专门的「半蹲」预设（crouch）——上身直立、髋/膝半屈、脚掌踩平、重心稳，
+// 看着随时能走/起身。区别于动作库那个点击式「深蹲」(squat：压在膝上、躯干前倾)——两者是不同动作，
+// 各有独立数据源（P1 不把一份数据硬塞两用途、P4 通用第一）。深蹲仍归动作库「蹲下」按钮，保持原样。
+const CROUCH_POSE_PRESET = MANNEQUIN_POSE_PRESETS.find((preset) => preset.id === 'crouch')
 
 const TURN_LAMBDA = 11 // 自动面向转身的阻尼系数（越大转身越快）
 const COMMIT_INTERVAL = 0.08 // 节流提交 state 的间隔(秒)，复用 CameraViewEditController 的 80ms
