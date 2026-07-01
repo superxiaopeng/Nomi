@@ -54,6 +54,9 @@ export type Scene3DCamera = {
   rotation: Scene3DVector3
   target: Scene3DVector3
   followTargetId?: string
+  // 相机运镜 take：相机注视点随时间走的「瞄准轨迹」id（录运镜时存下用户每帧看向哪），
+  // 让回放/离屏忠实还原 free-look 转朝向（不靠 follow 某物体、不靠运动切线）。缺省=老行为（看 target/follow）。
+  aimTrajectoryId?: string
   fov: number
   aspectRatio: Scene3DAspectRatio
   lensDepth: number

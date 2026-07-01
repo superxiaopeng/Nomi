@@ -30,7 +30,7 @@ import {
 } from './scene3dViewControllers'
 import { CameraStateRecorder } from './CameraStateRecorder'
 import { CharacterDriveController } from './scene3dCharacterDriveController'
-import { Scene3DPossessPrompt } from './scene3dPossessPrompt'
+import { Scene3DPossessPrompt, Scene3DCameraPossessPrompt } from './scene3dPossessPrompt'
 import { TrajectoryRenderer } from './trajectory'
 
 export function SceneContent({
@@ -45,8 +45,10 @@ export function SceneContent({
   trajectoryMode,
   possessedObject,
   possessedLocomotionClip,
+  cameraPossessId,
   onLocomotionChange,
   onPossess,
+  onCameraPossess,
   onSelect,
   onFocus,
   onObjectPatch,
@@ -86,9 +88,13 @@ export function SceneContent({
   possessedObject?: Scene3DObject
   // 被操控假人当前的 locomotion clip（idle/walk/run），由控制器算速度上抛、驱动该假人迈腿动画。
   possessedLocomotionClip?: string
+  // 当前被操控相机 id（用于「正在操控这台相机时不再显其操控浮层」）。
+  cameraPossessId?: string | null
   onLocomotionChange?: (clip: string) => void
   // 画布内「操控」浮层入口的点击回调（#6）。缺省 = 不显浮层（如只读）。
   onPossess?: (objectId: string) => void
+  // 画布内「操控镜头」浮层入口的点击回调。缺省 = 不显（如只读）。
+  onCameraPossess?: (cameraId: string) => void
   onSelect: (selection: Scene3DSelection) => void
   onFocus: (id: string) => void
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
@@ -159,6 +165,12 @@ export function SceneContent({
         )
       : undefined
 
+  // 画布内「操控镜头」浮层：选中单个相机、未在操控、非只读、非轨迹/取景态时贴相机旁出现（与角色一视同仁 P4）。
+  const cameraPossessPromptCamera =
+    onCameraPossess && !readOnly && !trajectoryMode && !cameraViewEditing && selection?.type === 'camera'
+      ? state.cameras.find((camera) => camera.id === selection.id && camera.id !== cameraPossessId)
+      : undefined
+
   return (
     <>
       <Scene3DEnvironmentLayer environment={state.environment} />
@@ -219,6 +231,9 @@ export function SceneContent({
       ))}
       {possessPromptObject && onPossess ? (
         <Scene3DPossessPrompt object={possessPromptObject} onPossess={onPossess} />
+      ) : null}
+      {cameraPossessPromptCamera && onCameraPossess ? (
+        <Scene3DCameraPossessPrompt camera={cameraPossessPromptCamera} onPossess={onCameraPossess} />
       ) : null}
       {!cameraViewEditing ? state.cameras.map((camera) => (
         <CameraHelperView

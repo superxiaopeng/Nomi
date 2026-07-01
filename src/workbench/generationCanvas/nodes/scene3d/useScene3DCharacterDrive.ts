@@ -3,12 +3,14 @@ import { clonePoseValue } from './scene3dMath'
 import { LOCOMOTION_CLIP_IDLE, MANNEQUIN_POSE_PRESETS } from './scene3dConstants'
 import { poseMatchesPreset } from './scene3dMath'
 import { shouldRecordLocomotionResume } from './scene3dCharacterDrive'
-import type { Scene3DObject, Scene3DSelection } from './scene3dTypes'
+import { activePossessTarget, type PossessTarget } from './scene3dPossessTarget'
+import type { Scene3DCamera, Scene3DObject, Scene3DSelection } from './scene3dTypes'
 
 // 角色操控（possess）的临时 UI 态。照 cameraViewEditId 的范本：只活在 Scene3DFullscreen 的 UI state，
 // 不持久化进 Scene3DState（退出即回到现有编排态，零持久副作用）。
 export function useScene3DCharacterDrive({
   objects,
+  cameras,
   selection,
   readOnly,
   patchObject,
@@ -16,10 +18,12 @@ export function useScene3DCharacterDrive({
   setViewLocked,
   setFocusId,
   exitTrajectoryMode,
+  enterCameraViewEdit,
   exitCameraViewEdit,
   onLocomotionResume,
 }: {
   objects: Scene3DObject[]
+  cameras: Scene3DCamera[]
   selection: Scene3DSelection
   readOnly: boolean
   patchObject: (id: string, patch: Partial<Scene3DObject>) => void
@@ -27,6 +31,8 @@ export function useScene3DCharacterDrive({
   setViewLocked: (locked: boolean) => void
   setFocusId: (id: string) => void
   exitTrajectoryMode: () => void
+  // 操控相机 = 进「取景态」（编辑器相机 fly + CameraViewEditController 实时写回该相机位姿，P1 复用既有机制）。
+  enterCameraViewEdit: (cameraData: Scene3DCamera) => void
   exitCameraViewEdit: () => void
   // #4：locomotion 从静态动作('')恢复到 walk/run/idle 时回调（录制器借此补 base 关键帧，治「蹲到片尾」）。
   onLocomotionResume?: () => void
@@ -41,8 +47,17 @@ export function useScene3DCharacterDrive({
   enterPossess: (objectId: string) => void
   exitPossess: () => void
   applyActionPreset: (presetId: string) => void
+  // 相机操控（运镜）：与角色操控互斥，同一套「操控」动词（P4）。
+  cameraPossessId: string | null
+  possessedCamera: Scene3DCamera | undefined
+  selectedCamera: Scene3DCamera | undefined
+  enterCameraPossess: (cameraId: string) => void
+  exitCameraPossess: () => void
+  // 统一「当前操控目标」（角色/相机/无），互斥单值。供录制器/控制器判走哪条路径。
+  possessTarget: PossessTarget
 } {
   const [possessId, setPossessId] = React.useState<string | null>(null)
+  const [cameraPossessId, setCameraPossessId] = React.useState<string | null>(null)
   // 被操控假人当前 locomotion clip（idle/walk/run），由 CharacterDriveController 按速度上抛。
   // 仅在「桶变化」时更新（rare），不引发渲染风暴。进/退操控都归位 idle。
   const [locomotionClip, setLocomotionClipState] = React.useState<string>(LOCOMOTION_CLIP_IDLE)
@@ -62,11 +77,19 @@ export function useScene3DCharacterDrive({
   const possessedObject = possessId
     ? objects.find((object) => object.id === possessId)
     : undefined
+  const possessedCamera = cameraPossessId
+    ? cameras.find((camera) => camera.id === cameraPossessId)
+    : undefined
   // 当前选中的「单个假人」（头部「操控」入口的出现条件）+ 被操控假人当前命中的动作预设（动作库高亮）。
   const selectedMannequin = selection?.type === 'object'
     ? objects.find((object) => object.id === selection.id && object.type === 'mannequin')
     : undefined
+  // 当前选中的「单个相机」（「操控镜头」入口的出现条件）。
+  const selectedCamera = selection?.type === 'camera'
+    ? cameras.find((camera) => camera.id === selection.id)
+    : undefined
   const activePresetId = activeActionPresetId(possessedObject)
+  const possessTarget = activePossessTarget(possessId, cameraPossessId)
 
   // 只有「单个假人」可被操控（群众/几何/灯光/相机不可）。
   const canPossess = React.useCallback((selection: Scene3DSelection): boolean => {
@@ -79,9 +102,10 @@ export function useScene3DCharacterDrive({
     if (readOnly) return
     const object = objects.find((candidate) => candidate.id === objectId)
     if (!object || object.type !== 'mannequin') return
-    // 让出其它临时态 + 把相机 fly 锁成 edit（viewLocked=true），WASD 让给角色，杜绝键盘争用。
+    // 让出其它临时态（含相机操控，互斥）+ 把相机 fly 锁成 edit（viewLocked=true），WASD 让给角色，杜绝键盘争用。
     exitTrajectoryMode()
     exitCameraViewEdit()
+    setCameraPossessId(null)
     setSelection({ type: 'object', id: objectId })
     setFocusId('')
     setViewLocked(true)
@@ -95,6 +119,24 @@ export function useScene3DCharacterDrive({
     setLocomotionClipState(LOCOMOTION_CLIP_IDLE)
   }, [setViewLocked])
 
+  // 操控相机（运镜）：与角色互斥。进入 = 退角色操控 + 进「取景态」（编辑器相机 fly + 实时写回该相机位姿），
+  // 这样 WASD 飞的就是这台被选中的场景相机，录的就是它的运镜（复用 enterCameraViewEdit 既有机制，不另写移动）。
+  const enterCameraPossess = React.useCallback((cameraId: string) => {
+    if (readOnly) return
+    const camera = cameras.find((candidate) => candidate.id === cameraId)
+    if (!camera) return
+    exitTrajectoryMode()
+    setPossessId(null)
+    setLocomotionClipState(LOCOMOTION_CLIP_IDLE)
+    enterCameraViewEdit(camera)
+    setCameraPossessId(cameraId)
+  }, [cameras, enterCameraViewEdit, exitTrajectoryMode, readOnly])
+
+  const exitCameraPossess = React.useCallback(() => {
+    setCameraPossessId(null)
+    exitCameraViewEdit()
+  }, [exitCameraViewEdit])
+
   // 只在「被操控对象被删除/消失」时自动退出操控态。选择变化（含点空白画布清选、选中别的对象）
   // **不**退出——possess 是显式模式，靠「退出操控」按钮或删除对象才结束。否则 3D 视口里随手点一下
   // 空白（onPointerMissed→clearSelection）就会掉出操控，太脆（R13 真机走查实测到）。键盘争用由
@@ -107,6 +149,15 @@ export function useScene3DCharacterDrive({
       setLocomotionClipState(LOCOMOTION_CLIP_IDLE)
     }
   }, [possessId, possessedObject, setViewLocked])
+
+  // 被操控相机被删除/消失 → 自动退出相机操控（同角色：显式模式，删除对象才被动结束）。
+  React.useEffect(() => {
+    if (!cameraPossessId) return
+    if (!possessedCamera) {
+      setCameraPossessId(null)
+      exitCameraViewEdit()
+    }
+  }, [cameraPossessId, exitCameraViewEdit, possessedCamera])
 
   const applyActionPreset = React.useCallback((presetId: string) => {
     if (readOnly || !possessId) return
@@ -129,6 +180,12 @@ export function useScene3DCharacterDrive({
     enterPossess,
     exitPossess,
     applyActionPreset,
+    cameraPossessId,
+    possessedCamera,
+    selectedCamera,
+    enterCameraPossess,
+    exitCameraPossess,
+    possessTarget,
   }
 }
 

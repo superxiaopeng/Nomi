@@ -32,10 +32,8 @@ import {
 } from './scene3dConstants'
 import { PanelButton, CanvasPanelRestoreButton } from './scene3dToolbar'
 import {
-  cameraLookAtRotation,
   levelEditorCameraRotation,
   applyEditorCameraPose,
-  editorCameraFromSceneCamera,
   vectorAlmostEqual,
 } from './scene3dMath'
 import { SceneObjectList } from './scene3dInspector'
@@ -44,6 +42,7 @@ import { SceneContent } from './scene3dSceneContent'
 import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import { CharacterPossessButton, Scene3DBottomBar } from './scene3dCharacterActionBar'
 import { useScene3DCharacterDrive } from './useScene3DCharacterDrive'
+import { useScene3DCameraViewEdit } from './useScene3DCameraViewEdit'
 import { useScene3DTakeRecorder } from './useScene3DTakeRecorder'
 import { Scene3DTakeSampler } from './Scene3DTakeSampler'
 import { CameraPreview, PlaybackCameraMonitor } from './scene3dCameraPreview'
@@ -356,58 +355,28 @@ export default function Scene3DFullscreen({
     latestEditorCameraRef.current = editorCamera
   }, [])
 
-  React.useEffect(() => {
-    if (cameraViewEditId && !cameraViewEditCamera) {
-      setCameraViewEditId(null)
-    }
-  }, [cameraViewEditCamera, cameraViewEditId])
-
-  const enterCameraViewEdit = React.useCallback((cameraData: Scene3DCamera) => {
-    if (readOnly) return
-    const editorCamera = editorCameraFromSceneCamera(cameraData)
-    latestEditorCameraRef.current = editorCamera
-    setSelection({ type: 'camera', id: cameraData.id })
-    setCameraViewEditId(cameraData.id)
-    setViewLocked(false)
-    setFocusId('')
-    updateEditorCamera(editorCamera)
-  }, [readOnly, updateEditorCamera])
-
-  const exitCameraViewEdit = React.useCallback(() => {
-    setCameraViewEditId(null)
-    setViewLocked(false)
-    setFocusId('')
-  }, [])
-
-  const toggleCameraViewEdit = React.useCallback(() => {
-    if (!selectedCamera || readOnly) return
-    if (cameraViewEditId === selectedCamera.id) {
-      return
-    }
-    enterCameraViewEdit(cameraWithPlaybackPosition(
-      stateRef.current,
+  const { enterCameraViewEdit, exitCameraViewEdit, toggleCameraViewEdit, levelSelectedCamera } =
+    useScene3DCameraViewEdit({
+      readOnly,
       selectedCamera,
-      trajectory.playheadRef.current,
-      trajectory.activeTrajectoryIds,
-    ))
-  }, [cameraViewEditId, enterCameraViewEdit, readOnly, selectedCamera, trajectory.activeTrajectoryIds, trajectory.playheadRef])
-
-  const levelSelectedCamera = React.useCallback(() => {
-    if (!selectedCamera || readOnly) return
-    const displayCamera = cameraWithPlaybackPosition(
-      stateRef.current,
-      selectedCamera,
-      trajectory.playheadRef.current,
-      trajectory.activeTrajectoryIds,
-    )
-    patchCamera(selectedCamera.id, {
-      rotation: cameraLookAtRotation(displayCamera.position, displayCamera.target),
+      cameraViewEditId,
+      cameraViewEditCamera,
+      stateRef,
+      latestEditorCameraRef,
+      playheadRef: trajectory.playheadRef,
+      activeTrajectoryIds: trajectory.activeTrajectoryIds,
+      setSelection,
+      setCameraViewEditId,
+      setViewLocked,
+      setFocusId,
+      updateEditorCamera,
+      patchCamera,
     })
-  }, [patchCamera, readOnly, selectedCamera, trajectory.activeTrajectoryIds, trajectory.playheadRef])
 
   const recordPoseResumeRef = React.useRef<() => void>(() => {}) // #4 ref 转发破环 drive↔recorder 初始化先后
   const characterDrive = useScene3DCharacterDrive({
     objects: state.objects,
+    cameras: state.cameras,
     selection,
     readOnly,
     patchObject,
@@ -415,6 +384,7 @@ export default function Scene3DFullscreen({
     setViewLocked,
     setFocusId,
     exitTrajectoryMode,
+    enterCameraViewEdit,
     exitCameraViewEdit,
     onLocomotionResume: React.useCallback(() => recordPoseResumeRef.current(), []),
   })
@@ -423,10 +393,11 @@ export default function Scene3DFullscreen({
     // 停止已即时 toast（useScene3DTakeRecorder）；出片态由画布「录制走位参考」节点徽标接力（#1/#11 同链）。
     onRecordTake?.(recordedState)
     characterDrive.exitPossess()
+    characterDrive.exitCameraPossess()
   }, [characterDrive, onRecordTake])
 
   const takeRecorder = useScene3DTakeRecorder({
-    possessId: characterDrive.possessId,
+    possessTarget: characterDrive.possessTarget,
     readOnly,
     stateRef,
     onRecorded: handleRecordTake,
@@ -474,6 +445,7 @@ export default function Scene3DFullscreen({
 
   const handleClose = React.useCallback(() => {
     characterDrive.exitPossess()
+    characterDrive.exitCameraPossess()
     trajectory.setTrajectoryEditMode(false)
     trajectory.setTimelineOpen(false)
     trajectory.setIsPlaying(false)
@@ -651,8 +623,10 @@ export default function Scene3DFullscreen({
               trajectoryMode={trajectoryMode}
               possessedObject={characterDrive.possessedObject}
               possessedLocomotionClip={characterDrive.locomotionClip}
+              cameraPossessId={characterDrive.cameraPossessId}
               onLocomotionChange={characterDrive.setLocomotionClip}
               onPossess={readOnly ? undefined : characterDrive.enterPossess}
+              onCameraPossess={readOnly ? undefined : characterDrive.enterCameraPossess}
               onSelect={selectSceneItem}
               onFocus={focusSceneItem}
               onObjectPatch={patchObject}
@@ -693,8 +667,10 @@ export default function Scene3DFullscreen({
             <Scene3DTakeSampler
               isRecording={takeRecorder.isRecording}
               possessedObjectId={characterDrive.possessId}
+              possessingCamera={Boolean(characterDrive.cameraPossessId)}
               onSampleCharacter={takeRecorder.sampleCharacter}
               onSampleCamera={takeRecorder.sampleCamera}
+              onSampleCameraAim={takeRecorder.sampleCameraAim}
             />
           </Canvas>
           {!leftPanelOpen ? (
@@ -731,7 +707,7 @@ export default function Scene3DFullscreen({
           {!readOnly && state.trajectories.length > 0 && !cameraViewEditCamera ? (
             <Scene3DTrajectoryEditBanner trajectory={trajectory} onEnterEdit={() => enterTrajectoryMode(false)} />
           ) : null}
-          {cameraViewEditCamera ? (
+          {cameraViewEditCamera && !characterDrive.cameraPossessId ? (
             <Scene3DCameraViewBanner cameraName={cameraViewEditCamera.name} onExit={exitCameraViewEdit} />
           ) : null}
           <div className="pointer-events-none absolute bottom-4 left-4 grid size-20 place-items-center rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] text-micro text-[var(--nomi-ink-60)] shadow-[var(--nomi-shadow-md)]">
@@ -744,6 +720,7 @@ export default function Scene3DFullscreen({
           <Scene3DBottomBar
             readOnly={readOnly}
             possessedObject={characterDrive.possessedObject}
+            possessedCamera={characterDrive.possessedCamera}
             activePresetId={characterDrive.activePresetId}
             recorder={onRecordTake ? {
               isRecording: takeRecorder.isRecording,
@@ -753,6 +730,7 @@ export default function Scene3DFullscreen({
             } : undefined}
             onApplyPreset={handleApplyActionPreset}
             onExitPossess={characterDrive.exitPossess}
+            onExitCameraPossess={characterDrive.exitCameraPossess}
             onAddObject={addObject}
             onAddCrowd={addCrowd}
             onAddCamera={addCamera}
