@@ -16,6 +16,8 @@ import {
   captureScene,
   clearMovementKeyState,
   eulerToArray,
+  findSceneObjectByRuntimeId,
+  followOrbitPolarBounds,
   hasActiveMovementKey,
   isEditableKeyboardTarget,
   isMovementCode,
@@ -68,6 +70,7 @@ export function Scene3DControls({
   speed,
   target,
   keyboardDisabled = false,
+  followObjectId,
   navigationLockedRef,
   onClearSelection,
   onWheelNavigation,
@@ -79,13 +82,16 @@ export function Scene3DControls({
   speed: number
   target: Scene3DVector3
   keyboardDisabled?: boolean
+  // #3：操控/录制态绑被操控角色 id → orbit 轴心每帧跟随其实时世界位置，绕看/拉近始终对着角色，
+  // 角色走动不再飞出画面（实时所见=离屏所得）。缺省/freeLook 时不跟随（零回归现有自由 orbit）。
+  followObjectId?: string | null
   navigationLockedRef: React.MutableRefObject<boolean>
   onClearSelection: () => void
   onWheelNavigation: (cameraState: Scene3DState['editorCamera']) => void
   onKeyboardNavigationStart: () => void
   onKeyboardNavigationStop: () => void
 }): JSX.Element {
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, scene, invalidate } = useThree()
   const direction = React.useRef(new THREE.Vector3())
   const desiredVelocity = React.useRef(new THREE.Vector3())
   const velocity = React.useRef(new THREE.Vector3())
@@ -110,6 +116,11 @@ export function Scene3DControls({
     ShiftRight: false,
   })
   const draggingRef = React.useRef(false)
+  // #3 跟随：被操控角色上一帧世界位置（追踪移动增量，按帧把 camera+orbit target 同步平移，保住取景偏移）。
+  const followObjectIdRef = React.useRef<string | null>(followObjectId ?? null)
+  const followLastPosRef = React.useRef<THREE.Vector3 | null>(null)
+  const followDeltaRef = React.useRef(new THREE.Vector3())
+  const followWorldPosRef = React.useRef(new THREE.Vector3())
   const yawRef = React.useRef(0)
   const pitchRef = React.useRef(0)
   const cameraEulerRef = React.useRef(new THREE.Euler(0, 0, 0, 'YXZ'))
@@ -142,6 +153,18 @@ export function Scene3DControls({
   React.useLayoutEffect(() => {
     selectionActiveRef.current = selectionActive
   }, [selectionActive])
+
+  // #3：换/进/退跟随目标 → 清基线（下一帧重建 lastPos，不把进入瞬间的位置当增量平移相机）。
+  // 并 update() 一次：进入跟随时若相机本就在带外极端俯仰，靠这帧 update 让 OrbitControls 立即夹回带内
+  // （否则要等角色移动那帧才触发 update，停着拖会先漂出再回正）。
+  React.useLayoutEffect(() => {
+    followObjectIdRef.current = followObjectId ?? null
+    followLastPosRef.current = null
+    if (!freeLook && orbitRef.current) {
+      orbitRef.current.update()
+      invalidate()
+    }
+  }, [followObjectId, freeLook, invalidate])
 
   // 角色操控态：相机 WASD 让位给角色，彻底不接走位键（杜绝两条 WASD 路径争用）。
   React.useLayoutEffect(() => {
@@ -316,6 +339,41 @@ export function Scene3DControls({
     if (dir.lengthSq() > 0 || velocity.current.lengthSq() > 0) invalidate()
   })
 
+  // #3 跟随：操控/录制态下，orbit 轴心跟住被操控角色实时世界位置。做法 = 算角色本帧移动增量，
+  // 把 camera.position 和 OrbitControls.target 同步平移同一增量 → 取景偏移（绕看角度/距离）保持不变，
+  // 角色始终钉在画面同一相对位置（不飞出框）；用户照旧可拖动 orbit / 滚轮拉近（围着角色转）。
+  // 仅 !freeLook（possess 锁视）且有 followObjectId 时生效；退出即停（freeLook 路径不变，零回归）。
+  useFrame(() => {
+    const followId = followObjectIdRef.current
+    if (freeLookRef.current || !followId) {
+      followLastPosRef.current = null
+      return
+    }
+    const group = findSceneObjectByRuntimeId(scene, followId)
+    if (!group) return
+    const worldPos = group.getWorldPosition(followWorldPosRef.current.set(0, 0, 0))
+    const last = followLastPosRef.current
+    if (!last) {
+      followLastPosRef.current = worldPos.clone()
+      return
+    }
+    const delta = followDeltaRef.current.copy(worldPos).sub(last)
+    if (delta.lengthSq() < 1e-10) return
+    last.copy(worldPos)
+    camera.position.add(delta)
+    const controls = orbitRef.current
+    if (controls?.target instanceof THREE.Vector3) {
+      controls.target.add(delta)
+      controls.update()
+    }
+    camera.updateMatrixWorld()
+    invalidate()
+  })
+
+  // #3 续：跟随角色（操控/录制绕拍）时夹 orbit 俯仰角到电影构图带 → 猛拖竖向主体不出框；
+  // 横向方位角不夹（绕圈手感不变）；非跟随态回 [0,π] 默认无约束（退出即自由 orbit，零回归）。
+  const polarBounds = followOrbitPolarBounds(!freeLook && Boolean(followObjectId))
+
   return (
     <>
       <OrbitControls
@@ -324,6 +382,8 @@ export function Scene3DControls({
         makeDefault={!freeLook}
         enableDamping
         dampingFactor={0.15}
+        minPolarAngle={polarBounds.min}
+        maxPolarAngle={polarBounds.max}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: null as unknown as THREE.MOUSE }}
       />
       {freeLook ? (

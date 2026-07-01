@@ -17,6 +17,7 @@ import {
   CROWD_INSTANCED_GEOMETRY_SEGMENTS,
   CROWD_FOOT_RING_SEGMENTS,
   MANNEQUIN_MODEL_URL,
+  MANNEQUIN_ANIMATION_URL,
 } from './scene3dConstants'
 import {
   vectorFromArray,
@@ -31,7 +32,10 @@ import {
   groundMannequinModel,
   normalizeMannequinModel,
   roleColorForIndex,
+  findSceneObjectByRuntimeId,
 } from './scene3dMath'
+import { locomotionAnimationClip } from './scene3dCharacterDrive'
+import { useMannequinLocomotion, type MannequinLocomotionDriver } from './scene3dMannequinLocomotion'
 
 export function Scene3DMeshGeometry({ geometry }: { geometry: Scene3DGeometry | undefined }): JSX.Element {
   if (geometry === 'sphere') return <sphereGeometry args={[0.55, 40, 24]} />
@@ -93,7 +97,19 @@ export class MannequinAssetBoundary extends React.Component<MannequinAssetBounda
   }
 }
 
-export function Mannequin({ color, pose }: { color: string; pose?: Record<string, Scene3DVector3> }): JSX.Element {
+export function Mannequin({
+  color,
+  pose,
+  activeClip,
+  driverRef,
+}: {
+  color: string
+  pose?: Record<string, Scene3DVector3>
+  activeClip?: string
+  // 给了 driverRef（离屏）→ 发布 locomotion 驱动句柄，由 stepper 在 capture 前 imperatively 定相位（确定性，腿迈）；
+  // 缺省 → LIVE 实时推进（possess 走路不变）。
+  driverRef?: React.MutableRefObject<MannequinLocomotionDriver | null>
+}): JSX.Element {
   const { scene } = useGLTF(MANNEQUIN_MODEL_URL)
   const model = React.useMemo(() => {
     const skeletonClone = cloneSkeleton(scene)
@@ -135,15 +151,26 @@ export function Mannequin({ color, pose }: { color: string; pose?: Record<string
     })
   }, [color, model.materials])
 
+  // #9 idle 不靠 clip：locomotion 桶 = idle（或空）→ animationClip=undefined，走静态「自然站姿」路径
+  //（手臂下垂 + 落地，不依赖 demand frameloop 推帧）；仅 walk/run → 真 clip 名交给 mixer。
+  const animationClip = locomotionAnimationClip(activeClip)
+
+  // 静态 pose 路径：仅当未启用 locomotion 动画时应用逐骨姿势 + 落地。
+  // 有真 clip 时由 useMannequinLocomotion 的 mixer 接管骨骼，这里不再写骨骼（否则两条路径打架）。
+  // idle/空（animationClip=undefined）走这里：可能有用户摆的 pose，缺省则 MANNEQUIN_DEFAULT_POSE = 自然站姿。
   React.useLayoutEffect(() => {
+    if (animationClip) return
     applyMannequinSkeletonPose(model.object, pose)
     groundMannequinModel(model.object)
-  }, [model, pose])
+  }, [model, pose, animationClip])
+
+  useMannequinLocomotion(model.object, animationClip, driverRef)
 
   return <primitive object={model.object} />
 }
 
 useGLTF.preload(MANNEQUIN_MODEL_URL)
+useGLTF.preload(MANNEQUIN_ANIMATION_URL)
 
 export function mannequinFootRingRadius(object: Scene3DObject): number {
   const scaleX = Math.max(0.08, Math.abs(object.scale[0] || 1))
@@ -497,6 +524,23 @@ export function nextAvailableObjectPosition(object: Scene3DObject, objects: Scen
   return makePosition((occupied.length + 1) * step, 0)
 }
 
+// 脚环的共享环面（几何 + 材质），所有脚环组件同用，单一真相源（位置由各自的 mesh 决定）。
+function FootRingSurface({ radius, segments = 72 }: { radius: number; segments?: number }): JSX.Element {
+  return (
+    <>
+      <ringGeometry args={[radius * 0.92, radius, segments]} />
+      <meshBasicMaterial
+        color={MANNEQUIN_FOOT_RING_COLOR}
+        depthWrite={false}
+        opacity={0.8}
+        side={THREE.DoubleSide}
+        transparent
+        toneMapped={false}
+      />
+    </>
+  )
+}
+
 export function FootRing({
   position,
   radius,
@@ -512,15 +556,44 @@ export function FootRing({
       rotation={[-Math.PI / 2, 0, 0]}
       userData={{ [CAMERA_HELPER_FLAG]: true }}
     >
-      <ringGeometry args={[radius * 0.92, radius, 72]} />
-      <meshBasicMaterial
-        color={MANNEQUIN_FOOT_RING_COLOR}
-        depthWrite={false}
-        opacity={0.8}
-        side={THREE.DoubleSide}
-        transparent
-        toneMapped={false}
-      />
+      <FootRingSurface radius={radius} />
+    </mesh>
+  )
+}
+
+// possess 直驱期间的脚环：每帧跟住被操控假人 group 的实时世界 x/z（同一个 group、按 runtime id 取，
+// 不读节流滞后的 state position → 零滞后不掉队）。仅用于被操控的那一个假人，其它走静态脚环（零回归）。
+export function LiveFootRing({ runtimeId, radius }: { runtimeId: string; radius: number }): JSX.Element {
+  const meshRef = React.useRef<THREE.Mesh>(null)
+  const { scene } = useThree()
+  const groupRef = React.useRef<THREE.Object3D | null>(null)
+  const worldPos = React.useMemo(() => new THREE.Vector3(), [])
+
+  // 换被操控对象（runtimeId 变）→ 丢缓存 group，下帧按新 id 重解析。
+  React.useLayoutEffect(() => { groupRef.current = null }, [runtimeId])
+
+  useFrame(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    let group = groupRef.current
+    if (!group || !group.parent) {
+      group = findSceneObjectByRuntimeId(scene, runtimeId)
+      groupRef.current = group
+    }
+    if (!group) return
+    group.getWorldPosition(worldPos)
+    mesh.position.set(worldPos.x, OBJECT_GROUND_GUIDE_ELEVATION, worldPos.z) // 贴地：x/z 跟角色，y 锁地面高度
+  })
+
+  return (
+    <mesh
+      ref={meshRef}
+      raycast={() => null}
+      renderOrder={3}
+      rotation={[-Math.PI / 2, 0, 0]}
+      userData={{ [CAMERA_HELPER_FLAG]: true }}
+    >
+      <FootRingSurface radius={radius} />
     </mesh>
   )
 }
@@ -560,20 +633,19 @@ export function InstancedFootRings({
       renderOrder={3}
       userData={{ [CAMERA_HELPER_FLAG]: true }}
     >
-      <ringGeometry args={[radius * 0.92, radius, CROWD_FOOT_RING_SEGMENTS]} />
-      <meshBasicMaterial
-        color={MANNEQUIN_FOOT_RING_COLOR}
-        depthWrite={false}
-        opacity={0.8}
-        side={THREE.DoubleSide}
-        transparent
-        toneMapped={false}
-      />
+      <FootRingSurface radius={radius} segments={CROWD_FOOT_RING_SEGMENTS} />
     </instancedMesh>
   )
 }
 
-export function MannequinFootRings({ object }: { object: Scene3DObject }): JSX.Element | null {
+// possessed = 该假人正被 possess 直驱 → 脚环每帧跟住实时 group（不滞后）。其它一律静态脚环（零回归）。
+export function MannequinFootRings({
+  object,
+  possessed,
+}: {
+  object: Scene3DObject
+  possessed?: boolean
+}): JSX.Element | null {
   const baseRadius = mannequinFootRingRadius(object)
   const positions = React.useMemo(() => {
     if (object.type !== 'mannequinCrowd') return []
@@ -598,6 +670,7 @@ export function MannequinFootRings({ object }: { object: Scene3DObject }): JSX.E
   if (object.type !== 'mannequin' && object.type !== 'mannequinCrowd') return null
 
   if (object.type === 'mannequin') {
+    if (possessed) return <LiveFootRing runtimeId={object.id} radius={baseRadius} />
     return <FootRing position={[object.position[0], 0, object.position[2]]} radius={baseRadius} />
   }
 

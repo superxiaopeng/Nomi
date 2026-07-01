@@ -1,12 +1,13 @@
 import React from 'react'
 import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
-import { IconCamera, IconEye, IconRotate } from '@tabler/icons-react'
+import { IconCamera, IconEye, IconRotate, IconChevronUp, IconChevronDown } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
 import { applySceneCameraPose, crowdCount } from './scene3dMath'
 import { SCENE3D_ASPECT_OPTIONS, SCENE3D_ASPECT_RATIOS } from './scene3dTypes'
 import type { Scene3DAspectRatio, Scene3DCamera, Scene3DObject, Scene3DState } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
+import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import {
   Scene3DMeshGeometry,
   ProceduralMannequin,
@@ -153,6 +154,9 @@ export function CameraPreview({
   )
   const previewStyle = React.useMemo(() => cameraPreviewViewportStyle(camera.aspectRatio), [camera.aspectRatio])
   const lensDepth = camera.lensDepth ?? 0
+  // 相机预览黑窗可收起（用户反馈 #10）：操控/编辑时这个小黑窗会糊在画面中央角色身上挡视线。
+  // 收起后只留一条标题栏（仍可截图/取景/展开），不破坏预览本身功能。纯 UI 态，不持久化。
+  const [collapsed, setCollapsed] = React.useState(false)
 
   return (
     <div
@@ -161,9 +165,18 @@ export function CameraPreview({
         rightPanelCollapsed ? 'top-16' : 'top-4',
       )}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className={cn('flex items-center justify-between gap-2', collapsed ? '' : 'mb-2')}>
         <div className="min-w-0 truncate text-caption font-medium">{camera.name} · {camera.aspectRatio}</div>
         <div className="flex shrink-0 items-center gap-1">
+          <button
+            className="grid size-7 place-items-center rounded-nomi-sm bg-[var(--nomi-ink-05)] text-[var(--nomi-ink-60)] hover:bg-[var(--nomi-ink-10)] hover:text-[var(--nomi-ink)]"
+            type="button"
+            title={collapsed ? '展开相机预览' : '收起相机预览（不挡画面）'}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? <IconChevronDown size={15} /> : <IconChevronUp size={15} />}
+          </button>
           <button
             className={cn(
               'inline-flex h-7 items-center gap-1 rounded-nomi-sm px-2 text-micro hover:bg-[var(--nomi-ink-10)] hover:text-[var(--nomi-ink)] disabled:opacity-40',
@@ -191,66 +204,71 @@ export function CameraPreview({
           </button>
         </div>
       </div>
-      <div className="flex min-h-[126px] items-center justify-center rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] p-1">
-        <div className="overflow-hidden rounded-nomi-sm bg-[var(--nomi-ink)]" style={previewStyle}>
-          <Canvas
-            camera={{
-              fov: previewCamera.fov,
-              near: previewCamera.near,
-              far: previewCamera.far,
-              position: previewCamera.position,
-              rotation: previewCamera.rotation,
-            }}
-            dpr={[1, 1.5]}
-            frameloop="demand"
-            gl={{ antialias: true, preserveDrawingBuffer: false }}
-          >
-            <CameraPreviewScene
-              state={state}
-              cameraData={previewCamera}
-              playheadSeconds={playheadSeconds}
-              activeTrajectoryIds={activeTrajectoryIds}
+      {collapsed ? null : (
+        <>
+          <div className="flex min-h-[126px] items-center justify-center rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] p-1">
+            <div className="overflow-hidden rounded-nomi-sm bg-[var(--nomi-ink)]" style={previewStyle}>
+              <Canvas
+                camera={{
+                  fov: previewCamera.fov,
+                  near: previewCamera.near,
+                  far: previewCamera.far,
+                  position: previewCamera.position,
+                  rotation: previewCamera.rotation,
+                }}
+                dpr={[1, 1.5]}
+                frameloop="demand"
+                gl={{ antialias: true, preserveDrawingBuffer: false }}
+                onCreated={({ gl, invalidate }) => attachWebGLContextRecovery(gl.domElement, invalidate)}
+              >
+                <CameraPreviewScene
+                  state={state}
+                  cameraData={previewCamera}
+                  playheadSeconds={playheadSeconds}
+                  activeTrajectoryIds={activeTrajectoryIds}
+                />
+              </Canvas>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-5 gap-1">
+            {SCENE3D_ASPECT_OPTIONS.map((option) => (
+              <button
+                key={option}
+                className={cn(
+                  'h-6 rounded-nomi-sm border border-[var(--nomi-line-soft)] text-micro text-[var(--nomi-ink-60)] hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
+                  option === camera.aspectRatio && 'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
+                )}
+                disabled={readOnly}
+                type="button"
+                onClick={() => onAspectChange(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
+            <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
+              <span>镜头深度</span>
+              <span className="font-medium text-[var(--nomi-ink)]">{Math.round(lensDepth)}%</span>
+            </div>
+            <input
+              className="block h-1.5 w-full accent-[var(--nomi-ink)]"
+              disabled={readOnly}
+              max={100}
+              min={-100}
+              step={1}
+              type="range"
+              value={lensDepth}
+              onChange={(event) => onLensDepthChange(Number(event.currentTarget.value))}
             />
-          </Canvas>
-        </div>
-      </div>
-      <div className="mt-2 grid grid-cols-5 gap-1">
-        {SCENE3D_ASPECT_OPTIONS.map((option) => (
-          <button
-            key={option}
-            className={cn(
-              'h-6 rounded-nomi-sm border border-[var(--nomi-line-soft)] text-micro text-[var(--nomi-ink-60)] hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
-              option === camera.aspectRatio && 'bg-[var(--nomi-ink)] text-[var(--nomi-paper)]',
-            )}
-            disabled={readOnly}
-            type="button"
-            onClick={() => onAspectChange(option)}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-      <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
-        <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
-          <span>镜头深度</span>
-          <span className="font-medium text-[var(--nomi-ink)]">{Math.round(lensDepth)}%</span>
-        </div>
-        <input
-          className="block h-1.5 w-full accent-[var(--nomi-ink)]"
-          disabled={readOnly}
-          max={100}
-          min={-100}
-          step={1}
-          type="range"
-          value={lensDepth}
-          onChange={(event) => onLensDepthChange(Number(event.currentTarget.value))}
-        />
-        <div className="mt-1 grid grid-cols-3 text-micro text-[var(--nomi-ink-40)]">
-          <span>-100%</span>
-          <span className="text-center">0</span>
-          <span className="text-right">100%</span>
-        </div>
-      </div>
+            <div className="mt-1 grid grid-cols-3 text-micro text-[var(--nomi-ink-40)]">
+              <span>-100%</span>
+              <span className="text-center">0</span>
+              <span className="text-right">100%</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

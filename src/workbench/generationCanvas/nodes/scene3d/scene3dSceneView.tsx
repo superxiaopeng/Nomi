@@ -130,6 +130,8 @@ export function SceneObjectView({
   navigationLockedRef,
   roleLabel,
   roleStartIndex,
+  activeClip,
+  possessed,
   onSelect,
   onFocus,
   onTransformStart,
@@ -145,6 +147,11 @@ export function SceneObjectView({
   navigationLockedRef: React.MutableRefObject<boolean>
   roleLabel?: string
   roleStartIndex?: number
+  // possess 态被操控假人的 locomotion 动画 clip（idle/walk/run）。仅被操控的单个假人有值；
+  // 其余对象/群众一律 undefined → Mannequin 走静态 pose 路径，零回归。
+  activeClip?: string
+  // 该假人正被 possess 直驱 → 脚环每帧跟住实时 group（不滞后）。其余 undefined → 静态脚环（零回归）。
+  possessed?: boolean
   onSelect: () => void
   onFocus: () => void
   onTransformStart: () => void
@@ -259,7 +266,7 @@ export function SceneObjectView({
       {object.type === 'mannequin' ? (
         <MannequinAssetBoundary fallback={<ProceduralMannequin color={object.color || '#808080'} />}>
           <React.Suspense fallback={<ProceduralMannequin color={object.color || '#808080'} />}>
-            <Mannequin color={object.color || '#808080'} pose={object.pose} />
+            <Mannequin color={object.color || '#808080'} pose={object.pose} activeClip={activeClip} />
           </React.Suspense>
         </MannequinAssetBoundary>
       ) : object.type === 'mannequinCrowd' ? (
@@ -302,8 +309,15 @@ export function SceneObjectView({
 
   return (
     <>
-      {selected ? <MannequinFootRings object={object} /> : null}
-      {object.type === 'mannequin' && roleLabel ? <MannequinRoleLabel position={singleMannequinLabelPosition(object)} label={roleLabel} /> : null}
+      {selected || possessed ? <MannequinFootRings object={object} possessed={possessed} /> : null}
+      {/* #10 possess 时胸口「黑窗」真凶（截图查证）：MannequinRoleLabel 的名牌背景 = 深色
+          #111827 plane（depthTest=false 永远画在身体之上）。它本应浮在头顶，但 mannequinLabelHeight
+          对放大过的假人（scale 2.5）算出的高度落在躯干 → 名牌深底糊在胸/腰，看着就是「黑窗」。
+          possess 直驱单个角色时本就不需要它的名牌（不用区分谁是谁），隐藏被操控角色自己的名牌即可，
+          退出 possess 自动恢复（零回归：编排态、其它角色名牌不变）。 */}
+      {object.type === 'mannequin' && roleLabel && !possessed
+        ? <MannequinRoleLabel position={singleMannequinLabelPosition(object)} label={roleLabel} />
+        : null}
       {object.type === 'mannequinCrowd' && roleStartIndex !== undefined
         ? crowdLabelPositions(object).map((position, index) => (
           <MannequinRoleLabel

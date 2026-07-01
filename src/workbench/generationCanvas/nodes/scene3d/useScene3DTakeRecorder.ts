@@ -36,6 +36,12 @@ export type TakeRecorder = {
   sampleCamera: (position: Scene3DVector3) => void
   /** 记录一次动作切换（录制中调；非录制 no-op）。time 由 hook 内部按 wall-clock 打戳。 */
   recordPoseEvent: (presetId: string) => void
+  /**
+   * #4：录制中「按 WASD 从静态动作恢复走路」时打一条 base 关键帧（presetId/pose 皆缺省 = rest），
+   * 让离屏 step-hold 从 squat 切回 base → frameMotionSource 判回 locomotion（腿重新迈），不再蹲到片尾。
+   * 非录制 no-op。
+   */
+  recordPoseResume: () => void
 }
 
 export function useScene3DTakeRecorder({
@@ -114,10 +120,19 @@ export function useScene3DTakeRecorder({
     poseEventsRef.current.push({ ms: performance.now(), presetId, pose: clonePoseValue(preset.pose) })
   }, [isRecording])
 
+  const recordPoseResume = React.useCallback(() => {
+    if (!isRecording) return
+    // base 关键帧：presetId/pose 皆缺省（poseKeyframeKey → 'base'），step-hold 命中它即解除静态动作打断。
+    poseEventsRef.current.push({ ms: performance.now(), presetId: undefined, pose: undefined })
+  }, [isRecording])
+
   const stopRecording = React.useCallback(() => {
     if (!isRecording) return
     clearTick()
     setIsRecording(false)
+    // 即时反馈（用户反馈 #11）：点停止后按钮瞬间变回「录 take」，用户以为白录。先即时确认「已停止」，
+    // 出片是异步的，结果状态由画布上「录制走位参考」节点的徽标接力（生成中 → 已生成 ✓，见 Scene3DEditor）。
+    toast('已停止录制，正在生成参考视频…', 'success')
     const endMs = performance.now()
     const objectId = possessId
     const characterSamples = characterSamplesRef.current
@@ -162,5 +177,6 @@ export function useScene3DTakeRecorder({
     sampleCharacter,
     sampleCamera,
     recordPoseEvent,
+    recordPoseResume,
   }
 }

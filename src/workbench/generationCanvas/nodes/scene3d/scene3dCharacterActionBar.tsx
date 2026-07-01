@@ -2,8 +2,6 @@ import React from 'react'
 import {
   IconHandStop,
   IconManFilled,
-  IconPlayerPlayFilled,
-  IconRun,
   IconArmchair,
   IconArrowBarToDown,
   IconCircleFilled,
@@ -46,10 +44,10 @@ export function CharacterPossessButton({ drive }: { drive: CharacterDriveApi }):
 
 // 动作库：动作名 → 现有静态姿势预设 key 的映射（不造新预设）。
 // 某动作没有对应预设就不会进列表（诚实，见 ACTION_LIBRARY 过滤）。
+// 注意：待机/行走/奔跑（idle/walk/run）已改由「移动自动播迈腿动画」驱动（possess 态按 WASD 速度自动切 clip），
+// 不再放进静态动作库——否则一个「行走」会有「静态摆腿姿势」和「真迈腿动画」两套心智、互相打架（P1）。
+// 这里只留 locomotion 之外的静态摆姿（下蹲/挥手/坐下）。
 const ACTION_DEFS: Array<{ label: string; presetId: string; icon: typeof IconManFilled }> = [
-  { label: '待机', presetId: 'standing', icon: IconManFilled },
-  { label: '行走', presetId: 'walk', icon: IconPlayerPlayFilled },
-  { label: '奔跑', presetId: 'run', icon: IconRun },
   { label: '下蹲', presetId: 'squat', icon: IconArrowBarToDown },
   { label: '挥手', presetId: 'wave', icon: IconHandStop },
   { label: '坐下', presetId: 'sit', icon: IconArmchair },

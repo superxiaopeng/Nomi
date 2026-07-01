@@ -8,9 +8,11 @@ import React, { Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Mannequin, MannequinCrowd, MannequinAssetBoundary, ProceduralMannequin } from './scene3dObjects'
-import { captureScene, applySceneCameraPose, aspectDimensions, capCameraMoveDimensions, applyMannequinSkeletonPose, groundMannequinModel } from './scene3dMath'
+import type { MannequinLocomotionDriver } from './scene3dMannequinLocomotion'
+import { captureScene, applySceneCameraPose, aspectDimensions, capCameraMoveDimensions, applyMannequinSkeletonPose, applyMannequinArmDownPose, resetMannequinSkeletonToRest, groundMannequinModel } from './scene3dMath'
 import { cameraWithPlaybackPosition, objectWithPlaybackPose } from './scene3dPlayback'
-import { samplePoseKeyframe, poseKeyframeKey } from './scene3dPoseTrack'
+import { samplePoseKeyframe, poseKeyframeKey, frameMotionSource } from './scene3dPoseTrack'
+import { locomotionAnimationClip } from './scene3dCharacterDrive'
 import { frameTimes } from './cameraMoveSchedule'
 import type { Scene3DState, Scene3DObject } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
@@ -27,13 +29,28 @@ export type CameraMoveCaptureResult = {
 // 只是物体先经 objectWithPlaybackPose 投影到时刻 t）。
 // 关键：每个 state.objects[i] **恒映射一个 group child**（即使内容为空），让 stepper 用
 // group.children[i] 直接对齐 state.objects[i]，不被「跳过的物体类型」打乱索引。
-function TrajectoryObjects({ objects }: { objects: Scene3DObject[] }): JSX.Element {
+// driverRefs：每个带 locomotionClip 的被操控假人对应一个 locomotion 驱动句柄 ref，由 stepper 在
+// capture 前 imperatively 定相位（确定性迈腿）。无 locomotionClip 的假人不传 activeClip → 走原静态路径（零回归）。
+function TrajectoryObjects({
+  objects,
+  driverRefs,
+}: {
+  objects: Scene3DObject[]
+  driverRefs: Map<string, React.MutableRefObject<MannequinLocomotionDriver | null>>
+}): JSX.Element {
   let roleStart = 0
   return (
     <>
       {objects.map((object) => {
         const content = object.type === 'mannequin'
-          ? <Mannequin color={object.color || '#808080'} pose={object.pose} />
+          ? (
+            <Mannequin
+              color={object.color || '#808080'}
+              pose={object.pose}
+              activeClip={object.locomotionClip}
+              driverRef={locomotionAnimationClip(object.locomotionClip) ? driverRefs.get(object.id) : undefined}
+            />
+          )
           : object.type === 'mannequinCrowd'
             ? <MannequinCrowd object={object} roleStartIndex={roleStart} />
             : null
@@ -48,25 +65,74 @@ function TrajectoryObjects({ objects }: { objects: Scene3DObject[] }): JSX.Eleme
   )
 }
 
-// 在时刻 t 把假人骨架摆到 pose-over-time 当前关键帧（仅边界变化时重摆，imperatively，不靠 React 重渲染）。
+// 在时刻 t 把假人骨架摆到「当前生效静态姿势」+ 落地（仅姿势 key 变化时重摆，imperatively，不靠 React 重渲染）。
 // child = 包裹该对象的 group；child.children[0] = Mannequin 挂载的骨架 root（normalizeMannequinModel 产物，
-// 即 Mannequin 组件里 applyMannequinSkeletonPose 的同一 root）。无 poseTrack / 非假人 → 不动（老行为）。
+// 即 Mannequin 组件里 applyMannequinSkeletonPose 的同一 root）。
+// #7：无论有无 poseTrack，静态姿势都**复用实时同一套 groundMannequinModel 落地**——
+//   有 poseTrack → 取该时刻关键帧 pose；无 poseTrack → 用 object.pose（如蹲）。
+//   此前「无 poseTrack 直接 return」使纯静态蹲姿在离屏从不落地 → 导出悬空（用户实测 #7）。
 function applyPoseOverTime(
   object: Scene3DObject,
   t: number,
   child: THREE.Object3D,
   appliedPoseKey: Map<string, string>,
 ): void {
-  if (object.type !== 'mannequin' || !object.poseTrack || object.poseTrack.length === 0) return
-  const keyframe = samplePoseKeyframe(object.poseTrack, t)
-  const key = poseKeyframeKey(keyframe)
+  if (object.type !== 'mannequin') return
+  const hasTrack = Boolean(object.poseTrack && object.poseTrack.length > 0)
+  const keyframe = hasTrack ? samplePoseKeyframe(object.poseTrack!, t) : undefined
+  // 生效 pose：有 track 取关键帧 pose（t 早于首帧 → 落回 object.pose）；无 track → object.pose。
+  const effectivePose = keyframe ? keyframe.pose : object.pose
+  // 缓存键：有 track 用关键帧 key（边界塌合）；无 track 用静态 pose 形状 key（pose 不变只摆一次）。
+  const key = hasTrack ? poseKeyframeKey(keyframe) : poseKeyframeKey({ time: 0, pose: effectivePose })
   if (appliedPoseKey.get(object.id) === key) return
   const mannequinRoot = child.children[0]
   if (!(mannequinRoot instanceof THREE.Group)) return
-  // keyframe 缺省（t 早于首帧）→ 落回静态基准 object.pose。
-  applyMannequinSkeletonPose(mannequinRoot, keyframe ? keyframe.pose : object.pose)
+  applyMannequinSkeletonPose(mannequinRoot, effectivePose)
   groundMannequinModel(mannequinRoot)
   appliedPoseKey.set(object.id, key)
+}
+
+// 在时刻 t 决定被操控假人该帧的「动作来源」并落到骨架（locomotion 迈腿 vs 静态 pose 共存，单一判定 frameMotionSource）：
+// - locomotion：调 driver.setTime(t) 定相位 + 落地（确定性腿迈）。清掉该对象的 appliedPoseKey，
+//   使下次切回静态时强制重摆（mixer 期间骨架已被动画覆盖，缓存键失效）。
+// - 否则（static-pose / static-base）：走原 applyPoseOverTime（静态优先，含 base 落回 object.pose）。
+// 无 locomotionClip 的假人 → frameMotionSource 恒非 locomotion → 完全走原静态路径（零回归）。
+function applyMotionOverTime(
+  object: Scene3DObject,
+  t: number,
+  child: THREE.Object3D,
+  appliedPoseKey: Map<string, string>,
+  lastSource: Map<string, string>,
+  driverRefs: Map<string, React.MutableRefObject<MannequinLocomotionDriver | null>>,
+): void {
+  if (object.type !== 'mannequin') return
+  // #9 idle 不靠 clip：把 locomotionClip 经 locomotionAnimationClip 折叠（idle/空 → undefined → 走静态站姿，
+  // 不调 driver），与 Mannequin 内部口径一致；仅 walk/run 才走 locomotion 驱动。
+  const source = frameMotionSource(object.poseTrack, locomotionAnimationClip(object.locomotionClip), t)
+  const prevSource = lastSource.get(object.id)
+  lastSource.set(object.id, source)
+  if (source === 'locomotion') {
+    const driver = driverRefs.get(object.id)?.current
+    if (driver) {
+      const mannequinRoot = child.children[0]
+      // #4 离屏侧根因：上一帧是静态动作（蹲/挥手）这帧切回走路 → 先把骨架复位 bind rest，清掉
+      // walk clip 不驱动的骨上残留的 squat 旋转（脊/头/腿链终端），否则导出停在「蹲到片尾」。
+      // 只在 static→locomotion 那一次转换 reset（不每帧 reset，避免抹掉 mixer 已写的迈腿相位）。
+      if (prevSource && prevSource !== 'locomotion' && mannequinRoot instanceof THREE.Group) {
+        resetMannequinSkeletonToRest(mannequinRoot)
+      }
+      driver.setTime(t)
+      if (mannequinRoot instanceof THREE.Group) {
+        // #2 A-hybrid：clip 已滤掉手臂链 → 离屏每帧也补「手臂下垂」静态姿势（与 LIVE 同一套）。
+        applyMannequinArmDownPose(mannequinRoot)
+        groundMannequinModel(mannequinRoot)
+      }
+    }
+    // locomotion 接管期间静态缓存失效：清键，切回静态时强制重摆。
+    appliedPoseKey.delete(object.id)
+    return
+  }
+  applyPoseOverTime(object, t, child, appliedPoseKey)
 }
 
 function cameraBindingTimes(state: Scene3DState, frameCount: number): number[] {
@@ -104,6 +170,18 @@ function TrajectoryFrameStepper({
   // pose-over-time：每个假人「上次套用的关键帧 key」。step-hold 下只在动作切换边界重摆骨架，
   // 不每帧重摆（groundMannequinModel 含全顶点遍历，每帧跑会掉帧；其设计本就是「仅姿势变化时跑一次」）。
   const appliedPoseKeyRef = React.useRef<Map<string, string>>(new Map())
+  // 每个假人「上一帧的动作来源」（locomotion/static-pose/static-base）。用于侦测 static→locomotion 转换，
+  // 在那一刻把骨架复位 rest 清掉静态残留（#4 离屏侧）。
+  const lastSourceRef = React.useRef<Map<string, string>>(new Map())
+  // 每个带 locomotionClip 的被操控假人对应一个 locomotion 驱动句柄 ref（Mannequin 发布，stepper 在 capture 前调）。
+  // 稳定身份：同一 object.id 复用同一 ref（避免每帧/每渲染换 ref 丢句柄）。
+  const driverRefsRef = React.useRef<Map<string, React.MutableRefObject<MannequinLocomotionDriver | null>>>(new Map())
+  const driverRefs = driverRefsRef.current
+  state.objects.forEach((object) => {
+    if (object.type === 'mannequin' && locomotionAnimationClip(object.locomotionClip) && !driverRefs.has(object.id)) {
+      driverRefs.set(object.id, { current: null })
+    }
+  })
 
   useFrame(() => {
     if (firedRef.current) return
@@ -133,7 +211,7 @@ function TrajectoryFrameStepper({
         child.position.set(posed.position[0], posed.position[1], posed.position[2])
         child.rotation.set(posed.rotation[0], posed.rotation[1], posed.rotation[2])
         child.visible = posed.visible
-        applyPoseOverTime(object, t, child, appliedPoseKeyRef.current)
+        applyMotionOverTime(object, t, child, appliedPoseKeyRef.current, lastSourceRef.current, driverRefs)
       })
       group.updateMatrixWorld(true)
     }
@@ -166,7 +244,7 @@ function TrajectoryFrameStepper({
 
   return (
     <group ref={objectGroupRef}>
-      <TrajectoryObjects objects={state.objects} />
+      <TrajectoryObjects objects={state.objects} driverRefs={driverRefs} />
     </group>
   )
 }

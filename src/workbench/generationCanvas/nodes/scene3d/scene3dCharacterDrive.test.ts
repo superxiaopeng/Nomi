@@ -7,7 +7,18 @@ import {
   normalizeAngle,
   dampYaw,
   applyGroundTranslation,
+  locomotionForSpeed,
+  groundSpeedForFlySpeed,
+  isArmLocomotionTrackName,
+  locomotionAnimationClip,
+  shouldRecordLocomotionResume,
+  CHARACTER_DRIVE_FLY_SPEED_MIN,
+  CHARACTER_DRIVE_FLY_SPEED_MAX,
 } from './scene3dCharacterDrive'
+import {
+  LOCOMOTION_RUN_SPEED_THRESHOLD,
+  LOCOMOTION_WALK_SPEED_THRESHOLD,
+} from './scene3dConstants'
 
 describe('groundMoveDirection', () => {
   it('无按键 → 零向量', () => {
@@ -136,5 +147,134 @@ describe('applyGroundTranslation', () => {
 
   it('y 始终来自 groundY，与传入 position.y 无关', () => {
     expect(applyGroundTranslation([0, 5, 0], 0, 0, 1.25)[1]).toBe(1.25)
+  })
+})
+
+describe('groundSpeedForFlySpeed', () => {
+  it('滑块最低档 → 走路速度（远低于 run 阈值）', () => {
+    const speed = groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MIN)
+    expect(speed).toBeGreaterThan(LOCOMOTION_WALK_SPEED_THRESHOLD)
+    expect(speed).toBeLessThan(LOCOMOTION_RUN_SPEED_THRESHOLD)
+    expect(locomotionForSpeed(speed)).toBe('walk')
+  })
+
+  it('滑块最高档 → 越过 run 阈值（奔跑）', () => {
+    const speed = groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MAX)
+    expect(speed).toBeGreaterThan(LOCOMOTION_RUN_SPEED_THRESHOLD)
+    expect(locomotionForSpeed(speed)).toBe('run')
+  })
+
+  it('滑块单调递增 → 速度单调递增', () => {
+    let prev = -Infinity
+    for (let s = CHARACTER_DRIVE_FLY_SPEED_MIN; s <= CHARACTER_DRIVE_FLY_SPEED_MAX; s += 1) {
+      const speed = groundSpeedForFlySpeed(s)
+      expect(speed).toBeGreaterThan(prev)
+      prev = speed
+    }
+  })
+
+  it('存在一个中高档使桶从 walk 翻成 run（run 真能被滑块触发）', () => {
+    const walkAtLow = locomotionForSpeed(groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MIN))
+    const runAtHigh = locomotionForSpeed(groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MAX))
+    expect(walkAtLow).toBe('walk')
+    expect(runAtHigh).toBe('run')
+  })
+
+  it('clamp 越界输入到滑块范围（不爆速/不负速）', () => {
+    expect(groundSpeedForFlySpeed(-100)).toBeCloseTo(groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MIN), 6)
+    expect(groundSpeedForFlySpeed(9999)).toBeCloseTo(groundSpeedForFlySpeed(CHARACTER_DRIVE_FLY_SPEED_MAX), 6)
+  })
+})
+
+describe('locomotionForSpeed', () => {
+  it('零速 / 极微速 → idle（站立）', () => {
+    expect(locomotionForSpeed(0)).toBe('idle')
+    expect(locomotionForSpeed(LOCOMOTION_WALK_SPEED_THRESHOLD - 1e-6)).toBe('idle')
+  })
+
+  it('walk 阈值（含边界）~run 阈值之间 → walk', () => {
+    expect(locomotionForSpeed(LOCOMOTION_WALK_SPEED_THRESHOLD)).toBe('walk')
+    expect(locomotionForSpeed((LOCOMOTION_WALK_SPEED_THRESHOLD + LOCOMOTION_RUN_SPEED_THRESHOLD) / 2)).toBe('walk')
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD - 1e-6)).toBe('walk')
+  })
+
+  it('达到/超过 run 阈值 → run', () => {
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD)).toBe('run')
+    expect(locomotionForSpeed(LOCOMOTION_RUN_SPEED_THRESHOLD + 10)).toBe('run')
+  })
+
+  it('负速取绝对值分桶（速度是标量大小）', () => {
+    expect(locomotionForSpeed(-LOCOMOTION_RUN_SPEED_THRESHOLD)).toBe('run')
+    expect(locomotionForSpeed(-(LOCOMOTION_WALK_SPEED_THRESHOLD + 0.01))).toBe('walk')
+  })
+})
+
+describe('isArmLocomotionTrackName（#2 手臂链 track 过滤）', () => {
+  it('左右肩/大臂/前臂/手/手指 track 全判为手臂链', () => {
+    for (const bone of [
+      'mixamorigLeftShoulder', 'mixamorigRightShoulder',
+      'mixamorigLeftArm', 'mixamorigRightArm',
+      'mixamorigLeftForeArm', 'mixamorigRightForeArm',
+      'mixamorigLeftHand', 'mixamorigRightHand',
+      'mixamorigLeftHandThumb1', 'mixamorigRightHandIndex3',
+    ]) {
+      expect(isArmLocomotionTrackName(`${bone}.quaternion`)).toBe(true)
+      expect(isArmLocomotionTrackName(`${bone}.position`)).toBe(true)
+    }
+  })
+
+  it('腿/髋/脊/头/颈/脚 track 不判为手臂链（留它们被动画驱动）', () => {
+    for (const bone of [
+      'mixamorigHips', 'mixamorigSpine', 'mixamorigSpine1', 'mixamorigSpine2',
+      'mixamorigNeck', 'mixamorigHead',
+      'mixamorigLeftUpLeg', 'mixamorigRightUpLeg',
+      'mixamorigLeftLeg', 'mixamorigRightLeg',
+      'mixamorigLeftFoot', 'mixamorigRightFoot',
+      'mixamorigLeftToeBase', 'mixamorigRightToeBase',
+    ]) {
+      expect(isArmLocomotionTrackName(`${bone}.quaternion`)).toBe(false)
+    }
+  })
+
+  it('无 Left/Right 前缀的中线骨（即便名里含 Arm 字样的脊椎也不会误命中）', () => {
+    expect(isArmLocomotionTrackName('mixamorigSpine.quaternion')).toBe(false)
+    expect(isArmLocomotionTrackName('mixamorigHips.position')).toBe(false)
+  })
+})
+
+describe('locomotionAnimationClip（#9 idle 不靠 clip）', () => {
+  it('idle / 空 → undefined（走静态站姿路径，不靠推帧）', () => {
+    expect(locomotionAnimationClip('idle')).toBeUndefined()
+    expect(locomotionAnimationClip('')).toBeUndefined()
+    expect(locomotionAnimationClip(undefined)).toBeUndefined()
+  })
+
+  it('walk / run → 原 clip 名（交给 mixer 驱动腿）', () => {
+    expect(locomotionAnimationClip('walk')).toBe('walk')
+    expect(locomotionAnimationClip('run')).toBe('run')
+  })
+})
+
+describe('shouldRecordLocomotionResume（#4 走→蹲→走：恢复走路时补 base 关键帧）', () => {
+  it("从静态动作('')恢复到 walk/run → 该补 base 关键帧", () => {
+    expect(shouldRecordLocomotionResume('', 'walk')).toBe(true)
+    expect(shouldRecordLocomotionResume('', 'run')).toBe(true)
+    expect(shouldRecordLocomotionResume('', 'idle')).toBe(true)
+  })
+
+  it("从静态动作('')恢复但 next 仍是 '' → 不补（没真恢复）", () => {
+    expect(shouldRecordLocomotionResume('', '')).toBe(false)
+    expect(shouldRecordLocomotionResume('', undefined)).toBe(false)
+  })
+
+  it('walk↔run 桶切换、idle→walk（prev 非空）→ 不补（不是从静态动作恢复）', () => {
+    expect(shouldRecordLocomotionResume('walk', 'run')).toBe(false)
+    expect(shouldRecordLocomotionResume('run', 'walk')).toBe(false)
+    expect(shouldRecordLocomotionResume('idle', 'walk')).toBe(false)
+    expect(shouldRecordLocomotionResume('walk', '')).toBe(false)
+  })
+
+  it('首次进入（prev undefined）→ 不补', () => {
+    expect(shouldRecordLocomotionResume(undefined, 'walk')).toBe(false)
   })
 })

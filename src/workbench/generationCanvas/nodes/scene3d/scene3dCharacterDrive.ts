@@ -1,6 +1,24 @@
 import * as THREE from 'three'
-import type { Scene3DMovementCode } from './scene3dConstants'
+import {
+  LOCOMOTION_CLIP_IDLE,
+  LOCOMOTION_CLIP_RUN,
+  LOCOMOTION_CLIP_WALK,
+  LOCOMOTION_RUN_SPEED_THRESHOLD,
+  LOCOMOTION_WALK_SPEED_THRESHOLD,
+  type Scene3DLocomotionClip,
+  type Scene3DMovementCode,
+} from './scene3dConstants'
 import type { Scene3DVector3 } from './scene3dTypes'
+
+// header「速度」滑块（flySpeed，原给相机 fly 调）的取值范围（与 Scene3DFullscreen 滑块 min/max 一致）。
+export const CHARACTER_DRIVE_FLY_SPEED_MIN = 1
+export const CHARACTER_DRIVE_FLY_SPEED_MAX = 16
+// 角色走位地面基速（米/秒）。滑块在此之上缩放：低档=从容走路(远低于 run 阈值 3.2)，
+// 高档=明确奔跑(越过 run 阈值)。基速以下任何缩放都走路，基速 ~2.3 倍才奔跑。
+export const CHARACTER_DRIVE_BASE_GROUND_SPEED = 2.6
+// 滑块两端相对基速的缩放：低端 ≈ 基速×0.46 (≈1.2 m/s 舒适走)、高端 ≈ 基速×2.31 (≈6.0 m/s 奔跑)。
+const GROUND_SPEED_SCALE_AT_MIN_FLY = 0.46
+const GROUND_SPEED_SCALE_AT_MAX_FLY = 2.31
 
 // 角色操控（possess）纯运动学层。和相机 fly（scene3dViewControllers）是两条独立路径：
 // 相机 fly 把按键映射到「相机本地空间」并允许 y 飞行；角色操控只在「地面平面 x/z」走位、贴地、自动面向。
@@ -78,4 +96,63 @@ export function applyGroundTranslation(
     Number(groundY.toFixed(4)),
     Number((position[2] + deltaZ).toFixed(4)),
   ]
+}
+
+// #2 A-hybrid：retargetClip 对绕肩手臂链校正差（headless 钉死：walk@0.5s 手-肩 y≈-0.005、横展 0.713
+// = 手臂水平张开退回 bind T-pose），但对绕髋腿/脊链校正好。所以播 locomotion 时**滤掉手臂链的 track**，
+// 只让腿/髋/脊被动画驱动，手臂另由「手臂下垂」静态姿势兜（applyMannequinArmDownPose）。
+// 这个纯字符串谓词判断某条 animation track 是否属于「手臂链」骨（肩/大臂/前臂/手/手指）。
+// track 名形如 "mixamorigLeftArm.quaternion"，取 '.' 前的骨名匹配。颈/头不滤（留它们让头自然摆）。
+const ARM_LOCOMOTION_BONE_PATTERN = /(Shoulder|Arm|ForeArm|Hand)/
+export function isArmLocomotionTrackName(trackName: string): boolean {
+  const boneName = trackName.split('.')[0]
+  if (!/(Left|Right)/.test(boneName)) return false
+  return ARM_LOCOMOTION_BONE_PATTERN.test(boneName)
+}
+
+// #9 idle 不靠 clip：locomotion 桶 = idle 时 demand frameloop 不推帧，idle clip 会冻在 bind T-pose。
+// 改成 idle（及空 clip）→ 返回 undefined，让 Mannequin 走静态「自然站姿」路径（手臂下垂 + 落地，不依赖推帧）；
+// 仅 walk/run 才返回真 clip 名交给 mixer（腿动 + 手臂静态下垂）。纯函数，单测覆盖。
+export function locomotionAnimationClip(locomotionClip: string | undefined): string | undefined {
+  if (!locomotionClip) return undefined
+  if (locomotionClip === LOCOMOTION_CLIP_IDLE) return undefined
+  return locomotionClip
+}
+
+// #4「走→蹲→走」录制：点静态动作（蹲/挥手）→ locomotionClip 置 ''（CharacterDriveController 冻结位移、
+// 显示静态姿势），录制器同刻打了一条 static-pose 关键帧。但「按 WASD 恢复走路」只把 locomotionClip 从 ''
+// 接回 walk/run（onLocomotionChange），**没有**往 pose track 打事件 → step-hold 下 squat 关键帧永久 hold
+// 到片尾（导出「蹲到底」）。这个纯谓词判断一次 locomotion 变化是否是「从静态动作恢复到走/跑」——是则录制器
+// 该补一条 base 关键帧（pose/presetId 皆缺省），让 frameMotionSource 在恢复时刻判回 locomotion（腿重新迈）。
+// 仅 '' → 非空 locomotion 才算恢复；walk↔run、→idle、首次进入（prev 非 '')都不补（不污染轨道）。
+export function shouldRecordLocomotionResume(
+  prevClip: string | undefined,
+  nextClip: string | undefined,
+): boolean {
+  return prevClip === '' && Boolean(nextClip)
+}
+
+// 把 header「速度」滑块(flySpeed，1–16) 线性映射到角色走位地面速度(米/秒)。
+// 滑块越高走得越快，**高档要越过 run 阈值(3.2)** 触发奔跑、低档保持走路；随滑块连续 derive，不钉死。
+// clamp 到滑块范围后归一化，再在「基速×低端缩放 ~ 基速×高端缩放」间线性插值。
+export function groundSpeedForFlySpeed(flySpeed: number): number {
+  const clamped = Math.min(
+    CHARACTER_DRIVE_FLY_SPEED_MAX,
+    Math.max(CHARACTER_DRIVE_FLY_SPEED_MIN, flySpeed),
+  )
+  const t = (clamped - CHARACTER_DRIVE_FLY_SPEED_MIN)
+    / (CHARACTER_DRIVE_FLY_SPEED_MAX - CHARACTER_DRIVE_FLY_SPEED_MIN)
+  const scale = GROUND_SPEED_SCALE_AT_MIN_FLY
+    + t * (GROUND_SPEED_SCALE_AT_MAX_FLY - GROUND_SPEED_SCALE_AT_MIN_FLY)
+  return CHARACTER_DRIVE_BASE_GROUND_SPEED * scale
+}
+
+// 由「角色当前地面速度(米/秒，非负)」分桶到 locomotion 动画 clip：
+// 微小速度以下 = idle（站着），walk 阈值~run 阈值之间 = walk，run 阈值以上 = run。
+// 纯函数、帧率无关，供 CharacterDriveController 每帧判桶（只在桶变化时才上抛切 clip）。
+export function locomotionForSpeed(speedMetersPerSec: number): Scene3DLocomotionClip {
+  const speed = Math.abs(speedMetersPerSec)
+  if (speed < LOCOMOTION_WALK_SPEED_THRESHOLD) return LOCOMOTION_CLIP_IDLE
+  if (speed >= LOCOMOTION_RUN_SPEED_THRESHOLD) return LOCOMOTION_CLIP_RUN
+  return LOCOMOTION_CLIP_WALK
 }

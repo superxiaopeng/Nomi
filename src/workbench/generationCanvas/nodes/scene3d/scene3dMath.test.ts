@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { cameraPoseSampleChanged, type CameraPoseSample } from "./scene3dMath";
+import { cameraPoseSampleChanged, followOrbitPolarBounds, type CameraPoseSample } from "./scene3dMath";
+import {
+  FOLLOW_ORBIT_MAX_POLAR_ANGLE,
+  FOLLOW_ORBIT_MIN_POLAR_ANGLE,
+} from "./scene3dConstants";
 
 const base: CameraPoseSample = {
   px: 1, py: 2, pz: 3,
@@ -48,5 +52,36 @@ describe("cameraPoseSampleChanged", () => {
   it("自定义 epsilon 生效", () => {
     expect(cameraPoseSampleChanged(base, { ...base, px: base.px + 0.05 }, 0.1)).toBe(false);
     expect(cameraPoseSampleChanged(base, { ...base, px: base.px + 0.2 }, 0.1)).toBe(true);
+  });
+});
+
+describe("followOrbitPolarBounds", () => {
+  it("非跟随态：返回 [0,π] = OrbitControls 默认无约束（退出操控自由 orbit 不变，零回归）", () => {
+    const bounds = followOrbitPolarBounds(false);
+    expect(bounds.min).toBe(0);
+    expect(bounds.max).toBe(Math.PI);
+  });
+
+  it("跟随态：返回电影构图带，夹住竖向两极（不到正俯视/正仰视）", () => {
+    const bounds = followOrbitPolarBounds(true);
+    expect(bounds.min).toBe(FOLLOW_ORBIT_MIN_POLAR_ANGLE);
+    expect(bounds.max).toBe(FOLLOW_ORBIT_MAX_POLAR_ANGLE);
+  });
+
+  it("跟随带严格收窄于默认 [0,π]：上界不到顶视(0)、下界不到底视(π)", () => {
+    const bounds = followOrbitPolarBounds(true);
+    expect(bounds.min).toBeGreaterThan(0);
+    expect(bounds.max).toBeLessThan(Math.PI);
+    expect(bounds.min).toBeLessThan(bounds.max);
+  });
+
+  it("构图带落在合理区间（中高俯角 ~ 近水平仰角），主体不会被顶出框", () => {
+    const bounds = followOrbitPolarBounds(true);
+    // min ≈ 26°(从竖直起算的俯角)：> 15°(不会接近鸟瞰)且 < 水平(π/2)
+    expect(bounds.min).toBeGreaterThan(Math.PI * (15 / 180));
+    expect(bounds.min).toBeLessThan(Math.PI / 2);
+    // max ≈ 100°(略过水平的低角度)：≥ 水平(π/2) 留一点仰拍空间，但 < 110°(远不到贴地正仰视脚底)
+    expect(bounds.max).toBeGreaterThanOrEqual(Math.PI / 2);
+    expect(bounds.max).toBeLessThan(Math.PI * (110 / 180));
   });
 });

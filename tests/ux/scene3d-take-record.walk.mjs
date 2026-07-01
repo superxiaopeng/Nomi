@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'node:fs'
 
 const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -110,12 +110,20 @@ try {
   // 关编辑器看画布
   const close = win.locator('[title="关闭"]').first()
   if ((await close.count()) > 0) await close.click()
-  await win.waitForTimeout(1500)
-  // 节点建在原节点下方、常在画布视口外 → getByText 不一定命中（Playwright 看不到视口外 canvas 节点）。
-  // 仅作信息参考；真正的端到端证据是下面 mp4 落盘（捕获 Host 只对带 cameraMoveAutoCapture 的节点触发）。
-  pass.takeNode = (await win.getByText('录制走位参考', { exact: false }).count()) > 0
+  // #1 修复后：take 节点继承 source 分类 → 与原节点同屏；关编辑器后 requestCanvasFit（360ms 触发 + 200ms 动画）
+  // 把它带进视口。等够时间让 fit 落定再截图/检查（之前 1500ms 偏紧，拉到 2600ms 更稳）。
+  await win.waitForTimeout(2600)
+  // #1 真证据：take 节点继承 source 分类后，真渲染进画布视口（同分类才进 visibleNodesForRender→才有 DOM）。
+  // 节点标题不画在卡面上（scene3d 卡面是 3D 编辑器入口，与 source 节点一致），所以不能按标题文本判命中。
+  // 改判两件真实可见证据：① 画布上 scene3d 卡片外壳 ≥2（原节点 + take 节点都在当前分类同屏）；
+  // ② take 节点底部状态徽标「参考视频生成中…/已生成 ✓」出现（出片态接力，见 Scene3DEditor）。
+  const shellCount = await win.evaluate(() =>
+    document.querySelectorAll('[class*="generation-canvas-v2-node"]').length)
+  const badgeVisible = await win.evaluate(() =>
+    document.body.innerText.includes('参考视频生成中') || document.body.innerText.includes('参考视频已生成'))
+  pass.takeNode = shellCount >= 2 || badgeVisible
   await win.screenshot({ path: path.join(outDir, 'tr-02-canvas-take-node.png') })
-  log(`  ${pass.takeNode ? '✓' : '·'} 画布可见「录制走位参考」节点（视口外不命中属正常，以 mp4 为准）`)
+  log(`  ${pass.takeNode ? '✓' : '✗'} take 节点进画布视口（卡片外壳=${shellCount}，状态徽标可见=${badgeVisible}）`)
 
   // 轮询临时项目目录，等离屏捕获 + ffmpeg 出 mp4（最多 ~70s）
   let mp4s = []
@@ -126,7 +134,13 @@ try {
   }
   pass.mp4Made = mp4s.length > 0
   await win.screenshot({ path: path.join(outDir, 'tr-03-after-capture.png') })
-  log(`  ${pass.mp4Made ? '✓' : '✗'} 生成 mp4（${mp4s.length} 个）${mp4s[0] ? ' → ' + path.basename(mp4s[0]) : ''}`)
+  // 把出的 mp4 拷进持久 outDir（临时 projectsDir 跑完即清），方便用户抽帧看腿。
+  let savedMp4 = ''
+  if (mp4s[0]) {
+    savedMp4 = path.join(outDir, 'tr-walk-take.mp4')
+    try { copyFileSync(mp4s[0], savedMp4) } catch { savedMp4 = mp4s[0] }
+  }
+  log(`  ${pass.mp4Made ? '✓' : '✗'} 生成 mp4（${mp4s.length} 个）${savedMp4 ? ' → ' + savedMp4 : ''}`)
 
   log('\n═══ 结果 ═══')
   log(`  编辑器可开:      ${pass.editorOpen ? '✓' : '✗'}`)
@@ -136,8 +150,8 @@ try {
   log(`  建 take 节点:    ${pass.takeNode ? '✓' : '✗'}`)
   log(`  端到端出 mp4:    ${pass.mp4Made ? '✓' : '✗'}`)
   log(errors.length ? `\nconsole errors:\n  ${errors.slice(0, 8).join('\n  ')}` : '\nno console errors')
-  // takeNode 仅信息参考（视口外不命中）；mp4Made 是端到端真证据。
-  const ok = pass.editorOpen && pass.possessed && pass.recStarted && pass.recStopped && pass.mp4Made
+  // #1 修复后 takeNode 也是硬证据（同分类必渲染）；mp4Made 是离屏端到端真证据。
+  const ok = pass.editorOpen && pass.possessed && pass.recStarted && pass.recStopped && pass.takeNode && pass.mp4Made
   await app.close()
   process.exit(ok ? 0 : 1)
 } catch (err) {

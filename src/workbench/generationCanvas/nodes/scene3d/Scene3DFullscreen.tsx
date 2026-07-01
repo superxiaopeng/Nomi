@@ -41,6 +41,7 @@ import {
 import { SceneObjectList } from './scene3dInspector'
 import { TrajectoryListPanel } from './scene3dTrajectoryListPanel'
 import { SceneContent } from './scene3dSceneContent'
+import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import { CharacterPossessButton, Scene3DBottomBar } from './scene3dCharacterActionBar'
 import { useScene3DCharacterDrive } from './useScene3DCharacterDrive'
 import { useScene3DTakeRecorder } from './useScene3DTakeRecorder'
@@ -404,6 +405,7 @@ export default function Scene3DFullscreen({
     })
   }, [patchCamera, readOnly, selectedCamera, trajectory.activeTrajectoryIds, trajectory.playheadRef])
 
+  const recordPoseResumeRef = React.useRef<() => void>(() => {}) // #4 ref 转发破环 drive↔recorder 初始化先后
   const characterDrive = useScene3DCharacterDrive({
     objects: state.objects,
     selection,
@@ -414,12 +416,13 @@ export default function Scene3DFullscreen({
     setFocusId,
     exitTrajectoryMode,
     exitCameraViewEdit,
+    onLocomotionResume: React.useCallback(() => recordPoseResumeRef.current(), []),
   })
 
   const handleRecordTake = React.useCallback((recordedState: Scene3DState) => {
+    // 停止已即时 toast（useScene3DTakeRecorder）；出片态由画布「录制走位参考」节点徽标接力（#1/#11 同链）。
     onRecordTake?.(recordedState)
     characterDrive.exitPossess()
-    toast('已录制走位，正在离屏渲染参考视频…', 'success')
   }, [characterDrive, onRecordTake])
 
   const takeRecorder = useScene3DTakeRecorder({
@@ -428,6 +431,7 @@ export default function Scene3DFullscreen({
     stateRef,
     onRecorded: handleRecordTake,
   })
+  recordPoseResumeRef.current = takeRecorder.recordPoseResume
 
   // 点动作库：即时改假人姿势（S1）+ 若正在录 take，记一条带时间戳的动作事件（pose-over-time 生产者）。
   // 录制器内部 no-op 非录制态，故非录制时纯走 applyActionPreset，零副作用。
@@ -629,7 +633,10 @@ export default function Scene3DFullscreen({
             dpr={[1, 2]}
             frameloop={trajectory.isPlaying || trajectory.timelineOpen || takeRecorder.isRecording ? 'always' : 'demand'}
             gl={{ antialias: true, preserveDrawingBuffer: false }}
-            onCreated={({ camera }) => applyEditorCameraPose(camera, initialEditorCameraRef.current)}
+            onCreated={({ camera, gl, invalidate }) => {
+              applyEditorCameraPose(camera, initialEditorCameraRef.current)
+              attachWebGLContextRecovery(gl.domElement, invalidate)
+            }}
             onPointerMissed={clearSelection}
           >
             <SceneContent
@@ -643,6 +650,9 @@ export default function Scene3DFullscreen({
               cameraViewEditCamera={cameraViewEditCamera}
               trajectoryMode={trajectoryMode}
               possessedObject={characterDrive.possessedObject}
+              possessedLocomotionClip={characterDrive.locomotionClip}
+              onLocomotionChange={characterDrive.setLocomotionClip}
+              onPossess={readOnly ? undefined : characterDrive.enterPossess}
               onSelect={selectSceneItem}
               onFocus={focusSceneItem}
               onObjectPatch={patchObject}

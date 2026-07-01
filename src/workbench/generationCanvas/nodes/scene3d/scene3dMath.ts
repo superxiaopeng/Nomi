@@ -16,6 +16,8 @@ import {
   CAMERA_LENS_DEPTH_MAX_FACTOR,
   CLIPBOARD_PASTE_OFFSET,
   CROWD_MAX_AXIS,
+  FOLLOW_ORBIT_MAX_POLAR_ANGLE,
+  FOLLOW_ORBIT_MIN_POLAR_ANGLE,
   MANNEQUIN_DEFAULT_POSE,
   MANNEQUIN_DEFAULT_SCALE,
   MANNEQUIN_REST_ROTATION_KEY,
@@ -273,6 +275,20 @@ export function rememberMannequinRestPose(root: THREE.Object3D): void {
   })
 }
 
+// 把所有骨复位到 bind rest（仅清旋转，不叠加任何 pose offset）。
+// 离屏从静态动作（如蹲）切回 locomotion 时调一次：mixer 的 walk clip 只驱动它 track 覆盖的骨，
+// squat 残留在「walk 不动的骨」（脊/头/部分腿链终端）上会让导出停在蹲姿。先 reset 清掉残留，
+// 再让 mixer 在干净 rest 上叠加迈腿，确保「蹲→走」真的站起来走（治 #4 离屏侧根因）。
+export function resetMannequinSkeletonToRest(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Bone)) return
+    const restRotation = object.userData[MANNEQUIN_REST_ROTATION_KEY] as Scene3DVector3 | undefined
+    if (!restRotation) return
+    object.rotation.set(restRotation[0], restRotation[1], restRotation[2])
+  })
+  root.updateMatrixWorld(true)
+}
+
 export function applyMannequinSkeletonPose(root: THREE.Object3D, pose?: Record<string, Scene3DVector3>): void {
   root.traverse((object) => {
     if (!(object instanceof THREE.Bone)) return
@@ -288,6 +304,31 @@ export function applyMannequinSkeletonPose(root: THREE.Object3D, pose?: Record<s
     object.rotation.x += (defaultOffset?.[0] || 0) + (savedOffset?.[0] || 0)
     object.rotation.y += (defaultOffset?.[1] || 0) + (savedOffset?.[1] || 0)
     object.rotation.z += (defaultOffset?.[2] || 0) + (savedOffset?.[2] || 0)
+  })
+  root.updateMatrixWorld(true)
+}
+
+// #2 A-hybrid：locomotion 动画态下手臂另走静态「手臂下垂」姿势（腿/髋/脊由 retarget clip 驱动）。
+// 只对手臂链骨（肩/大臂/前臂/手）先复位到 bind rest 再叠加 MANNEQUIN_DEFAULT_POSE 里手臂那组 offset
+// （= 「站立」预设的手臂下垂基准，单一真相源，不另造），不碰腿/髋/脊（那些此刻被 mixer 写着，碰了会打架）。
+// 每帧 mixer.update 后调一次（手臂 offset 是常量，重复叠加幂等：先复位 rest 再加 offset）。
+const ARM_DOWN_BONE_PATTERN = /(Shoulder|Arm|ForeArm|Hand)/
+function isArmDownBoneName(boneName: string): boolean {
+  if (!/(Left|Right)/.test(boneName)) return false
+  return ARM_DOWN_BONE_PATTERN.test(boneName)
+}
+
+export function applyMannequinArmDownPose(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Bone)) return
+    if (!isArmDownBoneName(object.name)) return
+    const restRotation = object.userData[MANNEQUIN_REST_ROTATION_KEY] as Scene3DVector3 | undefined
+    if (restRotation) object.rotation.set(restRotation[0], restRotation[1], restRotation[2])
+    const offset = MANNEQUIN_DEFAULT_POSE[normalizeMannequinBoneName(object.name)]
+    if (!offset) return
+    object.rotation.x += offset[0]
+    object.rotation.y += offset[1]
+    object.rotation.z += offset[2]
   })
   root.updateMatrixWorld(true)
 }
@@ -620,6 +661,15 @@ export function numberInputValue(value: number): string {
 
 export function isMovementCode(code: string): code is Scene3DMovementCode {
   return MOVEMENT_CODES.has(code)
+}
+
+// #3 续：解析 OrbitControls 在「是否跟随角色」下该用的俯仰角(polar angle)上下界。
+// 跟随态(操控/录制绕拍角色) → 返回电影构图带 [min,max]，夹住竖向两极（横向方位角不夹=绕圈手感不变），
+// 主体猛拖竖向也留在画面内。非跟随态 → 返回 [0, π] = OrbitControls 默认无约束（退出即恢复自由 orbit，零回归）。
+// 纯函数（无副作用、可测）：following 由调用方按 !freeLook && followObjectId 判定。
+export function followOrbitPolarBounds(following: boolean): { min: number; max: number } {
+  if (!following) return { min: 0, max: Math.PI }
+  return { min: FOLLOW_ORBIT_MIN_POLAR_ANGLE, max: FOLLOW_ORBIT_MAX_POLAR_ANGLE }
 }
 
 export function clearMovementKeyState(keys: Record<Scene3DMovementCode, boolean>): void {

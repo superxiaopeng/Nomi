@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { scene3DStateEqual } from "./Scene3DEditor";
+import { scene3DStateEqual, readTakeCaptureStatus } from "./Scene3DEditor";
 import { normalizeScene3DState } from "./scene3d/scene3dSerializer";
 import type { Scene3DState } from "./scene3d/scene3dTypes";
+import type { GenerationCanvasNode } from "../model/generationCanvasTypes";
+
+function nodeWithMeta(meta: Record<string, unknown> | undefined): GenerationCanvasNode {
+  return { id: "n1", kind: "scene3d", title: "录制走位参考", position: { x: 0, y: 0 }, meta } as GenerationCanvasNode;
+}
 
 // 单一确定性基准 state（normalize 默认会带随机 id，故只生成一次，b 用深拷贝，
 // 保证除被测字段外两侧完全一致 —— 测的是「字段值差异」而非「随机 id 差异」）。
@@ -78,5 +83,36 @@ describe("scene3DStateEqual", () => {
     const b = clone();
     b.lastThumbnail = "data:image/png;base64,xxx";
     expect(scene3DStateEqual(a, b)).toBe(false);
+  });
+});
+
+describe("readTakeCaptureStatus（录 take 闭环徽标状态，#1）", () => {
+  it("无相关 meta → null（普通 3D 节点不显徽标）", () => {
+    expect(readTakeCaptureStatus(nodeWithMeta(undefined))).toBe(null);
+    expect(readTakeCaptureStatus(nodeWithMeta({ scene3dState: {} }))).toBe(null);
+  });
+
+  it("有 cameraMoveAutoCapture → generating（离屏出片中）", () => {
+    expect(readTakeCaptureStatus(nodeWithMeta({ cameraMoveAutoCapture: { fps: 24, frameCount: 48 } }))).toBe(
+      "generating",
+    );
+  });
+
+  it("有带 url 的 cameraMoveVideo → done（出片完成）", () => {
+    expect(
+      readTakeCaptureStatus(nodeWithMeta({ cameraMoveVideo: { url: "asset://take.mp4", fps: 24, createdAt: 1 } })),
+    ).toBe("done");
+  });
+
+  it("cameraMoveVideo 缺 url → 不算完成（防半成品误报 ✓）", () => {
+    expect(readTakeCaptureStatus(nodeWithMeta({ cameraMoveVideo: { fps: 24 } }))).toBe(null);
+  });
+
+  it("出片中优先 generating（标志尚未清，video 还没写）", () => {
+    expect(
+      readTakeCaptureStatus(
+        nodeWithMeta({ cameraMoveAutoCapture: { fps: 24 }, cameraMoveVideo: { url: "x" } }),
+      ),
+    ).toBe("generating");
   });
 });
