@@ -51,10 +51,11 @@ export const NEWAPI_IMAGE_CREATE_OP: HttpOperation = {
     prompt: "{{request.prompt}}",
     size: "{{request.params.size}}",
     quality: "{{request.params.quality}}",
-    n: 1,
+    n: "{{request.params.n}}", // OpenAI 标准张数（taskParams 缺省 1；整 token 保留 number）
     response_format: "url",
   },
-  response_mapping: { image_url: "data.0.url" },
+  // data[*].url：n>1 时取回**全部**图（pathValues 支持 [*] 通配摊平），不再只落第一张（旧 data.0.url）。
+  response_mapping: { image_url: "data[*].url" },
   paramMap: NEWAPI_IMAGE_PARAM_MAP,
 };
 
@@ -98,7 +99,9 @@ export const NEWAPI_VIDEO_CREATE_OP: HttpOperation = {
     prompt: "{{request.prompt}}",
     duration: "{{request.params.duration}}",
     size: "{{request.params.size}}",
-    image: "{{request.params.image}}", // i2v 首帧链接（可选，未填模板丢弃）
+    // i2v 首帧：取 taskParams 聚合后的 image_url（含节点填的 firstFrameUrl / referenceImages[0]），
+    // 不是裸 image 键（那个 taskParams 从不产出 → 通用路 i2v 首帧此前根本到不了 wire）。可选，未填模板丢弃。
+    image: "{{request.params.image_url}}",
   },
   response_mapping: { task_id: "task_id" },
   provider_meta_mapping: { task_id: "task_id" },
@@ -113,7 +116,7 @@ export const NEWAPI_VIDEO_QUERY_OP: HttpOperation = {
   response_mapping: {
     task_id: "task_id",
     status: "status",
-    video_url: "data.0.url",
+    video_url: "data[*].url", // 取回全部产物（n>1 / 多结果），不再只落第一个（旧 data.0.url）
     error_message: "error.message",
   },
 };
@@ -137,6 +140,7 @@ export const NEWAPI_STANDARD_IMAGE_PARAMS: ParamControl[] = [
   { key: "aspect_ratio", label: "比例", type: "select", options: sel(["1:1", "16:9", "9:16", "4:3", "3:4"]), defaultValue: "1:1" },
   { key: "resolution", label: "清晰度", type: "select", options: sel(["1K", "2K", "4K"]), defaultValue: "1K" },
   { key: "quality", label: "质量", type: "select", options: sel(["standard", "hd"]), defaultValue: "standard" },
+  { key: "n", label: "张数", type: "number", options: [], min: 1, max: 4, defaultValue: 1 },
 ];
 
 export const NEWAPI_STANDARD_VIDEO_PARAMS: ParamControl[] = [
@@ -157,14 +161,16 @@ export const NEWAPI_AUDIO_TTS_OP: HttpOperation = {
     model: "{{model.modelKey}}",
     input: "{{request.prompt}}",
     voice: "{{request.params.voice}}",
+    speed: "{{request.params.speed}}", // OpenAI /v1/audio/speech 标准语速（0.25~4.0，缺省由模板丢弃→站默认）
     response_format: "mp3",
   },
 };
 
 // 通用中转配音参数（裸 relay 模型的兜底；模型若命中 seed-tts 档案，UI 由档案给火山音色下拉）。
-// voice 用 freeform——各中转 TTS 模型音色 ID 不同，不写死枚举。
+// voice 用 freeform——各中转 TTS 模型音色 ID 不同，不写死枚举。speed 是 OpenAI 标准语速。
 export const NEWAPI_STANDARD_AUDIO_PARAMS: ParamControl[] = [
   { key: "voice", label: "音色 ID", type: "text", options: [] },
+  { key: "speed", label: "语速", type: "number", options: [], min: 0.25, max: 4, defaultValue: 1 },
 ];
 
 /** 一个 new-api 模型的传输配方（按 kind 取 create/query + taskKind；图像另带 image_edit 改图 op）。 */

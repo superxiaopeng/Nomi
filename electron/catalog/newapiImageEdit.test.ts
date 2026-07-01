@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { NEWAPI_IMAGE_EDIT_OP, NEWAPI_IMAGE_CREATE_OP, NEWAPI_IMAGE_PARAM_MAP } from "./newapiTransport";
+import { NEWAPI_IMAGE_EDIT_OP, NEWAPI_IMAGE_CREATE_OP, NEWAPI_IMAGE_PARAM_MAP, NEWAPI_VIDEO_CREATE_OP, NEWAPI_VIDEO_QUERY_OP, NEWAPI_AUDIO_TTS_OP } from "./newapiTransport";
 import { taskTemplateParams } from "./taskParams";
 import { applyParamMap } from "./paramTranslate";
+import { valuesFromMapping } from "../tasks/responseParsing";
 import { renderTemplateValue, buildTemplateContext } from "../ai/requestPipeline";
+import type { HttpOperation } from "./types";
 
 type AnyRec = Record<string, unknown>;
 
-function renderBody(op: typeof NEWAPI_IMAGE_EDIT_OP, prompt: string, params: AnyRec): AnyRec {
+function renderBody(op: HttpOperation, prompt: string, params: AnyRec): AnyRec {
   const ctx = buildTemplateContext({
     request: { prompt },
     params,
@@ -54,5 +56,49 @@ describe("通用中转 text_to_image 分辨率派生（治「只能出 1K」）"
   });
   it("body 不再钉死 1024：2K/4K 能选出", () => {
     expect(derive("1:1", "2K")).not.toBe("1024x1024");
+  });
+});
+
+describe("通用中转路径夯实（输出多资产 + 参数广度 + i2v 断链）", () => {
+  it("图片 n>1：response_mapping data[*].url 取回全部图(不再只落第一张)", () => {
+    const resp = { data: [{ url: "https://x/1.png" }, { url: "https://x/2.png" }] };
+    expect(valuesFromMapping(resp, NEWAPI_IMAGE_CREATE_OP.response_mapping ?? null, "image_url")).toEqual([
+      "https://x/1.png",
+      "https://x/2.png",
+    ]);
+  });
+
+  it("n 强制为数字发出(UI 存字符串 '3' → body.n === 3)", () => {
+    const body = renderBody(NEWAPI_IMAGE_CREATE_OP, "x", taskTemplateParams({ extras: { n: "3" } }));
+    expect(body.n).toBe(3);
+  });
+
+  it("视频 i2v：节点填的首帧(firstFrameUrl)到达 body.image(此前断链到不了 wire)", () => {
+    const body = renderBody(NEWAPI_VIDEO_CREATE_OP, "走起来", taskTemplateParams({ extras: { firstFrameUrl: "https://x/f.png" } }));
+    expect(body.image).toBe("https://x/f.png");
+  });
+
+  it("视频 t2v：无首帧 → body 不带空的 image 字段(不误发 image:'')", () => {
+    const body = renderBody(NEWAPI_VIDEO_CREATE_OP, "一片森林", taskTemplateParams({ extras: {} }));
+    expect("image" in body).toBe(false);
+  });
+
+  it("视频轮询 data[*].url 取回全部视频", () => {
+    const resp = { data: [{ url: "https://x/a.mp4" }, { url: "https://x/b.mp4" }] };
+    expect(valuesFromMapping(resp, NEWAPI_VIDEO_QUERY_OP.response_mapping ?? null, "video_url")).toEqual([
+      "https://x/a.mp4",
+      "https://x/b.mp4",
+    ]);
+  });
+
+  it("音频 speed(OpenAI 标准)到达 body", () => {
+    const body = renderBody(NEWAPI_AUDIO_TTS_OP, "念一段", taskTemplateParams({ extras: { voice: "v1", speed: 1.5 } }));
+    expect(body.speed).toBe(1.5);
+    expect(body.voice).toBe("v1");
+  });
+
+  it("音频无 speed → body 不带空 speed 字段", () => {
+    const body = renderBody(NEWAPI_AUDIO_TTS_OP, "念", taskTemplateParams({ extras: { voice: "v1" } }));
+    expect("speed" in body).toBe(false);
   });
 });

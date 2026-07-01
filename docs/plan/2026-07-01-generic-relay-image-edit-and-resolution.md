@@ -116,6 +116,28 @@ Nomi 对中转有两条接入路：
    - ② 分辨率下拉有 1K/2K/4K；
    - ③ （若有可用 key）真发一次图生图，人眼看出图确实受参考图影响。无 key 时至少验 mapping 选到 image_edit、请求体结构正确（mock/日志）。
 
+## 六点五、Phase 2 通用性夯实（2026-07-01 续，用户「在其他通用上多夯实一下」）
+
+对整条通用拉取路径做同类「只按最窄场景写」缺口审计（subagent，见对话）。**只做不需要猜任何供应商格式的那批**（纯内部健壮性 / OpenAI 标准且 doc.newapi.pro 已核 / 照抄已验证路径）——遵守「拿不到官方 API 必须问用户、不许拿次优源替代」（记忆 api-doc-fetch-fail-ask-dont-substitute）。
+
+**已做（安全批）：**
+1. 图片输出多资产：`NEWAPI_IMAGE_CREATE_OP` response_mapping `data.0.url`→`data[*].url`（pathValues 已验支持 `[*]` 通配摊平，responseParsing.ts:22）。n>1 取回全部图，不再只落第一张。
+2. 图片张数：加 `n` 参数（OpenAI 标准，doc.newapi.pro 已核）+ body `n` 取 token；taskParams 强制 `Number()`（防 UI 存字符串 → 严格端点 400，同 AGNES int 坑）。
+3. 音频语速：加 `speed`（OpenAI /v1/audio/speech 标准）+ body token，空则丢弃。
+4. 视频 i2v 断链修复：body `image` 从裸 `{{request.params.image}}`（taskParams 从不产出）改成 `{{request.params.image_url}}`（firstReferenceImage 聚合）——通用路 i2v 首帧此前根本到不了 wire。
+5. 空值不误发：taskParams `image_url` 空→undefined（非 ""），否则 body 会发 `image:""` 被部分中转拒。
+6. 视频轮询多资产：`NEWAPI_VIDEO_QUERY_OP` `data.0.url`→`data[*].url`。
+
+**故意没做（需真实供应商文档才能定字段，按纪律留给「问用户/装新版验」）：**
+- 视频多参考图/尾帧/角色参考 wire 字段：new-api 视频非 OpenAI 标准，`last_frame`/`image_urls` 真名各站不一，不猜。
+- 图片 `seed`/`negative_prompt`：OpenAI images 官方无此二参、属中转扩展，加了赌各站支持，暂缓（真要加须先拿到目标站文档）。
+- 接入即验证（非阻断「测试连接」GET {baseUrl}/models）：需新增 main.ts IPC + desktopClient + UI（R8），独立一档。
+- images/edits multipart 图生图（gpt-image/DALL·E）：与 URL 架构冲突，需 runner 支持二进制上传。
+- 音频转写(Whisper)/声音克隆：新 mapping/multipart，二期。
+- 删并行的 `NEWAPI_STATUS_MAPPING` 改依赖 responseParsing 通用兜底表（P1 去重）：低优先，暂留。
+
+**验证**：新增 7 个专项测试（多资产 data[*]、n 数字、i2v 首帧到达/空值丢弃、视频多资产、音频 speed 有/无）。全量 2376 测试 + typecheck 过。
+
 ## 七、不动项 / 回滚
 - 不改策展路（apimart 等）——它们本就正常。
 - 不改视频/音频通用路。

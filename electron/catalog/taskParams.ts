@@ -73,7 +73,8 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
   return {
     ...extras,
     size,
-    n: extras.n ?? 1,
+    // n 强制数字（OpenAI images 要 int；UI number 参数可能存成字符串 "1"，整 token 会原样发 → 严格端点 400）。
+    n: Number(extras.n) || 1,
     width: request.width,
     height: request.height,
     seed: request.seed,
@@ -82,7 +83,9 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
     cfg_scale: request.cfgScale,
     negative_prompt: request.negativePrompt,
     duration,
-    image_url: firstReferenceImage(request),
+    // 空→undefined（不是 ""）：body 的 `image: "{{request.params.image_url}}"` 整 token 渲染时，
+    // undefined 会被丢弃、"" 却会当空字段发出去（纯文生图/文生视频误带 image:"" 会被部分中转拒）。
+    image_url: firstReferenceImage(request) || undefined,
     // 参考输入（单图首/尾帧 + 多参考数组）—— 构建逻辑在 electron/catalog/archetypeInput（M5）。
     ...refInput,
     // chat/completions 多模态图生图（通用中转 gemini/nano-banana 系）：参考图 → content 里的 image_url 项数组。
