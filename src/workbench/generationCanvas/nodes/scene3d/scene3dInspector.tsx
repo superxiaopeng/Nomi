@@ -445,6 +445,7 @@ export function PropertyPanel({
   onCameraPatch,
   onEnvironmentPatch,
   onApplyCameraMove,
+  onExportCameraMoveFrames,
 }: {
   state: Scene3DState
   selection: Scene3DSelection
@@ -453,6 +454,7 @@ export function PropertyPanel({
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
   onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
+  onExportCameraMoveFrames: (cameraId: string) => void
 }): JSX.Element {
   const selectedObject = selection?.type === 'object'
     ? state.objects.find((object) => object.id === selection.id)
@@ -638,6 +640,7 @@ export function PropertyPanel({
           <CameraMovePanel
             readOnly={readOnly}
             onApply={(spec) => onApplyCameraMove(selectedCamera.id, spec)}
+            onExportFrames={() => onExportCameraMoveFrames(selectedCamera.id)}
           />
         </div>
       ) : (

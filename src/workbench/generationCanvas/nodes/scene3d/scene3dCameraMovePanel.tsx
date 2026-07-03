@@ -18,9 +18,12 @@ const DEFAULT_AMPLITUDE_PERCENT = 60
 export function CameraMovePanel({
   readOnly,
   onApply,
+  onExportFrames,
 }: {
   readOnly: boolean
   onApply: (spec: CameraMovePresetSpec) => void
+  /** 把该相机运镜段的首/尾帧各截一张落画布（接 Seedance 首尾帧工作流）。 */
+  onExportFrames: () => void
 }): JSX.Element {
   const [durationValue, setDurationValue] = React.useState(DEFAULT_DURATION)
   const [amplitudePercent, setAmplitudePercent] = React.useState(DEFAULT_AMPLITUDE_PERCENT)
@@ -84,6 +87,18 @@ export function CameraMovePanel({
           </button>
         ))}
       </div>
+      <button
+        className={cn(
+          'h-8 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink-60)] transition',
+          'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)] disabled:cursor-not-allowed disabled:opacity-40',
+        )}
+        disabled={readOnly}
+        type="button"
+        title="按运镜段的起点/终点各截一张相机图落画布，可作首尾帧参考"
+        onClick={onExportFrames}
+      >
+        导出运镜首尾帧
+      </button>
       <div className="text-micro leading-4 text-[var(--nomi-ink-40)]">
         按当前机位与拍摄目标就地生成一段轨迹，追加到时间轴末尾；连点即串联多段，落段后可在轨迹模式里逐点精修。虚线三个是 FOV 参与动画的变焦运镜。
       </div>

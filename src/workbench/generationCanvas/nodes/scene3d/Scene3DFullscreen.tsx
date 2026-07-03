@@ -63,6 +63,7 @@ import {
   useScene3DKeyboardShortcuts,
   useScene3DAddActions,
   useScene3DCameraMoveAction,
+  useScene3DMoveFrameExport,
   type Scene3DClipboardItem,
 } from './useScene3DFullscreenActions'
 
@@ -229,6 +230,7 @@ export default function Scene3DFullscreen({
   }, [])
 
   const applyCameraMove = useScene3DCameraMoveAction({ readOnly, stateRef, setState, trajectory })
+  const exportCameraMoveFrames = useScene3DMoveFrameExport({ stateRef, captureApiRef, trajectory, onScreenshot })
 
   const deleteSceneItem = React.useCallback((target: Exclude<Scene3DSelection, null>) => {
     if (readOnly) return
@@ -780,6 +782,7 @@ export default function Scene3DFullscreen({
                   environment: { ...current.environment, ...patch },
                 }))}
                 onApplyCameraMove={applyCameraMove}
+                onExportCameraMoveFrames={(cameraId) => { void exportCameraMoveFrames(cameraId) }}
               />
             </motion.aside>
           ) : null}

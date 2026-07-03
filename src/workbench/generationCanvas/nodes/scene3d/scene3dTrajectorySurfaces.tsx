@@ -99,6 +99,7 @@ export function Scene3DRightPanelBody({
   onCameraPatch,
   onEnvironmentPatch,
   onApplyCameraMove,
+  onExportCameraMoveFrames,
 }: {
   state: Scene3DState
   trajectory: Scene3DTrajectoryEditing
@@ -110,6 +111,7 @@ export function Scene3DRightPanelBody({
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
   onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
+  onExportCameraMoveFrames: (cameraId: string) => void
 }): JSX.Element {
   return (
     <>
@@ -134,6 +136,7 @@ export function Scene3DRightPanelBody({
           onCameraPatch={onCameraPatch}
           onEnvironmentPatch={onEnvironmentPatch}
           onApplyCameraMove={onApplyCameraMove}
+          onExportCameraMoveFrames={onExportCameraMoveFrames}
         />
       )}
     </>
