@@ -27,6 +27,8 @@ import {
 import { nextAvailableObjectPosition } from './scene3dObjects'
 import { useScene3DTrajectoryEditing } from './useScene3DTrajectoryEditing'
 import { trajectoryPointTimeRatio } from './trajectory'
+import { applyCameraMovePreset, type CameraMovePresetSpec } from './cameraMovePreset'
+import { CAMERA_MOVE_LABEL } from './cameraMoveVocab'
 
 export type Scene3DClipboardItem =
   | { type: 'object'; item: Scene3DObject; pasteCount: number }
@@ -421,4 +423,28 @@ export function useScene3DAddActions({
   }, [exitTrajectoryMode, readOnly, setSelection, setState, setViewLocked, stateRef])
 
   return { addObject, addCamera, addCrowd }
+}
+
+// 运镜预设：按当前机位就地落一段轨迹并追加到时间轴末尾（连点串联）。在 stateRef 上算好再 setState
+// （applyCameraMovePreset 内生成随机 id，不能塞进 updater——StrictMode 双调用会得到两套 id）。
+export function useScene3DCameraMoveAction({
+  readOnly,
+  stateRef,
+  setState,
+  trajectory,
+}: {
+  readOnly: boolean
+  stateRef: React.MutableRefObject<Scene3DState>
+  setState: React.Dispatch<React.SetStateAction<Scene3DState>>
+  trajectory: ReturnType<typeof useScene3DTrajectoryEditing>
+}) {
+  return React.useCallback((cameraId: string, spec: CameraMovePresetSpec) => {
+    if (readOnly) return
+    const result = applyCameraMovePreset(stateRef.current, cameraId, spec)
+    if (!result) return
+    setState(result.state)
+    trajectory.setTimelineOpen(true)
+    const duration = result.endTime - result.startTime
+    toast(`已追加「${CAMERA_MOVE_LABEL[spec.move]} · ${duration}s」到时间轴（${result.startTime}s-${result.endTime}s）`, 'success')
+  }, [readOnly, setState, stateRef, trajectory])
 }

@@ -45,6 +45,8 @@ import {
   numberInputValue,
 } from './scene3dMath'
 import { Scene3DEnvironmentPanel } from './scene3dEnvironmentPanel'
+import { CameraMovePanel } from './scene3dCameraMovePanel'
+import type { CameraMovePresetSpec } from './cameraMovePreset'
 
 function VectorInputs({
   label,
@@ -441,6 +443,7 @@ export function PropertyPanel({
   onObjectPatch,
   onCameraPatch,
   onEnvironmentPatch,
+  onApplyCameraMove,
 }: {
   state: Scene3DState
   selection: Scene3DSelection
@@ -448,6 +451,7 @@ export function PropertyPanel({
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
+  onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
 }): JSX.Element {
   const selectedObject = selection?.type === 'object'
     ? state.objects.find((object) => object.id === selection.id)
@@ -628,6 +632,10 @@ export function PropertyPanel({
               </label>
             ))}
           </div>
+          <CameraMovePanel
+            readOnly={readOnly}
+            onApply={(spec) => onApplyCameraMove(selectedCamera.id, spec)}
+          />
         </div>
       ) : (
         <Scene3DEnvironmentPanel
