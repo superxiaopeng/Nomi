@@ -123,8 +123,8 @@ describe('zoomFovRamp · 变焦 FOV 数学', () => {
     expect(size1).toBeCloseTo(size0, 3)
   })
 
-  it('fov 两端 clamp 在 12-120', () => {
-    expect(zoomFovRamp('zoom_in', 14, 1)!.fovTo).toBeGreaterThanOrEqual(12)
+  it('fov 两端 clamp 在 6-120（与相机 fov 域一致，6 ↔ 200mm 长焦）', () => {
+    expect(zoomFovRamp('zoom_in', 8, 1)!.fovTo).toBeGreaterThanOrEqual(6)
     expect(zoomFovRamp('zoom_out', 90, 1)!.fovTo).toBeLessThanOrEqual(120)
   })
 })

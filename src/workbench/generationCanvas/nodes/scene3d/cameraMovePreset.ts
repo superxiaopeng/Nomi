@@ -42,7 +42,8 @@ export const CAMERA_MOVE_AMPLITUDE_MAX = 1
 
 // ── FOV 数学（变焦族唯一真相源，builder 也从这里取）─────────────────────────
 
-const FOV_MIN = 12
+// 与相机 fov 域一致（serializer clamp 6-120；6 ↔ 焦段 200mm 长焦）。
+const FOV_MIN = 6
 const FOV_MAX = 120
 
 function clampFov(value: number): number {

@@ -225,7 +225,8 @@ function normalizeCamera(value: unknown, index: number): Scene3DCamera | null {
     rotation: finiteVector(raw.rotation, [-0.35, 0.65, 0]),
     target: finiteVector(raw.target, [0, 0.75, 0]),
     followTargetId: followTargetId || undefined,
-    fov: Math.min(120, Math.max(12, finiteNumber(raw.fov, 45))),
+    // fov 下限 6：焦段 200mm 长焦 ↔ 竖直 fov≈6.9°（scene3dMath 焦段换算）。
+    fov: Math.min(120, Math.max(6, finiteNumber(raw.fov, 45))),
     aspectRatio: ASPECT_RATIOS.has(raw.aspectRatio as Scene3DAspectRatio) ? raw.aspectRatio as Scene3DAspectRatio : '16:9',
     lensDepth: Math.min(100, Math.max(-100, finiteNumber(raw.lensDepth, 0))),
     near: Math.max(0.01, finiteNumber(raw.near, 0.1)),
@@ -314,9 +315,9 @@ function normalizeTrajectoryBinding(
       ? raw.direction as Scene3DTrajectoryDirection
       : 'forward',
   }
-  // FOV 渐变端点：可选，clamp 与相机 fov 同域（12-120）；非有限值当缺省（老数据零迁移）。
-  if (Number.isFinite(raw.fovFrom as number)) binding.fovFrom = Math.min(120, Math.max(12, raw.fovFrom as number))
-  if (Number.isFinite(raw.fovTo as number)) binding.fovTo = Math.min(120, Math.max(12, raw.fovTo as number))
+  // FOV 渐变端点：可选，clamp 与相机 fov 同域（6-120）；非有限值当缺省（老数据零迁移）。
+  if (Number.isFinite(raw.fovFrom as number)) binding.fovFrom = Math.min(120, Math.max(6, raw.fovFrom as number))
+  if (Number.isFinite(raw.fovTo as number)) binding.fovTo = Math.min(120, Math.max(6, raw.fovTo as number))
   return binding
 }
 

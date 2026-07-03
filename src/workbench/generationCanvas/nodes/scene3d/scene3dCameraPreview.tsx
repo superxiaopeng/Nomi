@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { IconCamera, IconEye, IconRotate, IconChevronUp, IconChevronDown } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
-import { applySceneCameraPose, crowdCount } from './scene3dMath'
+import { applySceneCameraPose, crowdCount, FOCAL_MM_MAX, FOCAL_MM_MIN, focalMmToFov, fovToFocalMm } from './scene3dMath'
 import { SCENE3D_ASPECT_OPTIONS, SCENE3D_ASPECT_RATIOS } from './scene3dTypes'
 import type { Scene3DAspectRatio, Scene3DCamera, Scene3DObject, Scene3DState } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
@@ -130,6 +130,7 @@ export function CameraPreview({
   cameraViewEditing,
   rightPanelCollapsed,
   onAspectChange,
+  onFovChange,
   onLensDepthChange,
   onToggleViewEdit,
   onLevelCamera,
@@ -142,6 +143,7 @@ export function CameraPreview({
   cameraViewEditing: boolean
   rightPanelCollapsed: boolean
   onAspectChange: (aspectRatio: Scene3DAspectRatio) => void
+  onFovChange: (fov: number) => void
   onLensDepthChange: (lensDepth: number) => void
   onToggleViewEdit: () => void
   onLevelCamera: () => void
@@ -245,6 +247,27 @@ export function CameraPreview({
                 {option}
               </button>
             ))}
+          </div>
+          <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
+            <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
+              <span>焦段</span>
+              <span className="font-medium text-[var(--nomi-ink)]">{fovToFocalMm(camera.fov)}mm · FOV {Math.round(camera.fov)}°</span>
+            </div>
+            <input
+              className="block h-1.5 w-full accent-[var(--nomi-ink)]"
+              disabled={readOnly}
+              max={FOCAL_MM_MAX}
+              min={FOCAL_MM_MIN}
+              step={1}
+              type="range"
+              value={fovToFocalMm(camera.fov)}
+              onChange={(event) => onFovChange(focalMmToFov(Number(event.currentTarget.value)))}
+            />
+            <div className="mt-1 grid grid-cols-3 text-micro text-[var(--nomi-ink-40)]">
+              <span>{FOCAL_MM_MIN} 广角</span>
+              <span className="text-center">50 标准</span>
+              <span className="text-right">{FOCAL_MM_MAX} 长焦</span>
+            </div>
           </div>
           <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
             <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">

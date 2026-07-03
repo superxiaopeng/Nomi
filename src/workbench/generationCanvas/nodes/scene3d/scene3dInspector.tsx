@@ -39,6 +39,7 @@ import {
   clonePoseValue,
   poseMatchesPreset,
   cameraLookAtRotation,
+  fovToFocalMm,
   roleColorForIndex,
   mannequinRoleLabel,
   updateVectorValue,
@@ -619,11 +620,13 @@ export function PropertyPanel({
           <div className="grid grid-cols-3 gap-2">
             {(['fov', 'near', 'far'] as const).map((field) => (
               <label key={field} className="grid gap-1">
-                <span className="text-micro text-[var(--nomi-ink-60)]">{field.toUpperCase()}</span>
+                <span className="text-micro text-[var(--nomi-ink-60)]">
+                  {field === 'fov' ? `FOV ≈${fovToFocalMm(selectedCamera.fov)}mm` : field.toUpperCase()}
+                </span>
                 <input
                   className="h-8 min-w-0 rounded-nomi-sm border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink)] outline-none"
                   disabled={readOnly}
-                  min={field === 'fov' ? 12 : 0.01}
+                  min={field === 'fov' ? 6 : 0.01}
                   step={field === 'fov' ? 1 : 0.1}
                   type="number"
                   value={selectedCamera[field]}

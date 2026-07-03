@@ -709,6 +709,7 @@ export default function Scene3DFullscreen({
               cameraViewEditing={cameraViewEditId === selectedCamera.id}
               rightPanelCollapsed={!rightPanelOpen}
               onAspectChange={(aspectRatio) => patchCamera(selectedCamera.id, { aspectRatio })}
+              onFovChange={(fov) => patchCamera(selectedCamera.id, { fov })}
               onLensDepthChange={(lensDepth) => patchCamera(selectedCamera.id, { lensDepth })}
               onToggleViewEdit={toggleCameraViewEdit}
               onLevelCamera={levelSelectedCamera}

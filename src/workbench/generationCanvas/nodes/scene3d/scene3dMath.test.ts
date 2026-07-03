@@ -85,3 +85,25 @@ describe("followOrbitPolarBounds", () => {
     expect(bounds.max).toBeLessThan(Math.PI * (110 / 180));
   });
 });
+
+describe("焦段 mm ↔ 竖直 FOV（35mm 全幅等效）", async () => {
+  const { fovToFocalMm, focalMmToFov, FOCAL_MM_MIN, FOCAL_MM_MAX } = await import("./scene3dMath");
+
+  it("往返一致：mm → fov → mm 回到原值", () => {
+    for (const mm of [12, 24, 35, 50, 85, 135, 200]) {
+      expect(fovToFocalMm(focalMmToFov(mm))).toBe(mm);
+    }
+  });
+
+  it("标准焦段锚点：50mm ≈ 27°、35mm ≈ 38°、200mm ≈ 6.9°（竖直向，片高 24mm）", () => {
+    expect(focalMmToFov(50)).toBeCloseTo(27, 0);
+    expect(focalMmToFov(35)).toBeCloseTo(38, 0);
+    expect(focalMmToFov(200)).toBeCloseTo(6.9, 1);
+  });
+
+  it("越界 clamp 到 12-200mm 滑杆域", () => {
+    expect(fovToFocalMm(120)).toBe(FOCAL_MM_MIN);
+    expect(fovToFocalMm(3)).toBe(FOCAL_MM_MAX);
+    expect(focalMmToFov(999)).toBe(focalMmToFov(FOCAL_MM_MAX));
+  });
+});
