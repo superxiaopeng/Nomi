@@ -304,7 +304,7 @@ function normalizeTrajectoryBinding(
     })
     : []
   const startTime = Math.max(0, finiteNumber(raw.startTime, 0))
-  return {
+  const binding: Scene3DTrajectoryBinding = {
     id,
     trajectoryId,
     objects,
@@ -314,6 +314,10 @@ function normalizeTrajectoryBinding(
       ? raw.direction as Scene3DTrajectoryDirection
       : 'forward',
   }
+  // FOV 渐变端点：可选，clamp 与相机 fov 同域（12-120）；非有限值当缺省（老数据零迁移）。
+  if (Number.isFinite(raw.fovFrom as number)) binding.fovFrom = Math.min(120, Math.max(12, raw.fovFrom as number))
+  if (Number.isFinite(raw.fovTo as number)) binding.fovTo = Math.min(120, Math.max(12, raw.fovTo as number))
+  return binding
 }
 
 function normalizeTrajectoryGroup(value: unknown, index: number, trajectoryIds: Set<string>, usedTrajectoryIds: Set<string>): Scene3DTrajectoryGroup | null {

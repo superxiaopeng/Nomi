@@ -43,16 +43,24 @@ export type Scene3DPlaybackSample = {
   visible: boolean
 }
 
+export function findObjectTrajectoryBinding(
+  state: Pick<Scene3DState, 'trajectoryBindings'>,
+  objectId: string,
+  activeTrajectoryIds: ReadonlySet<string> | null = null,
+): Scene3DTrajectoryBinding | null {
+  return state.trajectoryBindings.find((candidate) => (
+    (!activeTrajectoryIds || activeTrajectoryIds.has(candidate.trajectoryId)) &&
+    candidate.objects.some((boundObject) => boundObject.objectId === objectId)
+  )) ?? null
+}
+
 export function sceneObjectTrajectorySample(
   state: Pick<Scene3DState, 'trajectories' | 'trajectoryBindings'>,
   objectId: string,
   playheadSeconds: number,
   activeTrajectoryIds: ReadonlySet<string> | null = null,
 ): Scene3DPlaybackSample | null {
-  const binding = state.trajectoryBindings.find((candidate) => (
-    (!activeTrajectoryIds || activeTrajectoryIds.has(candidate.trajectoryId)) &&
-    candidate.objects.some((boundObject) => boundObject.objectId === objectId)
-  ))
+  const binding = findObjectTrajectoryBinding(state, objectId, activeTrajectoryIds)
   if (!binding) return null
   const boundObject = binding.objects.find((candidate) => candidate.objectId === objectId)
   const trajectory = state.trajectories.find((candidate) => candidate.id === binding.trajectoryId)
@@ -104,14 +112,31 @@ export function cameraAimBindingId(cameraId: string): string {
   return `${cameraId}${CAMERA_AIM_BINDING_SUFFIX}`
 }
 
+// binding 上的 FOV 渐变：按段时间进度线性插值（fovFrom 始终对应 startTime，与 direction/offset 无关）。
+// 两端点任一缺省 → 用相机静态 fov 补位；都缺省 → 返回 null（老行为，完全不碰 fov）。
+export function bindingFovAtPlayhead(
+  binding: Scene3DTrajectoryBinding,
+  cameraFov: number,
+  playheadSeconds: number,
+): number | null {
+  if (binding.fovFrom === undefined && binding.fovTo === undefined) return null
+  const from = binding.fovFrom ?? cameraFov
+  const to = binding.fovTo ?? cameraFov
+  const duration = binding.endTime - binding.startTime
+  const t = duration > 0 ? clampRatio((playheadSeconds - binding.startTime) / duration) : 1
+  return from + (to - from) * t
+}
+
 export function cameraWithPlaybackPosition(
   state: Pick<Scene3DState, 'objects' | 'trajectories' | 'trajectoryBindings'>,
   camera: Scene3DCamera,
   playheadSeconds: number,
   activeTrajectoryIds: ReadonlySet<string> | null = null,
 ): Scene3DCamera {
+  const binding = findObjectTrajectoryBinding(state, camera.id, activeTrajectoryIds)
   const sample = sceneObjectTrajectorySample(state, camera.id, playheadSeconds, activeTrajectoryIds)
   const position = sample ? vectorToArray(sample.position) : camera.position
+  const playbackFov = binding ? bindingFovAtPlayhead(binding, camera.fov, playheadSeconds) : null
   // 注视点优先级：① aim 轨迹（相机运镜 take 录下的逐帧朝向，free-look 转头忠实还原）
   //  → ② follow 某物体（角色走位 take，相机跟拍主体）→ ③ 静态 target（老行为）。三者互斥单源。
   const aimSample = camera.aimTrajectoryId
@@ -127,6 +152,7 @@ export function cameraWithPlaybackPosition(
     position,
     target,
     rotation: cameraLookAtRotation(position, target),
+    fov: playbackFov ?? camera.fov,
   }
 }
 

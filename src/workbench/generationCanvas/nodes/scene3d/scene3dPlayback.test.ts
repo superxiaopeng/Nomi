@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { objectWithPlaybackPose } from './scene3dPlayback'
-import type { Scene3DObject, Scene3DVector3 } from './scene3dTypes'
+import { bindingFovAtPlayhead, cameraWithPlaybackPosition, objectWithPlaybackPose } from './scene3dPlayback'
+import type { Scene3DCamera, Scene3DObject, Scene3DTrajectoryBinding, Scene3DVector3 } from './scene3dTypes'
 
 const squat: Record<string, Scene3DVector3> = { mixamorigSpine: [10, 0, 0] }
 const wave: Record<string, Scene3DVector3> = { mixamorigRightArm: [-40, 0, 0] }
@@ -53,5 +53,76 @@ describe('objectWithPlaybackPose · pose-over-time', () => {
   it('空 poseTrack 数组 → 等同无轨道', () => {
     const object = mannequin({ pose: squat, poseTrack: [] })
     expect(objectWithPlaybackPose(noTrajectory, object, 3)).toBe(object)
+  })
+})
+
+function binding(extra: Partial<Scene3DTrajectoryBinding>): Scene3DTrajectoryBinding {
+  return {
+    id: 'b1',
+    trajectoryId: 't1',
+    objects: [{ objectId: 'cam1', offsetRatio: 0 }],
+    startTime: 2,
+    endTime: 6,
+    direction: 'forward',
+    ...extra,
+  }
+}
+
+function camera(extra: Partial<Scene3DCamera> = {}): Scene3DCamera {
+  return {
+    id: 'cam1',
+    name: '相机1',
+    visible: true,
+    position: [0, 1.45, 5],
+    rotation: [0, 0, 0],
+    target: [0, 1.35, 0],
+    fov: 40,
+    aspectRatio: '16:9',
+    lensDepth: 0,
+    near: 0.1,
+    far: 200,
+    ...extra,
+  }
+}
+
+describe('bindingFovAtPlayhead · FOV 渐变', () => {
+  it('两端点都缺省 → null（老行为，不碰 fov）', () => {
+    expect(bindingFovAtPlayhead(binding({}), 40, 4)).toBeNull()
+  })
+
+  it('按段时间进度线性插值，段外 clamp 到端点', () => {
+    const ramp = binding({ fovFrom: 20, fovTo: 60 })
+    expect(bindingFovAtPlayhead(ramp, 40, 2)).toBe(20)
+    expect(bindingFovAtPlayhead(ramp, 40, 4)).toBe(40)
+    expect(bindingFovAtPlayhead(ramp, 40, 6)).toBe(60)
+    expect(bindingFovAtPlayhead(ramp, 40, 0)).toBe(20)
+    expect(bindingFovAtPlayhead(ramp, 40, 99)).toBe(60)
+  })
+
+  it('单端点缺省 → 用相机静态 fov 补位', () => {
+    expect(bindingFovAtPlayhead(binding({ fovTo: 80 }), 40, 6)).toBe(80)
+    expect(bindingFovAtPlayhead(binding({ fovTo: 80 }), 40, 2)).toBe(40)
+  })
+})
+
+describe('cameraWithPlaybackPosition · 播放中 fov', () => {
+  const trajectory = {
+    id: 't1',
+    name: '推近',
+    points: [
+      { id: 'p1', position: [0, 1.45, 8] as Scene3DVector3 },
+      { id: 'p2', position: [0, 1.45, 4] as Scene3DVector3 },
+    ],
+    tension: 0.5,
+    closed: false,
+    color: '#888888',
+  }
+
+  it('binding 带 fov 渐变 → 播放相机 fov 跟播放头走；无渐变 → 保持静态 fov', () => {
+    const state = { objects: [], trajectories: [trajectory], trajectoryBindings: [binding({ fovFrom: 20, fovTo: 60 })] }
+    expect(cameraWithPlaybackPosition(state, camera(), 4).fov).toBe(40)
+    expect(cameraWithPlaybackPosition(state, camera(), 6).fov).toBe(60)
+    const plain = { objects: [], trajectories: [trajectory], trajectoryBindings: [binding({})] }
+    expect(cameraWithPlaybackPosition(plain, camera(), 4).fov).toBe(40)
   })
 })

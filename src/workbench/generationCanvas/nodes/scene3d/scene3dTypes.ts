@@ -97,6 +97,10 @@ export type Scene3DTrajectoryBinding = {
   startTime: number
   endTime: number
   direction: Scene3DTrajectoryDirection
+  // FOV 随段进度线性渐变（变焦推/拉、希区柯克的地基）。两者都缺省 = 老行为（用相机静态 fov）。
+  // 只对绑定对象里的相机生效；direction=reverse 时进度同样反转（fovFrom 始终对应段起点）。
+  fovFrom?: number
+  fovTo?: number
 }
 
 export type Scene3DTrajectoryGroup = {
