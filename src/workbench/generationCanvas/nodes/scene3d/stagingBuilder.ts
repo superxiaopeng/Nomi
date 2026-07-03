@@ -7,7 +7,7 @@ import {
   MANNEQUIN_POSE_PRESETS,
   ROLE_COLOR_SEQUENCE,
 } from './scene3dConstants'
-import type { Scene3DState, Scene3DObject, Scene3DCamera, Scene3DVector3 } from './scene3dTypes'
+import type { Scene3DState, Scene3DObject, Scene3DCamera, Scene3DPropKind, Scene3DVector3 } from './scene3dTypes'
 import {
   CAMERA_ANGLE_AZIMUTH_DEG,
   CAMERA_HEIGHT_POSE,
@@ -23,11 +23,21 @@ import {
   type StagingShot,
   type StagingEnvironment,
 } from './stagingVocab'
+import { makePropObject, PROP_KINDS } from './scene3dPropSpecs'
+import { buildSceneTemplateObjects, SCENE_TEMPLATES, type Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 export type StagingCharacterSpec = {
   name?: string
   pose?: string
   facing?: StagingFacing
+}
+
+// 语义道具摆位（AI 侧）：kind 必填，位置/朝向/缩放可选（省略则自动铺开在角色侧后方）。
+export type StagingPropSpec = {
+  kind: Scene3DPropKind
+  position?: [number, number] // [x, z]，地面坐标
+  rotationY?: number // 度
+  scale?: number
 }
 
 export type StagingSpec = {
@@ -36,6 +46,9 @@ export type StagingSpec = {
   camera?: { angle?: StagingCameraAngle; height?: StagingCameraHeight; shot?: StagingShot }
   environment?: StagingEnvironment
   crowd?: { rows: number; columns: number } | null
+  // 灰模布景（走 UI 同一套 builder，P4 一套能力两入口）：整套场景模板 + 单件道具。
+  sceneTemplate?: Scene3DSceneTemplate
+  props?: StagingPropSpec[]
 }
 
 const DEG = Math.PI / 180
@@ -139,6 +152,25 @@ function buildCrowdObject(spec: StagingSpec, centerX: number, backZ: number): Sc
   }
 }
 
+// 道具摆位：给了 position 用之；省略则沿角色右侧(+X)铺开，不与原点角色堆叠。
+function buildPropObjects(props: StagingPropSpec[] | undefined): Scene3DObject[] {
+  if (!props || props.length === 0) return []
+  const known = props.filter((prop) => PROP_KINDS.includes(prop.kind))
+  return known.map((prop, index) => {
+    const object = makePropObject(prop.kind)
+    const [x, z] = prop.position ?? [2.5 + index * 2.2, -0.5]
+    object.position = [x, 0, z]
+    if (typeof prop.rotationY === 'number' && Number.isFinite(prop.rotationY)) {
+      object.rotation = [0, prop.rotationY * (Math.PI / 180), 0]
+    }
+    if (typeof prop.scale === 'number' && Number.isFinite(prop.scale) && prop.scale > 0) {
+      const s = Math.min(10, Math.max(0.1, prop.scale))
+      object.scale = [s, s, s]
+    }
+    return object
+  })
+}
+
 function buildStagingCamera(objects: Scene3DObject[], camera: StagingSpec['camera'], layout: StagingLayout): Scene3DCamera {
   // agent 没指定 angle/height 时按 layout 取「能读出空间关系」的默认机位（环绕→俯、纵队→侧…）。
   const layoutDefault = LAYOUT_CAMERA_DEFAULT[layout]
@@ -182,7 +214,11 @@ export function buildStagingScene(spec: StagingSpec, spacingScale = 1): Scene3DS
   const centerX = objects.reduce((sum, o) => sum + o.position[0], 0) / Math.max(1, objects.length)
   const backZ = Math.min(...objects.map((o) => o.position[2]), 0)
   const crowd = buildCrowdObject(spec, centerX, backZ)
-  const allObjects = crowd ? [...objects, crowd] : objects
+  // 灰模布景（backdrop）铺在最前，角色/群众叠其上。相机取景只看角色位置（buildStagingCamera），
+  // 布景纯背景不影响构图。走 UI 同一套 builder（P4），无并行版。
+  const templateObjects = spec.sceneTemplate ? buildSceneTemplateObjects(spec.sceneTemplate) : []
+  const propObjects = buildPropObjects(spec.props)
+  const allObjects = [...templateObjects, ...propObjects, ...objects, ...(crowd ? [crowd] : [])]
   const camera = buildStagingCamera(objects, spec.camera, layout)
   const env = ENV_PRESET[spec.environment ?? 'studio']
   return {
