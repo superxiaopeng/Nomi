@@ -25,7 +25,7 @@ import {
 import { cn } from '../../../../utils/cn'
 import { type Scene3DGeometry, type Scene3DPropKind } from './scene3dTypes'
 import { CROWD_MAX_AXIS, type CrowdAddOptions } from './scene3dConstants'
-import { PROP_KINDS, propKindLabel } from './scene3dProps'
+import { PROP_KINDS, propKindLabel } from './scene3dPropSpecs'
 import { SCENE_TEMPLATES, SCENE_TEMPLATE_LABEL, type Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 const PROP_MENU_ICONS: Record<Scene3DPropKind, Icon> = {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROP_KINDS, PROP_SPECS, makePropObject, propGroundFootprint } from './scene3dProps'
+import { PROP_KINDS, PROP_SPECS, makePropObject, propGroundFootprint } from './scene3dPropSpecs'
 import { normalizeScene3DState } from './scene3dSerializer'
 
 describe('语义道具 spec 完整性', () => {

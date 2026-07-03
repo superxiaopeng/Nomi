@@ -1,5 +1,4 @@
 import React from 'react'
-import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { IconCamera, IconEye, IconRotate, IconChevronUp, IconChevronDown } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'

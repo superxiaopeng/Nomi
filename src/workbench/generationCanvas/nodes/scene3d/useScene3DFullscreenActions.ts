@@ -33,7 +33,7 @@ import { setScene3DPlayheadSeconds, trajectoryPointTimeRatio } from './trajector
 import { applyCameraMovePreset, type CameraMovePresetSpec } from './cameraMovePreset'
 import { CAMERA_MOVE_LABEL } from './cameraMoveVocab'
 import { cameraWithPlaybackPosition } from './scene3dPlayback'
-import { makePropObject } from './scene3dProps'
+import { makePropObject } from './scene3dPropSpecs'
 import { buildSceneTemplateObjects, SCENE_TEMPLATE_LABEL, type Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 export type Scene3DClipboardItem =

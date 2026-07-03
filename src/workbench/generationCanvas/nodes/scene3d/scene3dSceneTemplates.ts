@@ -3,7 +3,7 @@
 // 尺寸单位米；道具走 scene3dProps 的 spec（P1 无第二套道具），地面/家具用 mesh 图元。
 import type { Scene3DObject, Scene3DPropKind, Scene3DVector3 } from './scene3dTypes'
 import { createScene3DObjectId } from './scene3dSerializer'
-import { makePropObject } from './scene3dProps'
+import { makePropObject } from './scene3dPropSpecs'
 
 export type Scene3DSceneTemplate = 'street' | 'room'
 

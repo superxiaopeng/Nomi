@@ -8,7 +8,8 @@ import type {
   Scene3DObject,
   Scene3DVector3,
 } from './scene3dTypes'
-import { PropObject, propGroundFootprint } from './scene3dProps'
+import { PropObject } from './scene3dProps'
+import { propGroundFootprint } from './scene3dPropSpecs'
 import {
   CAMERA_HELPER_FLAG,
   OBJECT_GROUND_GUIDE_ELEVATION,
