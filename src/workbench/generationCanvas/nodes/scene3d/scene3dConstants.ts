@@ -362,10 +362,12 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
     // 2026-07-05 用 pose-lab 多视角复核，避免坐姿看起来像深蹲或手臂空垂穿腿。
     pose: makePoseOffset({
       mixamorigSpine: [4, 0, 0],
-      mixamorigLeftArm: [8, -6, 0],
-      mixamorigRightArm: [8, 6, 0],
-      mixamorigLeftForeArm: [26, -4, 0],
-      mixamorigRightForeArm: [26, 4, 0],
+      mixamorigLeftArm: [-4, -7, 0],
+      mixamorigRightArm: [-4, 7, 0],
+      mixamorigLeftForeArm: [58, -2, 0],
+      mixamorigRightForeArm: [58, 2, 0],
+      mixamorigLeftHand: [2, 0, -4],
+      mixamorigRightHand: [2, 0, 4],
       mixamorigLeftUpLeg: [86, 4, 0],
       mixamorigRightUpLeg: [86, -4, 0],
       mixamorigLeftLeg: [94, 0, 0],
