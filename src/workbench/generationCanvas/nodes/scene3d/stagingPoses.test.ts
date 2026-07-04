@@ -64,4 +64,14 @@ describe('staging pose presets', () => {
       .filter(Boolean)
     expect(new Set(enumIds)).toEqual(new Set(STAGING_POSE_IDS))
   })
+
+  it('pose-lab 全量截图脚本按预设数量自动分批（防新增姿势漏截图）', () => {
+    const shotScriptPath = fileURLToPath(new URL('../../../../../scripts/pose-lab-shot-all.mjs', import.meta.url))
+    const source = readFileSync(shotScriptPath, 'utf8')
+    expect(source).toContain('MANNEQUIN_POSE_PRESETS')
+    expect(source).toContain('presetIds.length')
+    expect(source).toContain('from += batchSize')
+    expect(source).not.toMatch(/全部\s+(12|13)\s+个预设/)
+    expect(source).not.toMatch(/shoot\(view,\s*(0|4|8|12),/)
+  })
 })
