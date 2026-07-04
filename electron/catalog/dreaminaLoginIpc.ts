@@ -3,7 +3,7 @@
 // 解析全走 dreaminaCodec 纯函数（可单测）；spawn 走 dreaminaCli（统一 PATH 兜底 + 超时）。
 import { spawn } from "node:child_process";
 import { resolveDreaminaBin, isDreaminaInstalled, runDreaminaCli } from "./dreaminaCli";
-import { parseDeviceFlow, parseAccountStatus, isNotMaestroVip, type DreaminaDeviceFlow } from "./dreaminaCodec";
+import { parseDeviceFlow, parseAccountStatus, isNotMaestroVip, isReusingLogin, type DreaminaDeviceFlow } from "./dreaminaCodec";
 
 export type DreaminaStatus = {
   installed: boolean;
@@ -34,7 +34,11 @@ export async function dreaminaStatus(): Promise<DreaminaStatus> {
 /** 发起设备码登录，返回 verification_uri/user_code/device_code 供前端显二维码。 */
 export async function dreaminaLoginStart(): Promise<DreaminaDeviceFlow> {
   const ran = await runDreaminaCli(["login", "--headless"], { timeoutMs: 30_000 });
-  const flow = parseDeviceFlow(`${ran.stdout}\n${ran.stderr}`);
+  const text = `${ran.stdout}\n${ran.stderr}`;
+  if (isReusingLogin(text)) {
+    throw new Error("即梦已复用本机登录态，无需重新扫码。Nomi 会刷新当前登录状态。");
+  }
+  const flow = parseDeviceFlow(text);
   if (!flow) throw new Error(`发起即梦登录失败：${(ran.stderr || ran.stdout || "").slice(0, 300)}`);
   return flow;
 }

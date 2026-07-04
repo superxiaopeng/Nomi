@@ -78,43 +78,79 @@ export function isDreaminaInstalled(): boolean {
 }
 
 export type DreaminaRunResult = { code: number; stdout: string; stderr: string };
+type DreaminaRunOptions = { timeoutMs?: number; bin?: string; retries?: number; retryDelayMs?: number };
+
+function hasNetworkTimeoutSignal(text: string): boolean {
+  return /context deadline exceeded|etimedout|eai_again|econnreset|und_err_headers_timeout|und_err_connect_timeout|headers timeout|connect timeout|timeout exceeded|fetch failed|request timeout|network timeout|i\/o timeout|执行超时/i.test(String(text || ""));
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  return error instanceof Error && hasNetworkTimeoutSignal(error.message);
+}
+
+function isNetworkTimeoutResult(result: DreaminaRunResult): boolean {
+  return hasNetworkTimeoutSignal(result.stderr);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
- * 跑一条 dreamina 命令，收齐 stdout/stderr。超时杀进程。
+ * 跑一条 dreamina 命令，收齐 stdout/stderr。超时杀进程；网络超时类故障默认重试 1 次。
  * 参数走数组（不过 shell），无注入面。env.PATH 补兜底目录。
  */
-export function runDreaminaCli(args: string[], opts: { timeoutMs?: number; bin?: string } = {}): Promise<DreaminaRunResult> {
+export async function runDreaminaCli(args: string[], opts: DreaminaRunOptions = {}): Promise<DreaminaRunResult> {
   const bin = opts.bin || resolveDreaminaBin();
   if (!bin) {
     return Promise.reject(
       new Error("未找到即梦 CLI（dreamina）。请先安装：终端运行 curl -fsSL https://jimeng.jianying.com/cli | bash，并完成 dreamina login。"),
     );
   }
-  const timeoutMs = opts.timeoutMs ?? 120_000;
-  return new Promise<DreaminaRunResult>((resolve, reject) => {
-    const child = spawn(bin, args, { windowsHide: true, env: buildDreaminaEnv() });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      try { child.kill("SIGKILL"); } catch { /* already gone */ }
-      reject(new Error(`即梦 CLI 执行超时（${args[0] || "?"}）`));
-    }, timeoutMs);
-    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(err);
+
+  const maxRetries = Math.max(0, Math.trunc(opts.retries ?? 1));
+  const baseTimeoutMs = opts.timeoutMs ?? 120_000;
+  const retryDelayMs = Math.max(0, opts.retryDelayMs ?? 500);
+
+  const runOnce = (attemptIndex: number): Promise<DreaminaRunResult> =>
+    new Promise<DreaminaRunResult>((resolve, reject) => {
+      const timeoutMs = baseTimeoutMs + attemptIndex * 30_000;
+      const child = spawn(bin, args, { windowsHide: true, env: buildDreaminaEnv() });
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { child.kill("SIGKILL"); } catch { /* already gone */ }
+        reject(new Error(`即梦 CLI 执行超时（${args[0] || "?"}）`));
+      }, timeoutMs);
+      child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+      child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+      child.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on("close", (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ code: code ?? -1, stdout, stderr });
+      });
     });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({ code: code ?? -1, stdout, stderr });
-    });
-  });
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const result = await runOnce(attempt);
+      if (!isNetworkTimeoutResult(result) || attempt >= maxRetries) return result;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableNetworkError(error) || attempt >= maxRetries) throw error;
+    }
+    await delay(retryDelayMs * Math.max(1, 2 ** attempt));
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError || "即梦 CLI 调用失败"));
 }

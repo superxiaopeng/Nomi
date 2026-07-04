@@ -68,7 +68,15 @@ export function DreaminaMemberCard({ status, onChanged }: DreaminaMemberCardProp
       const f = await dreamina.loginStart()
       setFlow(f)
       void runPollLoop(f.deviceCode)
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      if (/复用.*登录态|已登录|already logged in|already authenticated/i.test(message)) {
+        toast('即梦已登录', 'success')
+        onChanged()
+      } else {
+        setError(message)
+      }
+    } finally { setBusy(false) }
   }
 
   const handleLogout = async () => {

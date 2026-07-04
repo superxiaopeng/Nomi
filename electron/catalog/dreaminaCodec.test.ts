@@ -14,6 +14,8 @@ import {
   parseDeviceFlow,
   parseAccountStatus,
   isNotMaestroVip,
+  isNetworkTimeout,
+  isReusingLogin,
   isComplianceConfirmationRequired,
   describeDreaminaFailure,
 } from "./dreaminaCodec";
@@ -224,6 +226,12 @@ describe("登录 / 账户状态解析", () => {
     expect(isNotMaestroVip("当前账号没有 dreamina_cli 使用权限")).toBe(true);
     expect(isNotMaestroVip("success")).toBe(false);
   });
+
+  it("isReusingLogin 识别已有登录态复用", () => {
+    expect(isReusingLogin("已复用当前本地 OAuth 登录态")).toBe(true);
+    expect(isReusingLogin("already authenticated")).toBe(true);
+    expect(isReusingLogin("verification_uri: https://jimeng.jianying.com")).toBe(false);
+  });
 });
 
 describe("describeDreaminaFailure（治「用不了」黑洞）", () => {
@@ -243,6 +251,13 @@ describe("describeDreaminaFailure（治「用不了」黑洞）", () => {
 
   it("命中非会员闸 → 指引开通会员", () => {
     expect(describeDreaminaFailure(1, "", "current account is not maestro vip")).toMatch(/会员/);
+  });
+
+  it("命中网络超时 → 提示任务可能仍在即梦侧继续处理", () => {
+    expect(isNetworkTimeout("context deadline exceeded")).toBe(true);
+    const msg = describeDreaminaFailure(1, "", "fetch failed: ETIMEDOUT");
+    expect(msg).toMatch(/超时/);
+    expect(msg).toMatch(/刷新|生成记录|重试/);
   });
 
   it("有原始错误文本时透传（截断保护）", () => {
