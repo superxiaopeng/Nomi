@@ -1,6 +1,21 @@
 # 接入本地 ComfyUI（A 线：当生成后端，窄·稳）
 
-日期：2026-07-04 ｜ 用户拍板「A：先做窄的」｜ 架构调查见本轮两份 Explore 报告
+日期：2026-07-04 ｜ 用户拍板「A：先做窄的」+「②启用开关」｜ 架构调查见本轮两份 Explore 报告
+
+## ✅ 已交付（2026-07-04）
+
+全部落地并五门 + R13 走查通过。**关键修正**：担心要改的生成门槛**根本不用改**——`modelCatalogCache.ts:83` / `catalogStore.ts:351` 早就是「`authType:'none'` + `vendor.enabled` 即可执行、不要 key」（本地 process 类 vendor 在用）。所以 ComfyUI 只要 `authType:'none'` + `enabled` 就能生成，门槛零改动。
+
+落了什么：
+- **通用命名响应变换钩子**：`HttpOperation.response_transform?: string`（types.ts）+ 注册表 `electron/tasks/responseTransforms.ts` + `buildProfileTaskResult` 应用点（跑 response_mapping 前，create/poll 两路都过）。未声明→原样，对现有 vendor 零影响。
+- **ComfyUI 供应商**：`electron/catalog/comfyuiLocal.ts`——vendor 种子（`comfyui-local`，`authType:'none'`，默认 `enabled:false` 防污染）+ `comfyui-history` 变换（unwrap 动态 prompt_id + 拼 /view + fail-fast 读 status_str=error）+ 文生图 workflow（官方默认图 API 格式，节点 inputs 埋 `{{}}`；参数键用 `comfy_*` 前缀避开 taskTemplateParams 的标准键派生清空）+ `meta.parameters` 8 个控件。`seedBuiltins.ts` 登记（seedVendor 认 `enabled:false`、CuratedModel 带 meta.parameters）。
+- **接入开关（形状②，用户可见）**：`ComfyuiLocalCard.tsx`（专属卡，非通用自定义卡）——「可接入/有本地 ComfyUI？」里默认关，点启用翻 `vendor.enabled`；启用/重检 `GET /system_stats`（新 IPC `comfyui:probe` + `electron/comfyuiProbe.ts`，直连 localhost 显 Python/显卡/显存）；地址可改；停用回落。`OnboardingDrawer` 像 dreamina 一样特判排除 + 双槽渲染。
+- **验证**：`comfyuiLocal.test.ts`（15 例，变换三态 + 真管线注入证数字保持数字）+ `comfyuiLocal.integration.test.ts`（真 HTTP 端到端：假 ComfyUI，submit→poll→transform→succeeded + /view 真取到图）+ `scripts/comfyui-onboarding-walkthrough.mjs`（R13：可接入→启用→探测 mock→运行中显 GPU 摘要+模型行→停用，截图人眼过）。
+- **诚实欠账**：真出图（真像素、SaveImage 落盘、/view 下载本地化）需用户本机 ComfyUI + checkpoint；ckpt_name 默认 `v1-5-pruned-emaonly.safetensors`（用户环境不同要改）；高清放大/换脸/图生图、`/object_info` 拉 checkpoint 下拉、ws 实时进度、用户导入任意 workflow = 后续增量。
+
+---
+
+## 原始设计（存档）
 
 ## 背后逻辑（D1）
 

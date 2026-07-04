@@ -24,6 +24,7 @@ import { ModelEnableEditor } from './ModelEnableEditor'
 import { CustomVendorManage } from './CustomVendorManage'
 import { ConnectAssistantCard, type McpInfo } from './ConnectAssistantCard'
 import { DreaminaMemberCard, type DreaminaStatus } from './DreaminaMemberCard'
+import { ComfyuiLocalCard, COMFYUI_VENDOR_KEY } from './ComfyuiLocalCard'
 import { KNOWN_VENDORS, isKnownVendor } from '../../config/knownVendors'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { notifyModelOptionsRefresh } from '../../config/useModelOptions'
@@ -33,6 +34,7 @@ type VendorMeta = {
   name: string
   hasApiKey: boolean
   baseUrl: string
+  enabled: boolean
 }
 
 // 能力概览：四类产物 → 图标/文案。covered 由已连通供应商的模型 kind 派生（derive 不 hardcode）。
@@ -70,6 +72,7 @@ export function OnboardingDrawer(): JSX.Element {
           name: String(v.name || v.key),
           hasApiKey: Boolean(v.hasApiKey),
           baseUrl: String(v.baseUrlHint || ''),
+          enabled: v.enabled !== false,
         })
       }
       const rows: ChipModel[] = ms.map((m) => ({
@@ -163,7 +166,15 @@ export function OnboardingDrawer(): JSX.Element {
   // 其他模型：用户自定义接入（有 key 才存在）→ 视为已接入。排除有专属卡的内置家：
   // 5 个 KNOWN_VENDORS + 即梦 dreamina（走 DreaminaMemberCard，其 seeded 模型不是"自定义"，
   // 否则与即梦会员卡重复且被误标"已配置"——真机走查抓到，dreamina 种了 4 个模型）。
-  const otherModels = models.filter((m) => !isKnownVendor(m.vendorKey) && m.vendorKey !== 'dreamina')
+  // 排除有专属卡的内置家：dreamina（会员卡）+ comfyui-local（本地后端启用卡）。否则本地 ComfyUI 会落进
+  // 通用「自定义中转」卡（那卡的 key/BaseURL 手填隐喻对无 key 本地后端是错的）。
+  const otherModels = models.filter((m) => !isKnownVendor(m.vendorKey) && m.vendorKey !== 'dreamina' && m.vendorKey !== COMFYUI_VENDOR_KEY)
+
+  // 本地 ComfyUI（无 key 本地后端，专属卡）：种子存在才显；enabled 决定归「已接入 / 可接入」。
+  const comfyuiMeta = vendorMeta.get(COMFYUI_VENDOR_KEY)
+  const comfyuiAvailable = comfyuiMeta !== undefined
+  const comfyuiEnabled = !!comfyuiMeta?.enabled
+  const comfyuiModels = models.filter((m) => m.vendorKey === COMFYUI_VENDOR_KEY)
 
   // 即梦 / 编程助手连接判定 + 可用性（卡是否该出现）。
   const dreaminaAvailable = dreaminaStatus !== null
@@ -175,6 +186,7 @@ export function OnboardingDrawer(): JSX.Element {
   const hasConnected =
     connectedKnown.length > 0 ||
     otherModels.length > 0 ||
+    comfyuiEnabled ||
     dreaminaConnected ||
     assistantConnected
 
@@ -280,6 +292,9 @@ export function OnboardingDrawer(): JSX.Element {
                 </FoldableModelCard>
               )
             })}
+            {comfyuiAvailable && comfyuiEnabled ? (
+              <ComfyuiLocalCard enabled={comfyuiEnabled} baseUrl={comfyuiMeta?.baseUrl ?? ''} models={comfyuiModels} onChanged={refresh} />
+            ) : null}
             {dreaminaAvailable && dreaminaConnected ? (
               <DreaminaMemberCard status={dreaminaStatus} onChanged={refresh} />
             ) : null}
@@ -309,6 +324,12 @@ export function OnboardingDrawer(): JSX.Element {
           </button>
           <div className="text-micro text-nomi-ink-40 px-1 -mt-0.5">new-api 一次拉全图·视频·文本 · 也可接官方厂商 / 自定义接口</div>
         </AvailableGroup>
+
+        {comfyuiAvailable && !comfyuiEnabled ? (
+          <AvailableGroup title="有本地 ComfyUI？" count={1} defaultExpanded={false}>
+            <ComfyuiLocalCard enabled={comfyuiEnabled} baseUrl={comfyuiMeta?.baseUrl ?? ''} models={comfyuiModels} onChanged={refresh} />
+          </AvailableGroup>
+        ) : null}
 
         {dreaminaAvailable && !dreaminaConnected ? (
           <AvailableGroup title="有即梦会员？" count={1} defaultExpanded={false}>
