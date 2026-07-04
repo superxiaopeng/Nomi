@@ -27,9 +27,7 @@ import {
   type Scene3DState,
   type Scene3DTransformMode,
 } from './scene3dTypes'
-import {
-  FULLSCREEN_Z_INDEX,
-} from './scene3dConstants'
+import { FULLSCREEN_Z_INDEX } from './scene3dConstants'
 import { PanelButton, CanvasPanelRestoreButton } from './scene3dToolbar'
 import {
   levelEditorCameraRotation,
@@ -57,6 +55,7 @@ import {
 } from './scene3dTrajectorySurfaces'
 import { removeTrajectoryBindingsForNode } from './scene3dTrajectoryState'
 import { cameraWithPlaybackPosition } from './scene3dPlayback'
+import type { Scene3DReferenceTargetSummary } from './scene3dReferenceDirector'
 import {
   useScene3DClipboardActions,
   useScene3DTrajectoryModeActions,
@@ -77,6 +76,7 @@ type Scene3DFullscreenProps = {
   // 录 take（S2）：把录制好的（含角色/机位轨迹的）场景交回宿主建 scene3d 节点 + 打捕获标志。
   // 可选——未传则不出现「录 take」按钮（如样张/只读环境）。
   onRecordTake?: (recordedState: Scene3DState) => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }
 
 export default function Scene3DFullscreen({
@@ -87,6 +87,7 @@ export default function Scene3DFullscreen({
   onStateChange,
   onScreenshot,
   onRecordTake,
+  referenceTarget,
 }: Scene3DFullscreenProps): JSX.Element {
   const [state, setState] = React.useState(() => cloneScene3DState(initialState))
   const [selection, setSelection] = React.useState<Scene3DSelection>(null)
@@ -785,6 +786,7 @@ export default function Scene3DFullscreen({
                 }))}
                 onApplyCameraMove={applyCameraMove}
                 onExportCameraMoveFrames={(cameraId) => { void exportCameraMoveFrames(cameraId) }}
+                referenceTarget={referenceTarget}
               />
             </motion.aside>
           ) : null}

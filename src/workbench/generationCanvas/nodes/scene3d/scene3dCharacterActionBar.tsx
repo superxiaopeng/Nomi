@@ -170,7 +170,7 @@ export function CharacterActionBar({
 }): JSX.Element {
   return (
     <div
-      className="absolute bottom-5 left-1/2 z-[5] max-w-[calc(100%-32px)] -translate-x-1/2"
+      className="absolute bottom-5 left-1/2 z-[8] max-w-[calc(100%-32px)] -translate-x-1/2"
       aria-label="角色操控动作库"
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -251,7 +251,7 @@ export function CameraPossessActionBar({
 }): JSX.Element {
   return (
     <div
-      className="absolute bottom-5 left-1/2 z-[5] max-w-[calc(100%-32px)] -translate-x-1/2"
+      className="absolute bottom-5 left-1/2 z-[8] max-w-[calc(100%-32px)] -translate-x-1/2"
       aria-label="镜头操控工具栏"
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

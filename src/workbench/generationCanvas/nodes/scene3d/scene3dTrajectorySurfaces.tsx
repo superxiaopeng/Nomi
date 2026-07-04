@@ -9,6 +9,7 @@ import { PropertyPanel } from './scene3dInspector'
 import { TrajectoryPanel } from './trajectory/TrajectoryPanel'
 import { TrajectoryTimeline } from './trajectory/TrajectoryTimeline'
 import { TrajectoryPlayback } from './trajectory/TrajectoryPlayback'
+import type { Scene3DReferenceTargetSummary } from './scene3dReferenceDirector'
 
 export type Scene3DRightPanelTab = 'properties' | 'trajectory'
 
@@ -100,6 +101,7 @@ export function Scene3DRightPanelBody({
   onEnvironmentPatch,
   onApplyCameraMove,
   onExportCameraMoveFrames,
+  referenceTarget,
 }: {
   state: Scene3DState
   trajectory: Scene3DTrajectoryEditing
@@ -112,6 +114,7 @@ export function Scene3DRightPanelBody({
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
   onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
   onExportCameraMoveFrames: (cameraId: string) => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }): JSX.Element {
   return (
     <>
@@ -137,6 +140,7 @@ export function Scene3DRightPanelBody({
           onEnvironmentPatch={onEnvironmentPatch}
           onApplyCameraMove={onApplyCameraMove}
           onExportCameraMoveFrames={onExportCameraMoveFrames}
+          referenceTarget={referenceTarget}
         />
       )}
     </>

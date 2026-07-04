@@ -13,6 +13,11 @@ import { cloneScene3DState, normalizeScene3DState } from './scene3d/scene3dSeria
 import { persistScene3DScreenshot } from './scene3d/scene3dScreenshot'
 import { frameCountForDuration } from './scene3d/takeRecording'
 import { isVideoLikeGenerationNodeKind } from '../model/generationNodeKinds'
+import {
+  referenceSlotForScene3DCaptureTitle,
+  shouldAttachScene3DFrameReference,
+  summarizeScene3DReferenceTarget,
+} from './scene3d/scene3dReferenceDirector'
 import type { Scene3DCaptureResult, Scene3DState } from './scene3d/scene3dTypes'
 
 const loadScene3DFullscreen = () => import('./scene3d/Scene3DFullscreen')
@@ -125,9 +130,15 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
   const updateNode = useGenerationCanvasStore((state) => state.updateNode)
   const addNode = useGenerationCanvasStore((state) => state.addNode)
   const connectNodes = useGenerationCanvasStore((state) => state.connectNodes)
+  const canvasNodes = useGenerationCanvasStore((state) => state.nodes)
+  const canvasEdges = useGenerationCanvasStore((state) => state.edges)
   const requestCanvasFit = useWorkbenchStore((state) => state.requestCanvasFit)
   const sceneState = React.useMemo(() => readScene3DState(node), [node.id, node.meta?.scene3dState])
   const sceneStateKey = React.useMemo(() => scene3DStateKey(sceneState), [sceneState])
+  const referenceTarget = React.useMemo(
+    () => summarizeScene3DReferenceTarget(node.id, canvasNodes, canvasEdges),
+    [canvasEdges, canvasNodes, node.id],
+  )
   const persistedSceneStateKeyRef = React.useRef(sceneStateKey)
   const lastThumbnailRef = React.useRef(sceneState.lastThumbnail)
   const thumbnailUrl = sceneState.lastThumbnail
@@ -267,6 +278,14 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
         },
       })
       connectNodes(node.id, screenshotNode.id, 'reference')
+      const targetSlot = referenceSlotForScene3DCaptureTitle(capture.title)
+      if (
+        targetSlot &&
+        referenceTarget.state !== 'not-connected' &&
+        shouldAttachScene3DFrameReference(referenceTarget, targetSlot)
+      ) {
+        connectNodes(screenshotNode.id, referenceTarget.targetNodeId, targetSlot)
+      }
 
       const current = useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === node.id)
       const nextSceneState = persistableScene3DState({
@@ -285,7 +304,7 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
     } catch (error) {
       toast(error instanceof Error ? error.message : '截图失败，请重试', 'error')
     }
-  }, [addNode, connectNodes, node.id, node.meta, node.position.x, node.position.y, updateNode, width])
+  }, [addNode, connectNodes, node.id, node.meta, node.position.x, node.position.y, referenceTarget, updateNode, width])
 
   const takeCaptureStatus = readTakeCaptureStatus(node)
 
@@ -375,6 +394,7 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
             onScreenshot={(capture) => { void handleScreenshot(capture) }}
             onStateChange={handleStateChange}
             onRecordTake={readOnly ? undefined : handleRecordTake}
+            referenceTarget={referenceTarget}
           />
         </React.Suspense>
       ) : null}

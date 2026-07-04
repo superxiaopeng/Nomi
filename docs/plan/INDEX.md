@@ -41,6 +41,7 @@
 | [2026-06-06-P0-P1-execution-log.md](2026-06-06-P0-P1-execution-log.md) | 通用素材系统 P0+P1 执行日志 | 📎 |
 | [2026-06-06-reference-at-and-sources.md](2026-06-06-reference-at-and-sources.md) | 通用「素材引用」系统（非 Seedance 专用） | 🚧 |
 | [2026-06-06-drop-and-wire-execution.md](2026-06-06-drop-and-wire-execution.md) | 拖入/连线→参考（drop-and-wire） | 🚧 |
+| [2026-07-04-scene3d-reference-pack.md](2026-07-04-scene3d-reference-pack.md) | Scene3D 导演参考包：白膜置景/运镜首尾帧/录 take → 目标视频参考槽 | 🚧 |
 | [2026-05-31-asset-node-and-canvas-perf.md](2026-05-31-asset-node-and-canvas-perf.md) | 素材节点(≠生成节点) + A1.5 组件抽取 | ✅ |
 | [2026-05-31-canvas-image-resize-crop.md](2026-05-31-canvas-image-resize-crop.md) | 画布图片等比缩放+裁剪（Figma 式） | 📋 |
 | [2026-05-31-three-canvas-bugs.md](2026-05-31-three-canvas-bugs.md) | 修三个生成画布 bug | 🚧 |

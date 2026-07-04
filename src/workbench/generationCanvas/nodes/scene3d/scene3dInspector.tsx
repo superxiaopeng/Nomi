@@ -48,6 +48,7 @@ import {
 import { Scene3DEnvironmentPanel } from './scene3dEnvironmentPanel'
 import { CameraMovePanel } from './scene3dCameraMovePanel'
 import type { CameraMovePresetSpec } from './cameraMovePreset'
+import type { Scene3DReferenceTargetSummary } from './scene3dReferenceDirector'
 
 function VectorInputs({
   label,
@@ -446,6 +447,7 @@ export function PropertyPanel({
   onEnvironmentPatch,
   onApplyCameraMove,
   onExportCameraMoveFrames,
+  referenceTarget,
 }: {
   state: Scene3DState
   selection: Scene3DSelection
@@ -455,6 +457,7 @@ export function PropertyPanel({
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
   onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
   onExportCameraMoveFrames: (cameraId: string) => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }): JSX.Element {
   const selectedObject = selection?.type === 'object'
     ? state.objects.find((object) => object.id === selection.id)
@@ -641,6 +644,7 @@ export function PropertyPanel({
             readOnly={readOnly}
             onApply={(spec) => onApplyCameraMove(selectedCamera.id, spec)}
             onExportFrames={() => onExportCameraMoveFrames(selectedCamera.id)}
+            referenceTarget={referenceTarget}
           />
         </div>
       ) : (

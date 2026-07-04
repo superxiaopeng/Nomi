@@ -2,6 +2,7 @@
 // 点按 = 按当前机位/拍摄目标就地落一段轨迹并追加到时间轴末尾（cameraMovePreset 纯函数），
 // 连点即串联多段；落完仍可去轨迹模式逐点精修。样张：docs/design/mockups/scene3d-camera-directing-upgrade.html。
 import React from 'react'
+import { IconLink, IconMovie, IconPhoto } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
 import { CAMERA_MOVES, CAMERA_MOVE_LABEL, ZOOM_MOVES, type CameraMove } from './cameraMoveVocab'
 import {
@@ -11,6 +12,10 @@ import {
   CAMERA_MOVE_DURATION_MIN,
   type CameraMovePresetSpec,
 } from './cameraMovePreset'
+import {
+  scene3DReferenceTargetLabel,
+  type Scene3DReferenceTargetSummary,
+} from './scene3dReferenceDirector'
 
 const DEFAULT_DURATION = 5 // Seedance 甜区中档（与 CAMERA_SPEED_DURATION.medium 一致）
 const DEFAULT_AMPLITUDE_PERCENT = 60
@@ -19,11 +24,13 @@ export function CameraMovePanel({
   readOnly,
   onApply,
   onExportFrames,
+  referenceTarget,
 }: {
   readOnly: boolean
   onApply: (spec: CameraMovePresetSpec) => void
   /** 把该相机运镜段的首/尾帧各截一张落画布（接 Seedance 首尾帧工作流）。 */
   onExportFrames: () => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }): JSX.Element {
   const [durationValue, setDurationValue] = React.useState(DEFAULT_DURATION)
   const [amplitudePercent, setAmplitudePercent] = React.useState(DEFAULT_AMPLITUDE_PERCENT)
@@ -36,9 +43,47 @@ export function CameraMovePanel({
     })
   }, [amplitudePercent, durationValue, onApply])
 
+  const target = referenceTarget ?? {
+    state: 'not-connected' as const,
+    currentFrameSupport: { firstFrame: false, lastFrame: false },
+    anyFrameSupport: { firstFrame: false, lastFrame: false },
+  }
+  const videoRouteLabel = target.state === 'video-ref'
+    ? '录 take → video_ref'
+    : target.state === 'prompt-fallback'
+      ? '录 take → 运镜文字'
+      : '待接目标'
+  const frameRouteLabel = target.anyFrameSupport.firstFrame && target.anyFrameSupport.lastFrame
+    ? '首帧 / 尾帧'
+    : target.anyFrameSupport.firstFrame
+      ? '首帧'
+      : '不可接帧槽'
+
   return (
     <div className="grid gap-2 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-2">
       <div className="text-caption font-medium text-[var(--nomi-ink)]">运镜预设</div>
+      <div
+        className="grid gap-2 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] p-2"
+        data-scene3d-reference-panel
+      >
+        <div className="flex min-w-0 items-center gap-1.5 text-caption font-medium text-[var(--nomi-ink)]">
+          <IconLink size={14} stroke={1.6} />
+          <span>参考输出</span>
+        </div>
+        <div className="min-w-0 truncate text-micro text-[var(--nomi-ink-60)]" data-scene3d-reference-target>
+          {scene3DReferenceTargetLabel(target)}
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="flex min-w-0 items-center gap-1 rounded-nomi-sm bg-[var(--nomi-paper)] px-1.5 py-1 text-micro text-[var(--nomi-ink-60)]">
+            <IconMovie size={13} stroke={1.6} className="shrink-0" />
+            <span className="truncate">{videoRouteLabel}</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-1 rounded-nomi-sm bg-[var(--nomi-paper)] px-1.5 py-1 text-micro text-[var(--nomi-ink-60)]">
+            <IconPhoto size={13} stroke={1.6} className="shrink-0" />
+            <span className="truncate">{frameRouteLabel}</span>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="grid gap-1">
           <span className="text-micro text-[var(--nomi-ink-60)]">时长（秒）</span>
