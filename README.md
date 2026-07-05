@@ -26,7 +26,7 @@
 
 <p align="center">
   <a href="https://github.com/aqm857886159/Nomi/stargazers"><img src="https://img.shields.io/badge/GitHub-%E2%AD%90%20Star-2563eb?logo=github&logoColor=2563eb&labelColor=f1f5f9" alt="Star on GitHub" /></a>
-  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.16.1-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
+  <a href="https://github.com/aqm857886159/Nomi/releases/latest"><img src="https://img.shields.io/badge/release-v0.16.2-2563eb?labelColor=f1f5f9" alt="Latest release" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-2563eb?labelColor=f1f5f9" alt="Platform" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2563eb?labelColor=f1f5f9" alt="License" /></a>
 </p>
@@ -86,7 +86,7 @@
 - 🎬 **3D 导演台 + AI 运镜** — 在 3D 场景里摆角色姿势、架机位、设画幅，截机位画面当参考；也能让 AI 按你的描述自动搭好站位。**文字说不清的构图，直接「搭」出来**，锁住跨镜头的空间关系。v0.16.1 重新校准了坐、蹲、半蹲、单膝跪、双膝跪、指向、举手等白模姿势，并用 front / side / q3 / back / top 多视角截图回归，参考图和参考视频更稳定。再用一句话描述运镜，AI 沿相机轨迹渲一段运镜小片喂给视频模型，把镜头运动复刻到成片上。还能**文生 3D / 图生 3D**（混元 / Meshy / HiTem3D）直接生成 3D 模型资产。
 - 🎨 **画布上直接修图，不用导去 PS** — 生成的图当场就能改：**抠图换背景、把元素拆出来单独调、改图里的文字**（对标 Lovart 的元素 / 文字编辑），还能往画布粘贴、派生新版本。素材一多，用「**找素材**」一键按成片 / 参考自动分组、缩略图识别，秒找到要的那张。
 - 🔗 **一键接入 Claude Code / Codex / Cursor** — Nomi 的创作能力抽成了一个**无头能力核**（MCP）；在「模型接入」面板一键写好接入，让编程助手用对话直接指挥 Nomi 建项目、加节点、连参考、触发生成——Nomi 里所见即所得。
-- 🔑 **一个 key、十几个模型全通** — 「模型接入」填一个 key（APIMart / kie），视频 **Sora 2 / Veo 3.1 / 可灵 / Seedance / Wan / Hailuo**、图像 **Seedream / Nano Banana / GPT Image / Qwen / Imagen** 等预置模型立即可用，**文生 / 图生 / 首尾帧补间 / 多图参考**模式齐全，同款模型的**标准 / 快速 / Pro 变体**一处切换；也可自定义接入任意中转站。
+- 🔑 **一个 key、十几个模型全通** — 「模型接入」填一个 key（APIMart / kie），视频 **Sora 2 / Veo 3.1 / 可灵 / Seedance / Wan / Hailuo**、图像 **Seedream / Nano Banana / GPT Image / Qwen / Imagen** 等预置模型立即可用，**文生 / 图生 / 首尾帧补间 / 多图参考**模式齐全，同款模型的**标准 / 快速 / Pro 变体**一处切换；也可自定义接入任意中转站——中转的**图生图 / 参考图 / 1K–4K 清晰度**同样可用（v0.16.2 起老接入自动升级，无需删了重加）。
 - 🎫 **有即梦高级会员？用会员积分直接出片（不用 API key）** — 接入即梦官方 CLI，扫码登录就能用会员积分跑 **Seedance 2.0 视频**（文生 / 图生 / 首尾帧 / 全能参考 / 多帧）和**即梦图片**（文生图 3.0–5.0 / 改图 / 超清），零额外 API 费。走官方授权、不碰逆向、不存密码。<sub>注：即梦 CLI 生成仅「高级会员（maestro vip）」可用。</sub>
 - 🎭 **项目级资产锁一致性** — 角色（多视角参考图）、分镜、风格沉淀成可复用资产，减少多片段里的「脸漂移、风格跑偏」。
 - ✍️ **提示词库 + AI 优化** — 内置起步提示词直接送上画布；写得糙的提示词一键 AI 优化，改动**高亮可对比、确认再应用**，不黑箱。
