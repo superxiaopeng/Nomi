@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://nomiaqm.com"><strong>🌐 官网</strong></a>
   ·
+  <a href="https://nomiaqm.com/quickstart.html"><strong>新手指南</strong></a>
+  ·
   <a href="https://github.com/aqm857886159/Nomi/releases/latest"><strong>⬇️ GitHub 下载</strong></a>
   ·
   <a href="https://pan.quark.cn/s/d3322c17e7b6"><strong>📦 网盘下载</strong></a>
