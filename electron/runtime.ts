@@ -9,17 +9,37 @@ import { requestJson } from "./vendor/vendorHttp";
 import { buildNormalizedRecipe, buildTaskProvenance } from "./vendor/provenance";
 import { traceVendorCompleted, traceVendorRequested } from "./events/vendorCallTrace";
 import { scheduleTechnicalReview } from "./review/reviewTrace";
-import { type AuthType, authHeaders as buildAuthHeaders, buildHttpRequest, buildTemplateContext, extractTaskId as extractTaskIdShared } from "./ai/requestPipeline";
+import {
+  type AuthType,
+  authHeaders as buildAuthHeaders,
+  buildHttpRequest,
+  buildTemplateContext,
+  extractTaskId as extractTaskIdShared,
+} from "./ai/requestPipeline";
 import { executeProcessOperation } from "./catalog/processOperation";
 import { executeTextTask } from "./textTaskRunner";
 import { runAudioTask } from "./audioTaskRunner";
 import { firstString, isJsonRecord, nowIso, trim, type JsonRecord } from "./jsonUtils";
-import { collectAssetUrls, firstMappedString, providerMetaFromResponse, taskStatusFromResponse, valuesFromMapping } from "./tasks/responseParsing";
+import {
+  collectAssetUrls,
+  firstMappedString,
+  providerMetaFromResponse,
+  taskStatusFromResponse,
+  valuesFromMapping,
+} from "./tasks/responseParsing";
 import { extractAssetUrl } from "./tasks/assetUrlExtract";
 import { TtlLruCache } from "./tasks/taskCache";
 import { markTaskAdmitted } from "./tasks/taskAdmission";
 import { collectFilesRecursively, parseDataUrl } from "./assets/assetBytes";
-import { assetBucketFromMeta, assetKindFromContentType, contentTypeFromPath, extensionFromMime, extensionFromUrl, localAssetUrl, stableAssetId } from "./assets/assetPaths";
+import {
+  assetBucketFromMeta,
+  assetKindFromContentType,
+  contentTypeFromPath,
+  extensionFromMime,
+  extensionFromUrl,
+  localAssetUrl,
+  stableAssetId,
+} from "./assets/assetPaths";
 import { readCachedTaskResult, recipeFingerprint, rememberTaskResult } from "./vendor/fingerprintCache";
 import { decryptApiKeyRecord } from "./catalog/secrets";
 import { ensureDir } from "./runtimePaths";
@@ -40,14 +60,7 @@ export { createProject, deleteProject, listProjects, readProject, resolveProject
 // catalogStore 反向复用本文件任务引擎 → 运行期循环引用（CommonJS 安全）。
 import { extractVendorExtraHeaders, readCatalog } from "./catalog/catalogStore";
 
-import type {
-  BillingModelKind,
-  HttpOperation,
-  Mapping,
-  Model,
-  ProfileKind,
-  Vendor,
-} from "./catalog/types";
+import type { BillingModelKind, HttpOperation, Mapping, Model, ProfileKind, Vendor } from "./catalog/types";
 import { selectExecutableModel, selectTaskMapping } from "./catalog/types";
 import { applyHeadlessParamDefaults, taskTemplateParams } from "./catalog/taskParams";
 import { applyParamMap, type ParamMap } from "./catalog/paramTranslate";
@@ -191,10 +204,36 @@ type LocalAssetRecord = {
     contentType: string;
     size: number;
     kind: string;
-  };
+  } & JsonRecord;
 };
 
-function uniqueAssetPath(projectId: string, fileName: string, bucket: "generated" | "imported" = "generated"): { absolutePath: string; relativePath: string } {
+function readAssetSidecarMeta(absolutePath: string): JsonRecord {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(`${absolutePath}.meta`, "utf8"));
+    return isJsonRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAssetSidecarMeta(absolutePath: string, meta: JsonRecord): void {
+  const sidecar: JsonRecord = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (value !== undefined) sidecar[key] = value;
+  }
+  if (Object.keys(sidecar).length === 0) return;
+  try {
+    fs.writeFileSync(`${absolutePath}.meta`, JSON.stringify(sidecar));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function uniqueAssetPath(
+  projectId: string,
+  fileName: string,
+  bucket: "generated" | "imported" = "generated",
+): { absolutePath: string; relativePath: string } {
   const projectDir = projectDirById(projectId);
   if (!projectDir) throw new Error("Project not found");
   const today = new Date().toISOString().slice(0, 10);
@@ -213,14 +252,17 @@ function uniqueAssetPath(projectId: string, fileName: string, bucket: "generated
   };
 }
 
-export function writeAsset(projectId: string, bytes: Buffer, fileName: string, contentType: string, meta: JsonRecord): unknown {
+export function writeAsset(
+  projectId: string,
+  bytes: Buffer,
+  fileName: string,
+  contentType: string,
+  meta: JsonRecord,
+): unknown {
   const { absolutePath, relativePath } = uniqueAssetPath(projectId, fileName, assetBucketFromMeta(meta));
   fs.writeFileSync(absolutePath, bytes);
-  // sidecar: originalUrl 落盘，供后续生成直接取公网 URL（不需 vendor 上传 API）。
-  const sidecarOriginalUrl = typeof meta.originalUrl === "string" && /^https?:\/\//i.test(meta.originalUrl) ? meta.originalUrl : null;
-  if (sidecarOriginalUrl) {
-    try { fs.writeFileSync(`${absolutePath}.meta`, JSON.stringify({ originalUrl: sidecarOriginalUrl })); } catch { /* non-fatal */ }
-  }
+  // sidecar: kind/originalUrl/mediaType 等资产来源信息落盘，重启后 list 可恢复素材盒分类。
+  writeAssetSidecarMeta(absolutePath, meta);
   const url = localAssetUrl(projectId, relativePath);
   const t = nowIso();
   return {
@@ -241,6 +283,43 @@ export function writeAsset(projectId: string, bytes: Buffer, fileName: string, c
   };
 }
 
+export function moveAssetFile(
+  projectId: string,
+  sourcePath: string,
+  fileName: string,
+  contentType: string,
+  meta: JsonRecord,
+): unknown {
+  const { absolutePath, relativePath } = uniqueAssetPath(projectId, fileName, assetBucketFromMeta(meta));
+  try {
+    fs.renameSync(sourcePath, absolutePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+    fs.copyFileSync(sourcePath, absolutePath);
+    fs.rmSync(sourcePath, { force: true });
+  }
+  const stat = fs.statSync(absolutePath);
+  writeAssetSidecarMeta(absolutePath, meta);
+  const url = localAssetUrl(projectId, relativePath);
+  const t = nowIso();
+  return {
+    id: `asset-${crypto.randomUUID()}`,
+    name: sanitizeName(fileName, "asset"),
+    userId: "local",
+    projectId,
+    createdAt: t,
+    updatedAt: t,
+    data: {
+      ...meta,
+      url,
+      relativePath,
+      absolutePath,
+      contentType,
+      size: stat.size,
+    },
+  };
+}
+
 export async function importRemoteAsset(payload: unknown): Promise<unknown> {
   const raw = payload as JsonRecord;
   const projectId = String(raw.projectId || "").trim();
@@ -248,12 +327,26 @@ export async function importRemoteAsset(payload: unknown): Promise<unknown> {
   if (!projectId) throw new Error("projectId is required");
   if (!url) throw new Error("url is required");
   if (url.startsWith("nomi-local://")) {
-    return { id: `asset-${crypto.randomUUID()}`, name: String(raw.fileName || "local asset"), userId: "local", projectId, createdAt: nowIso(), updatedAt: nowIso(), data: { url, kind: raw.kind || "local" } };
+    return {
+      id: `asset-${crypto.randomUUID()}`,
+      name: String(raw.fileName || "local asset"),
+      userId: "local",
+      projectId,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      data: { url, kind: raw.kind || "local" },
+    };
   }
   if (url.startsWith("data:")) {
     const parsed = parseDataUrl(url);
     const ext = extensionFromMime(parsed.contentType, "bin");
-    return writeAsset(projectId, parsed.bytes, String(raw.fileName || `asset-${Date.now()}.${ext}`), parsed.contentType, { kind: raw.kind || "generated", originalUrl: null });
+    return writeAsset(
+      projectId,
+      parsed.bytes,
+      String(raw.fileName || `asset-${Date.now()}.${ext}`),
+      parsed.contentType,
+      { kind: raw.kind || "generated", originalUrl: null },
+    );
   }
   if (!/^https?:\/\//i.test(url)) throw new Error("Only http(s), data, and nomi-local assets are supported");
   // v0.7.6: hardenedFetch — 资产下载需要更大上限（视频/图片），但仍拦私网 + 超时
@@ -284,35 +377,50 @@ export function listProjectAssets(payload: unknown): { items: LocalAssetRecord[]
   const limit = Math.max(1, Math.min(500, requestedLimit));
   const offset = Math.max(0, Number.parseInt(String(raw?.cursor || "0"), 10) || 0);
   const kindFilter = typeof raw?.kind === "string" && raw.kind.trim() ? raw.kind.trim() : "";
-  const records = collectFilesRecursively(assetsDir).flatMap((absolutePath): LocalAssetRecord[] => {
-    try {
-      const stat = fs.statSync(absolutePath);
-      const relativePath = path.relative(projectDir, absolutePath).replace(/\\/g, "/");
-      const contentType = contentTypeFromPath(absolutePath);
-      const kind = assetKindFromContentType(contentType);
-      if (kindFilter && kind !== kindFilter) return [];
-      const createdAt = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();
-      const updatedAt = new Date(stat.mtimeMs).toISOString();
-      return [{
-        id: stableAssetId(projectId, relativePath),
-        name: path.basename(absolutePath),
-        userId: "local",
-        projectId,
-        createdAt,
-        updatedAt,
-        data: {
-          url: localAssetUrl(projectId, relativePath),
-          relativePath,
-          absolutePath,
-          contentType,
-          size: stat.size,
-          kind,
-        },
-      }];
-    } catch {
-      return [];
-    }
-  }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  const records = collectFilesRecursively(assetsDir)
+    .flatMap((absolutePath): LocalAssetRecord[] => {
+      try {
+        if (absolutePath.endsWith(".meta")) return [];
+        const stat = fs.statSync(absolutePath);
+        const relativePath = path.relative(projectDir, absolutePath).replace(/\\/g, "/");
+        const contentType = contentTypeFromPath(absolutePath);
+        const sidecarMeta = readAssetSidecarMeta(absolutePath);
+        const mediaKind = assetKindFromContentType(contentType);
+        const sidecarKind = typeof sidecarMeta.kind === "string" && sidecarMeta.kind.trim() ? sidecarMeta.kind.trim() : "";
+        const kind = sidecarKind || mediaKind;
+        if (kindFilter && kind !== kindFilter) return [];
+        const createdAt = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();
+        const updatedAt = new Date(stat.mtimeMs).toISOString();
+        return [
+          {
+            id: stableAssetId(projectId, relativePath),
+            name: path.basename(absolutePath),
+            userId: "local",
+            projectId,
+            createdAt,
+            updatedAt,
+            data: {
+              ...sidecarMeta,
+              url: localAssetUrl(projectId, relativePath),
+              relativePath,
+              absolutePath,
+              contentType,
+              size: stat.size,
+              kind,
+              mediaType:
+                typeof sidecarMeta.mediaType === "string" && sidecarMeta.mediaType
+                  ? sidecarMeta.mediaType
+                  : mediaKind === "image" || mediaKind === "video" || mediaKind === "audio"
+                    ? mediaKind
+                    : undefined,
+            },
+          },
+        ];
+      } catch {
+        return [];
+      }
+    })
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   const items = records.slice(offset, offset + limit);
   const nextOffset = offset + items.length;
   return {
@@ -321,7 +429,11 @@ export function listProjectAssets(payload: unknown): { items: LocalAssetRecord[]
   };
 }
 
-export function findExecutableModel(vendorKey: string, modelKey: string, kind?: BillingModelKind): { vendor: Vendor; model: Model; apiKey: string } {
+export function findExecutableModel(
+  vendorKey: string,
+  modelKey: string,
+  kind?: BillingModelKind,
+): { vendor: Vendor; model: Model; apiKey: string } {
   const state = readCatalog();
   const vendor = state.vendors.find((item) => item.key === vendorKey && item.enabled);
   if (!vendor) throw new Error(`Vendor is not enabled: ${vendorKey}`);
@@ -333,7 +445,11 @@ export function findExecutableModel(vendorKey: string, modelKey: string, kind?: 
   return { vendor, model, apiKey };
 }
 
-export function findExecutableModelForTask(vendorKey: string, modelKey: string, kind: BillingModelKind): { vendor: Vendor; model: Model; apiKey: string } {
+export function findExecutableModelForTask(
+  vendorKey: string,
+  modelKey: string,
+  kind: BillingModelKind,
+): { vendor: Vendor; model: Model; apiKey: string } {
   if (modelKey) return findExecutableModel(vendorKey, modelKey, kind);
   const state = readCatalog();
   const model = state.models.find((item) => item.vendorKey === vendorKey && item.enabled && item.kind === kind);
@@ -359,15 +475,27 @@ export function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
 
 export { extractAssetUrl } from "./tasks/assetUrlExtract";
 
-export async function localizeTaskAsset(projectId: string, assetUrl: string, type: "image" | "video" | "audio" | "model3d", nodeId?: string): Promise<TaskResult["assets"][number]> {
-  const imported = await importRemoteAsset({
+export async function localizeTaskAsset(
+  projectId: string,
+  assetUrl: string,
+  type: "image" | "video" | "audio" | "model3d",
+  nodeId?: string,
+): Promise<TaskResult["assets"][number]> {
+  const imported = (await importRemoteAsset({
     projectId,
     url: assetUrl,
     kind: "generated",
     ownerNodeId: nodeId || null,
     fileName: `${type}-${Date.now()}.${type === "image" ? "png" : type === "video" ? "mp4" : type === "model3d" ? "glb" : "mp3"}`,
-  }) as { id?: string; name?: string; data?: { url?: string; absolutePath?: string } };
-  if (type === "image" || type === "video") scheduleTechnicalReview({ projectId, nodeId, absolutePath: String(imported.data?.absolutePath || ""), assetUrl: String(imported.data?.url || assetUrl), type }); // S4-2b:落地技术自检,仅图像/视频（3D 模型不送 VLM）
+  })) as { id?: string; name?: string; data?: { url?: string; absolutePath?: string } };
+  if (type === "image" || type === "video")
+    scheduleTechnicalReview({
+      projectId,
+      nodeId,
+      absolutePath: String(imported.data?.absolutePath || ""),
+      assetUrl: String(imported.data?.url || assetUrl),
+      type,
+    }); // S4-2b:落地技术自检,仅图像/视频（3D 模型不送 VLM）
   return {
     type,
     url: String(imported.data?.url || assetUrl),
@@ -386,7 +514,13 @@ export function findTaskMapping(vendorKey: string, taskKind: ProfileKind, modelK
 }
 
 // 共享 requestPipeline context 构造（wizard 测试与生产同一份；params 经 taskTemplateParams 归一）。
-function templateContext(request: TaskRequest, model: Model, apiKey: string, providerMeta: JsonRecord = {}, paramMap?: ParamMap): JsonRecord {
+function templateContext(
+  request: TaskRequest,
+  model: Model,
+  apiKey: string,
+  providerMeta: JsonRecord = {},
+  paramMap?: ParamMap,
+): JsonRecord {
   // 铁律翻译层：渲染 body 前按本 codec 的 paramMap 把档案中性参数译成该站 wire 字段（见 catalog/paramTranslate）。
   return buildTemplateContext({
     request: request as unknown as JsonRecord,
@@ -405,7 +539,14 @@ export function buildProfileHttpRequest(input: {
   request: TaskRequest;
   operation: HttpOperation;
   providerMeta?: JsonRecord;
-}): { method: string; url: string; headers: Record<string, string>; query: Record<string, unknown>; body: unknown; preview: unknown } {
+}): {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  query: Record<string, unknown>;
+  body: unknown;
+  preview: unknown;
+} {
   // 共享 requestPipeline 构造请求；extraHeaders（relay/网关自定义鉴权头）透传进 profile 路径（与文本路径同源，修 P1）。
   const extraHeaders = extractVendorExtraHeaders(input.vendor);
   return buildHttpRequest({
@@ -413,7 +554,13 @@ export function buildProfileHttpRequest(input: {
     authType: input.vendor.authType as AuthType,
     authHeaderName: input.vendor.authHeader ?? undefined,
     apiKey: input.apiKey,
-    context: templateContext(input.request, input.model, input.apiKey, input.providerMeta || {}, input.operation.paramMap),
+    context: templateContext(
+      input.request,
+      input.model,
+      input.apiKey,
+      input.providerMeta || {},
+      input.operation.paramMap,
+    ),
     operation: input.operation,
     ...(extraHeaders ? { extraHeaders } : {}),
   });
@@ -430,8 +577,19 @@ export async function executeProfileOperation(input: {
   // 进程型 transport（P4 声明驱动）：op 声明 process（本地 CLI dreamina）→ spawn，不走 HTTP。
   // 渲染/spawn/本地文件导入全在 processOperation（注入 writeAsset，避免 ↔ runtime 循环依赖）。
   if (input.operation.process) {
-    const context = templateContext(input.request, input.model, input.apiKey, input.providerMeta || {}, input.operation.paramMap);
-    return executeProcessOperation({ process: input.operation.process, context, projectId: trim(input.request.extras?.projectId), writeAsset });
+    const context = templateContext(
+      input.request,
+      input.model,
+      input.apiKey,
+      input.providerMeta || {},
+      input.operation.paramMap,
+    );
+    return executeProcessOperation({
+      process: input.operation.process,
+      context,
+      projectId: trim(input.request.extras?.projectId),
+      writeAsset,
+    });
   }
 
   // R1：发送前把本地素材(nomi-local://)按策略变成 vendor 可达值。带跨供应商 fallback + 内容类型感知：
@@ -455,7 +613,15 @@ export async function executeProfileOperation(input: {
       ? { ...input, request: { ...input.request, extras: localized.value as TaskRequest["extras"] } }
       : input;
   const built = buildProfileHttpRequest(effectiveInput);
-  const response = await requestJson(effectiveInput.vendor, effectiveInput.apiKey, built.method, built.url, built.headers, built.query, built.body);
+  const response = await requestJson(
+    effectiveInput.vendor,
+    effectiveInput.apiKey,
+    built.method,
+    built.url,
+    built.headers,
+    built.query,
+    built.body,
+  );
   return {
     response,
     request: built.preview,
@@ -482,7 +648,9 @@ export async function buildProfileTaskResult(input: {
   model?: Model;
 }): Promise<{ result: TaskResult; providerMeta: JsonRecord }> {
   const responseMapping = isJsonRecord(input.operation.response_mapping) ? input.operation.response_mapping : null;
-  const providerMetaMapping = isJsonRecord(input.operation.provider_meta_mapping) ? input.operation.provider_meta_mapping : null;
+  const providerMetaMapping = isJsonRecord(input.operation.provider_meta_mapping)
+    ? input.operation.provider_meta_mapping
+    : null;
   const providerMeta = providerMetaFromResponse(input.response, providerMetaMapping);
   const taskId = firstString(
     firstMappedString(input.response, responseMapping, "task_id"),
@@ -497,12 +665,12 @@ export async function buildProfileTaskResult(input: {
     ...valuesFromMapping(input.response, responseMapping, "video_url"),
     ...valuesFromMapping(input.response, responseMapping, "model_url"),
   ];
-  const assetUrls = Array.from(new Set([
-    ...mappedAssetValues.flatMap(collectAssetUrls),
-    ...collectAssetUrls(extractAssetUrl(input.response)),
-  ]));
+  const assetUrls = Array.from(
+    new Set([...mappedAssetValues.flatMap(collectAssetUrls), ...collectAssetUrls(extractAssetUrl(input.response))]),
+  );
   const status = taskStatusFromResponse(input.response, responseMapping, input.mapping.statusMapping, assetUrls);
-  const type: "image" | "video" | "model3d" = input.wantedKind === "video" ? "video" : input.wantedKind === "model3d" ? "model3d" : "image";
+  const type: "image" | "video" | "model3d" =
+    input.wantedKind === "video" ? "video" : input.wantedKind === "model3d" ? "model3d" : "image";
   const assets = input.projectId
     ? await Promise.all(assetUrls.map((url) => localizeTaskAsset(input.projectId || "", url, type, input.nodeId)))
     : assetUrls.map((url) => ({ type, url, thumbnailUrl: type === "image" ? url : null }));
@@ -516,7 +684,14 @@ export async function buildProfileTaskResult(input: {
       raw: input.response,
       // S4-1:profile 主路径补 provenance(与 fallback 共用 buildTaskProvenance,单一真相)。
       ...(status === "succeeded" && input.vendor && input.model
-        ? { provenance: buildTaskProvenance({ vendor: input.vendor, model: input.model, request: input.request, vendorRequestId: taskId }) }
+        ? {
+            provenance: buildTaskProvenance({
+              vendor: input.vendor,
+              model: input.model,
+              request: input.request,
+              vendorRequestId: taskId,
+            }),
+          }
         : {}),
     },
   };
@@ -536,12 +711,26 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   const grantId = trim(request.extras?.grantId);
   const taskId = `task-${crypto.randomUUID()}`;
   const mapping = findTaskMapping(vendorKey, kind, modelKey);
-  request.extras = applyHeadlessParamDefaults(request.extras, (model?.meta as { archetypeId?: string } | undefined)?.archetypeId, kind, vendorKey, mapping?.create?.defaultParams); // headless 缺参兜底(档案默认+mapping)
+  request.extras = applyHeadlessParamDefaults(
+    request.extras,
+    (model?.meta as { archetypeId?: string } | undefined)?.archetypeId,
+    kind,
+    vendorKey,
+    mapping?.create?.defaultParams,
+  ); // headless 缺参兜底(档案默认+mapping)
   // 第四路 audio：TTS/Whisper 同步收口（二进制/multipart）。付费守卫：必发 vendor，进来即校验消费令牌。
-  if (wantedKind === "audio") { assertAndConsumeSpendGrant(grantId, nodeId); return runAudioTask({ vendor, model, apiKey, request, kind, taskId, projectId, nodeId, mapping }); }
+  if (wantedKind === "audio") {
+    assertAndConsumeSpendGrant(grantId, nodeId);
+    return runAudioTask({ vendor, model, apiKey, request, kind, taskId, projectId, nodeId, mapping });
+  }
   if (mapping) {
     // S8 指纹缓存:同配方(参数没动)秒回上次成功结果,零 vendor 调用;强制重跑经 extras.forceRerun 绕读。
-    const recipe = buildNormalizedRecipe({ vendor, model, mappingId: trim((mapping as unknown as JsonRecord).id), request });
+    const recipe = buildNormalizedRecipe({
+      vendor,
+      model,
+      mappingId: trim((mapping as unknown as JsonRecord).id),
+      request,
+    });
     const fingerprint = recipeFingerprint(recipe);
     const cachedHit = readCachedTaskResult({ projectId, fingerprint, nodeId, extras: request.extras });
     if (cachedHit) return cachedHit as TaskResult;
@@ -561,7 +750,12 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
     });
     traceVendorRequested(projectId, { runId: normalized.result.id, nodeId, recipe });
     if (["succeeded", "failed"].includes(normalized.result.status)) {
-      traceVendorCompleted(projectId, { runId: normalized.result.id, nodeId, status: normalized.result.status as "succeeded" | "failed", assetCount: normalized.result.assets.length });
+      traceVendorCompleted(projectId, {
+        runId: normalized.result.id,
+        nodeId,
+        status: normalized.result.status as "succeeded" | "failed",
+        assetCount: normalized.result.assets.length,
+      });
       rememberTaskResult(projectId, fingerprint, normalized.result);
     }
     if (!["succeeded", "failed"].includes(normalized.result.status)) {
@@ -588,7 +782,12 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   // S8 指纹缓存(fallback 路径同语义)。
   const fallbackRecipe = buildNormalizedRecipe({ vendor, model, request });
   const fallbackFingerprint = recipeFingerprint(fallbackRecipe);
-  const fallbackHit = readCachedTaskResult({ projectId, fingerprint: fallbackFingerprint, nodeId, extras: request.extras });
+  const fallbackHit = readCachedTaskResult({
+    projectId,
+    fingerprint: fallbackFingerprint,
+    nodeId,
+    extras: request.extras,
+  });
   if (fallbackHit) return fallbackHit as TaskResult;
   assertAndConsumeSpendGrant(grantId, nodeId); // 付费守卫：fallback 缓存未命中=真发 vendor，发前校验
   // 与 profile 路径同源走 requestJson（单一真相）：错误在抛出那刻即为结构化
@@ -600,30 +799,55 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
     ...authHeaders(vendor, apiKey),
     ...(fallbackExtraHeaders || {}),
   };
-  const providerResponse = await requestJson(vendor, apiKey, "POST", endpoint(vendor, suffix), fallbackHeaders, {}, {
-    model: model.modelAlias || model.modelKey,
-    prompt: request.prompt,
-    size: request.width && request.height ? `${request.width}x${request.height}` : undefined,
-    seed: request.seed,
-    n: 1,
-    response_format: "url",
-    extras: request.extras,
-  });
+  const providerResponse = await requestJson(
+    vendor,
+    apiKey,
+    "POST",
+    endpoint(vendor, suffix),
+    fallbackHeaders,
+    {},
+    {
+      model: model.modelAlias || model.modelKey,
+      prompt: request.prompt,
+      size: request.width && request.height ? `${request.width}x${request.height}` : undefined,
+      seed: request.seed,
+      n: 1,
+      response_format: "url",
+      extras: request.extras,
+    },
+  );
   const assetUrl = extractAssetUrl(providerResponse);
   const upstreamTaskId = extractTaskIdShared(providerResponse) || taskId;
   traceVendorRequested(projectId, { runId: upstreamTaskId, nodeId, recipe: fallbackRecipe });
   if (!assetUrl) {
-    admitTask(upstreamTaskId, { vendor: vendorKey, request, raw: providerResponse, model, projectId, nodeId, wantedKind, fingerprint: fallbackFingerprint });
+    admitTask(upstreamTaskId, {
+      vendor: vendorKey,
+      request,
+      raw: providerResponse,
+      model,
+      projectId,
+      nodeId,
+      wantedKind,
+      fingerprint: fallbackFingerprint,
+    });
     return { id: upstreamTaskId, kind, status: "queued", assets: [], raw: providerResponse };
   }
-  const type: "image" | "video" | "model3d" = wantedKind === "video" ? "video" : wantedKind === "model3d" ? "model3d" : "image";
+  const type: "image" | "video" | "model3d" =
+    wantedKind === "video" ? "video" : wantedKind === "model3d" ? "model3d" : "image";
   const asset: TaskResult["assets"][number] = projectId
     ? await localizeTaskAsset(projectId, assetUrl, type, nodeId)
     : { type, url: assetUrl, thumbnailUrl: type === "image" ? assetUrl : null };
   // E11 provenance + S4-1 终态事件:与 profile 路径共用 vendor/provenance 模块(单一真相)。
   const provenance = buildTaskProvenance({ vendor, model, request, vendorRequestId: upstreamTaskId });
   traceVendorCompleted(projectId, { runId: upstreamTaskId, nodeId, status: "succeeded", assetCount: 1 });
-  const finalResult: TaskResult = { id: upstreamTaskId, kind, status: "succeeded", assets: [asset], raw: providerResponse, provenance };
+  const finalResult: TaskResult = {
+    id: upstreamTaskId,
+    kind,
+    status: "succeeded",
+    assets: [asset],
+    raw: providerResponse,
+    provenance,
+  };
   rememberTaskResult(projectId, fallbackFingerprint, finalResult);
   return finalResult;
 }
