@@ -381,7 +381,28 @@ export function canRunGenerationNode(
 ): boolean {
   if (!node) return false
   const executionKind = getGenerationNodeExecutionKind(node.kind)
-  if (executionKind === 'image') return true
+  if (executionKind === 'image') {
+    // L3 护栏：档案当前模式是「图生图」(image_edit) 且声明了参考槽、却一张参考都递不进来 → 不可生成
+    // （对齐视频节点既有护栏；composer 给「图生图需要参考图」文案）。此前 image 恒 true，空参考的
+    // 图生图会被静默当纯文生发出去（模板丢空键）——「图生图不按原图」体感来源之一。
+    // 纯文生图模式 / 无档案模型照旧恒可生成（后者由 runtime 的 image_edit 闸兜底诚实拒发）；
+    // 连了线但源未生成不在此禁——composer 的「备齐参考」波次接管。
+    if (!('id' in node) || !node.id) return true
+    const meta = node.meta || {}
+    const imageArchetype = resolveArchetypeForModel({
+      modelKey: typeof meta.modelKey === 'string' ? meta.modelKey : undefined,
+      modelAlias: typeof meta.modelAlias === 'string' ? meta.modelAlias : undefined,
+      meta,
+    })
+    const imageMode = imageArchetype ? currentArchetypeMode(imageArchetype, meta) : null
+    if (!imageMode || imageMode.transportTaskKind !== 'image_edit' || (imageMode.slots || []).length === 0) return true
+    const references = resolveGenerationReferences(node, context)
+    return Boolean(
+      references.referenceImages.length > 0 ||
+      references.firstFrameUrl ||
+      (imageArchetype && hasArchetypeArrayReferences(meta, imageArchetype)),
+    )
+  }
   // C5: 文本节点只要选了文本模型就能生成；prompt 缺失由 buildCatalogTaskRequest 兜底报错。
   if (executionKind === 'text') return true
   // 声音：配音(台词缺失下游兜底，同 text 可生成)；转写需先有音频参考(audio_ref 槽)。

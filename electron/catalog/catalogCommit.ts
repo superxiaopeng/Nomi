@@ -1,6 +1,7 @@
 import { firstString, isJsonRecord, nowIso, trim, type JsonRecord } from "../jsonUtils";
 import { humanizeModelKey } from "./modelLabel";
 import { newapiTransportFor } from "./newapiTransport";
+import { consumedCanonicalKeys } from "./paramTranslate";
 import { guessModelKind } from "./modelKindHeuristic";
 import { hardenedFetchText } from "../hardenedFetch";
 import type { AiSdkProviderKind, BillingModelKind, HttpOperation, Model, ProfileKind, Vendor } from "./types";
@@ -132,10 +133,16 @@ export function commitOnboardedModelToCatalog(payload: {
   // on the node have no {{request.params.*}} slot in the body and would send
   // nothing. Inject the missing field keys at the param nesting level.
   const mappingCreate = draft.mappingCreate as HttpOperation | undefined;
+  const mappingEdit = draft.mappingEdit as HttpOperation | undefined;
   const mappingQuery = draft.mappingQuery as HttpOperation | undefined;
+  // reconcile 只补「body 缺、又没被 paramMap 消费」的字段。被 paramMap 转成 wire 键的 canonical 键
+  // （如 aspect_ratio/resolution → size）不该再以裸键注入 body——否则通用中转会收到无用的 aspect_ratio
+  // 裸字段（严格端点可能 400）。这是 P2 根因修（不是逐 op 打补丁）。
+  const consumed = new Set(consumedCanonicalKeys(mappingCreate?.paramMap));
+  const reconcileKeys = onboardingFields.map((f) => f.key).filter((k) => !consumed.has(k));
   const reconciledCreate: HttpOperation | undefined = mappingCreate
-    ? mappingCreate.body !== undefined && onboardingFields.length > 0
-      ? { ...mappingCreate, body: mergeMissingParamsIntoBody(mappingCreate.body, onboardingFields.map((f) => f.key)) }
+    ? mappingCreate.body !== undefined && reconcileKeys.length > 0
+      ? { ...mappingCreate, body: mergeMissingParamsIntoBody(mappingCreate.body, reconcileKeys) }
       : mappingCreate
     : undefined;
 
@@ -166,7 +173,9 @@ export function commitOnboardedModelToCatalog(payload: {
       labelZh: modelDisplayName,
       kind: billingKind,
       enabled: true,
-      meta: { parameters: metaParameters },
+      // image 模型声明「支持参考图」→ 节点 UI 渲染参考图槽（parameterControlModel.imageCatalogReferenceSlot）；
+      // 槽写 meta.referenceImages → 驱动 hasReference → image_edit（图生图）。通用中转图像模型现在都能图生图。
+      meta: { parameters: metaParameters, ...(billingKind === "image" ? { imageOptions: { supportsReferenceImages: true } } : {}) },
       onboarding: {
         addedVia: payload.addedVia ?? "agent",
         trialId: String(outcome.trialId || ""),
@@ -175,7 +184,7 @@ export function commitOnboardedModelToCatalog(payload: {
         fields: onboardingFields,
       },
     });
-    // 4. mapping
+    // 4. mapping（text_to_image / text_to_video / …）
     if (reconciledCreate) {
       tx.upsertMapping({
         vendorKey,
@@ -184,6 +193,18 @@ export function commitOnboardedModelToCatalog(payload: {
         enabled: true,
         create: reconciledCreate,
         ...(mappingQuery ? { query: mappingQuery } : {}),
+      });
+    }
+    // 4b. 图生图/改图 mapping（image_edit）：图像模型专有，chat/completions 多模态。不 reconcile（chat body
+    // 是刻意造型的，塞 aspect_ratio/quality 裸字段无意义）。per (vendor, image_edit) 一条即覆盖该 vendor 全部
+    // 图像模型（create op 用 {{model.modelKey}} 运行时填）。
+    if (mappingEdit && targetKind === "image") {
+      tx.upsertMapping({
+        vendorKey,
+        taskKind: "image_edit",
+        name: `${modelDisplayName} · 改图`,
+        enabled: true,
+        create: mappingEdit,
       });
     }
     return committed;
@@ -251,16 +272,18 @@ function paramsToOnboardingFields(
   }));
 }
 
-/** 按 kind 给出 commit draft 的 targetKind + 标准参数 + 传输 mapping（图片同步无 query / 视频异步带 query）。 */
+/** 按 kind 给出 commit draft 的 targetKind + 标准参数 + 传输 mapping（图片同步无 query / 视频异步带 query；
+ *  图片另带 image_edit 改图 op = 图生图）。 */
 function draftShapeForKind(kind: "text" | "image" | "video" | "audio"): {
   targetKind: "text" | "image" | "video" | "audio";
   modelFields: JsonRecord[];
   mappingCreate?: HttpOperation;
+  mappingEdit?: HttpOperation;
   mappingQuery?: HttpOperation;
 } {
   if (kind === "image") {
     const t = newapiTransportFor("image");
-    return { targetKind: "image", modelFields: paramsToOnboardingFields(t.params), mappingCreate: t.create };
+    return { targetKind: "image", modelFields: paramsToOnboardingFields(t.params), mappingCreate: t.create, ...(t.edit ? { mappingEdit: t.edit } : {}) };
   }
   if (kind === "video") {
     const t = newapiTransportFor("video");
@@ -353,6 +376,7 @@ export function commitManualOpenAiCompatibleModels(payload: {
         targetKind: shape.targetKind,
         modelFields: shape.modelFields,
         ...(shape.mappingCreate ? { mappingCreate: shape.mappingCreate } : {}),
+        ...(shape.mappingEdit ? { mappingEdit: shape.mappingEdit } : {}),
         ...(shape.mappingQuery ? { mappingQuery: shape.mappingQuery } : {}),
       },
     };

@@ -1,7 +1,7 @@
 {
   "name": "nomi",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.16.2",
   "description": "Open-source, local-first AI video creation workbench for writing scripts, generating assets, editing timelines, and exporting videos.",
   "author": "青阳 <TZ857886159>",
   "license": "Apache-2.0",
@@ -21,7 +21,7 @@
     "build": "pnpm run build:renderer && pnpm run build:electron",
     "build:renderer": "node scripts/build-tailwind.mjs --minify && vite build --mode production",
     "build:electron": "tsc -p electron/tsconfig.json",
-    "build:site": "node -e \"const fs=require('fs'); for (const f of ['marketing/index.html','marketing/robots.txt','marketing/sitemap.xml']) { if (!fs.existsSync(f)) throw new Error(f+' is missing'); } console.log('marketing site ready');\"",
+    "build:site": "node -e \"const fs=require('fs'); for (const f of ['marketing/index.html','marketing/quickstart.html','marketing/handbook.html','marketing/robots.txt','marketing/sitemap.xml','marketing/assets/guide/first-video-poster.svg','marketing/assets/guide/install-flow.svg','marketing/assets/guide/model-setup-flow.svg','marketing/assets/guide/scene3d-director.svg','marketing/assets/guide/image-to-video-flow.svg']) { if (!fs.existsSync(f)) throw new Error(f+' is missing'); } console.log('marketing site ready');\"",
     "start": "node ./scripts/start-electron.mjs",
     "start:low-memory": "node ./scripts/start-low-memory.mjs",
     "preview": "vite preview",
@@ -60,6 +60,7 @@
     "dist:mac:dir": "electron-builder --mac dir --arm64",
     "postinstall": "node ./scripts/install-git-hooks.cjs",
     "test:e2e": "node tests/ux/smoke.e2e.mjs",
+    "test:site": "node tests/ux/marketing-quickstart.static.mjs",
     "test:journeys": "node ./scripts/eval-journey.mjs --ci"
   },
   "dependencies": {

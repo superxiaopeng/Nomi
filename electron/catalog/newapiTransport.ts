@@ -29,10 +29,11 @@ export const NEWAPI_STATUS_MAPPING: Record<string, string[]> = {
   failed: ["failed", "fail", "error", "cancelled", "canceled", "timeout"],
 };
 
-// 铁律翻译（用户自建中转的关键）：通用 new-api 站走 OpenAI 兼容契约 → size 是像素。当模型套上某档案
-// （如 gpt-image-2）时，档案产中性「比例 + 清晰度档位」，这里把它俩算成 OpenAI 像素 size（3840x2160=4K…）。
-// 模型未套档案（裸 relay 模型，UI 直接出像素 size）时：aspect_ratio 不存在 → 转换返回 undefined → 不覆盖
-// 直填的 size（兼容旧行为）。这条 paramMap 同时覆盖两种情况，且让自建站的「分辨率/比例」不再发不出去。
+// 铁律翻译（用户自建中转的关键）：通用 new-api 站走 OpenAI 兼容契约 → size 是像素。中性「比例
+// aspect_ratio + 清晰度 resolution(1K/2K/4K)」在这里算成 OpenAI 像素 size（3840x2160=4K…），无论模型
+// 是否套档案：裸 relay 模型的标准参数现在也出 比例+清晰度（NEWAPI_STANDARD_IMAGE_PARAMS，取代旧的写死
+// 像素 size 三档），故用户能选到 2K/4K（治「只能出 1K」）。比例 auto/空 → 转换返回 undefined → 不覆盖
+// （极端兜底）。这条 paramMap 让自建站的「分辨率/比例」不再发不出去、也不再钉死 1K。
 export const NEWAPI_IMAGE_PARAM_MAP: ParamMap = {
   rules: [{ wire: "size", fromMany: ["aspect_ratio", "resolution"], transform: "ratioResToOpenAiSize" }],
 };
@@ -50,11 +51,42 @@ export const NEWAPI_IMAGE_CREATE_OP: HttpOperation = {
     prompt: "{{request.prompt}}",
     size: "{{request.params.size}}",
     quality: "{{request.params.quality}}",
-    n: 1,
+    n: "{{request.params.n}}", // OpenAI 标准张数（taskParams 缺省 1；整 token 保留 number）
     response_format: "url",
   },
-  response_mapping: { image_url: "data.0.url" },
+  // data[*].url：n>1 时取回**全部**图（pathValues 支持 [*] 通配摊平），不再只落第一张（旧 data.0.url）。
+  response_mapping: { image_url: "data[*].url" },
   paramMap: NEWAPI_IMAGE_PARAM_MAP,
+};
+
+// ── 图片：图生图/改图（image_edit）走 chat/completions 多模态 ──────────────────────────────
+// 通用中转的图生图**主力口径**（R5 核 apiyi/laozhang/七牛 等 nano-banana 中转文档）：gemini/nano-banana
+// 系图生图走 /v1/chat/completions，参考图在 messages[].content[] 的 {type:"image_url",image_url:{url}}，
+// 出图是 base64 塞在 choices[0].message.content（extractChatImageUrl 兜底解析）。这条纯 URL-in-JSON，
+// 贴 Nomi 架构。content 是 [静态 text 项, 变长 image_url 项数组]——后者用整 token 引用 chat_image_parts
+// （taskParams 建），renderTemplateValue 的数组摊平特性把它铺平进 content。
+// 边界：gpt-image/DALL·E 的 /v1/images/edits 是 multipart 二进制上传，与 URL 架构冲突，本期不接（诚实标出）。
+export const NEWAPI_IMAGE_EDIT_OP: HttpOperation = {
+  method: "POST",
+  path: "/v1/chat/completions",
+  headers: JSON_HEADERS,
+  body: {
+    model: "{{model.modelKey}}",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "{{request.prompt}}" },
+          "{{request.params.chat_image_parts}}",
+        ],
+      },
+    ],
+    stream: false,
+  },
+  // 结构化路径优先（部分中转 message.images:[{url}]）；markdown/字符串/数组内联 base64 由 runtime 的
+  // extractAssetUrl → extractChatImageUrl 兜底。刻意不把 message.content 直接当 image_url（会把整段 markdown
+  // 误当 URL 污染结果）。
+  response_mapping: { image_url: "choices.0.message.images.0.url" },
 };
 
 // ── 视频：异步 create（返回 task_id 进轮询）──
@@ -67,7 +99,9 @@ export const NEWAPI_VIDEO_CREATE_OP: HttpOperation = {
     prompt: "{{request.prompt}}",
     duration: "{{request.params.duration}}",
     size: "{{request.params.size}}",
-    image: "{{request.params.image}}", // i2v 首帧链接（可选，未填模板丢弃）
+    // i2v 首帧：取 taskParams 聚合后的 image_url（含节点填的 firstFrameUrl / referenceImages[0]），
+    // 不是裸 image 键（那个 taskParams 从不产出 → 通用路 i2v 首帧此前根本到不了 wire）。可选，未填模板丢弃。
+    image: "{{request.params.image_url}}",
   },
   response_mapping: { task_id: "task_id" },
   provider_meta_mapping: { task_id: "task_id" },
@@ -82,7 +116,7 @@ export const NEWAPI_VIDEO_QUERY_OP: HttpOperation = {
   response_mapping: {
     task_id: "task_id",
     status: "status",
-    video_url: "data.0.url",
+    video_url: "data[*].url", // 取回全部产物（n>1 / 多结果），不再只落第一个（旧 data.0.url）
     error_message: "error.message",
   },
 };
@@ -100,9 +134,13 @@ type ParamControl = {
 
 const sel = (values: string[]) => values.map((value) => ({ value, label: value }));
 
+// 中性「比例 + 清晰度档」（不再写死像素 size 三档 = 治「只能出 1K」）。派生像素 size 由 NEWAPI_IMAGE_PARAM_MAP
+// 的 ratioResToOpenAiSize 算（支持 1K/2K/4K，受 OpenAI 像素预算夹取）。resolution 大写 canonical，转换器内部归一。
 export const NEWAPI_STANDARD_IMAGE_PARAMS: ParamControl[] = [
-  { key: "size", label: "尺寸", type: "select", options: sel(["1024x1024", "1792x1024", "1024x1792"]), defaultValue: "1024x1024" },
+  { key: "aspect_ratio", label: "比例", type: "select", options: sel(["1:1", "16:9", "9:16", "4:3", "3:4"]), defaultValue: "1:1" },
+  { key: "resolution", label: "清晰度", type: "select", options: sel(["1K", "2K", "4K"]), defaultValue: "1K" },
   { key: "quality", label: "质量", type: "select", options: sel(["standard", "hd"]), defaultValue: "standard" },
+  { key: "n", label: "张数", type: "number", options: [], min: 1, max: 4, defaultValue: 1 },
 ];
 
 export const NEWAPI_STANDARD_VIDEO_PARAMS: ParamControl[] = [
@@ -123,20 +161,24 @@ export const NEWAPI_AUDIO_TTS_OP: HttpOperation = {
     model: "{{model.modelKey}}",
     input: "{{request.prompt}}",
     voice: "{{request.params.voice}}",
+    speed: "{{request.params.speed}}", // OpenAI /v1/audio/speech 标准语速（0.25~4.0，缺省由模板丢弃→站默认）
     response_format: "mp3",
   },
 };
 
 // 通用中转配音参数（裸 relay 模型的兜底；模型若命中 seed-tts 档案，UI 由档案给火山音色下拉）。
-// voice 用 freeform——各中转 TTS 模型音色 ID 不同，不写死枚举。
+// voice 用 freeform——各中转 TTS 模型音色 ID 不同，不写死枚举。speed 是 OpenAI 标准语速。
 export const NEWAPI_STANDARD_AUDIO_PARAMS: ParamControl[] = [
   { key: "voice", label: "音色 ID", type: "text", options: [] },
+  { key: "speed", label: "语速", type: "number", options: [], min: 0.25, max: 4, defaultValue: 1 },
 ];
 
-/** 一个 new-api 模型的传输配方（按 kind 取 create/query + taskKind）。 */
+/** 一个 new-api 模型的传输配方（按 kind 取 create/query + taskKind；图像另带 image_edit 改图 op）。 */
 export function newapiTransportFor(kind: "image" | "video" | "audio"): {
   taskKind: ProfileKind;
   create: HttpOperation;
+  /** 图像专有：图生图/改图 mapping（chat/completions 多模态）。落库时按 taskKind:"image_edit" 注册。 */
+  edit?: HttpOperation;
   query?: HttpOperation;
   statusMapping?: Record<string, string[]>;
   params: ParamControl[];
@@ -147,5 +189,5 @@ export function newapiTransportFor(kind: "image" | "video" | "audio"): {
   if (kind === "audio") {
     return { taskKind: "text_to_audio", create: NEWAPI_AUDIO_TTS_OP, params: NEWAPI_STANDARD_AUDIO_PARAMS };
   }
-  return { taskKind: "text_to_image", create: NEWAPI_IMAGE_CREATE_OP, params: NEWAPI_STANDARD_IMAGE_PARAMS };
+  return { taskKind: "text_to_image", create: NEWAPI_IMAGE_CREATE_OP, edit: NEWAPI_IMAGE_EDIT_OP, params: NEWAPI_STANDARD_IMAGE_PARAMS };
 }

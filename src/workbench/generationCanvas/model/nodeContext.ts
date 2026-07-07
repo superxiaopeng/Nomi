@@ -1,4 +1,5 @@
 import type { GenerationCanvasEdge, GenerationCanvasNode } from './generationCanvasTypes'
+import { resultUrl } from '../runner/referenceUrl'
 
 export type GenerationNodeContext = {
   node: GenerationCanvasNode | null
@@ -45,11 +46,9 @@ export function collectNodeContext(
   const target = nodeById.get(nodeId) || null
   const promptParts = [...upstream, target].filter(Boolean).map((item) => item?.prompt || '').filter(Boolean)
   const references = [...new Set([...upstream, target].flatMap((item) => item?.references || []))]
-  const resultUrls = upstream
-    // URL 优先级与显示侧 referenceUrl.resultUrl 一致：**优先 providerUrl（公网 CDN）**。否则只有 providerUrl
-    // 无 result.url 的上游图会被生成侧静默丢（显示有、生成兜不到）→ image_urls 空 → 纯文生（#4 根因）。
-    .map((item) => item.result?.providerUrl || item.result?.url || item.result?.thumbnailUrl || '')
-    .filter(Boolean)
+  // URL 口径单源：referenceUrl.resultUrl（本地持久文件优先，providerUrl 兜底）。不再手写第二份优先级
+  // ——三处（chip 显示 / 槽解析 / 生成收集）漂移正是 #4 与「过期临时链」两类 bug 的温床。
+  const resultUrls = upstream.map((item) => resultUrl(item.result)).filter(Boolean)
 
   return {
     node: target,

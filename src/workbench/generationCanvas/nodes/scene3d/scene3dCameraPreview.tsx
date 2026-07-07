@@ -1,20 +1,18 @@
 import React from 'react'
-import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { IconCamera, IconEye, IconRotate, IconChevronUp, IconChevronDown } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
-import { applySceneCameraPose, crowdCount } from './scene3dMath'
+import { applySceneCameraPose, crowdCount, FOCAL_MM_MAX, FOCAL_MM_MIN, focalMmToFov, fovToFocalMm } from './scene3dMath'
 import { SCENE3D_ASPECT_OPTIONS, SCENE3D_ASPECT_RATIOS } from './scene3dTypes'
 import type { Scene3DAspectRatio, Scene3DCamera, Scene3DObject, Scene3DState } from './scene3dTypes'
 import { Scene3DEnvironmentLayer } from './scene3dEnvironment'
 import { attachWebGLContextRecovery } from './scene3dContextRecovery'
 import {
-  Scene3DMeshGeometry,
   ProceduralMannequin,
   Mannequin,
   ProceduralMannequinCrowd,
-  LightObject,
   MannequinAssetBoundary,
+  StaticObjectVisual,
 } from './scene3dObjects'
 import {
   cameraWithPlaybackPosition,
@@ -72,18 +70,8 @@ export function PreviewObjectView({
         </MannequinAssetBoundary>
       ) : object.type === 'mannequinCrowd' ? (
         <ProceduralMannequinCrowd object={object} roleStartIndex={roleStartIndex} />
-      ) : object.type === 'light' ? (
-        <LightObject object={object} />
       ) : (
-        <mesh>
-          <Scene3DMeshGeometry geometry={object.geometry} />
-          <meshStandardMaterial
-            color={object.color || '#808080'}
-            roughness={0.55}
-            metalness={0.04}
-            side={object.geometry === 'plane' ? THREE.DoubleSide : THREE.FrontSide}
-          />
-        </mesh>
+        <StaticObjectVisual object={object} />
       )}
     </group>
   )
@@ -130,7 +118,9 @@ export function CameraPreview({
   cameraViewEditing,
   rightPanelCollapsed,
   onAspectChange,
+  onFovChange,
   onLensDepthChange,
+  onShakeAmplitudeChange,
   onToggleViewEdit,
   onLevelCamera,
   onScreenshot,
@@ -142,7 +132,9 @@ export function CameraPreview({
   cameraViewEditing: boolean
   rightPanelCollapsed: boolean
   onAspectChange: (aspectRatio: Scene3DAspectRatio) => void
+  onFovChange: (fov: number) => void
   onLensDepthChange: (lensDepth: number) => void
+  onShakeAmplitudeChange: (shakeAmplitude: number) => void
   onToggleViewEdit: () => void
   onLevelCamera: () => void
   onScreenshot: () => void
@@ -154,6 +146,7 @@ export function CameraPreview({
   )
   const previewStyle = React.useMemo(() => cameraPreviewViewportStyle(camera.aspectRatio), [camera.aspectRatio])
   const lensDepth = camera.lensDepth ?? 0
+  const shakeAmplitude = camera.shakeAmplitude ?? 0
   // 相机预览黑窗可收起（用户反馈 #10）：操控/编辑时这个小黑窗会糊在画面中央角色身上挡视线。
   // 收起后只留一条标题栏（仍可截图/取景/展开），不破坏预览本身功能。纯 UI 态，不持久化。
   const [collapsed, setCollapsed] = React.useState(false)
@@ -230,7 +223,7 @@ export function CameraPreview({
               </Canvas>
             </div>
           </div>
-          <div className="mt-2 grid grid-cols-5 gap-1">
+          <div className="mt-2 grid grid-cols-6 gap-1">
             {SCENE3D_ASPECT_OPTIONS.map((option) => (
               <button
                 key={option}
@@ -245,6 +238,27 @@ export function CameraPreview({
                 {option}
               </button>
             ))}
+          </div>
+          <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
+            <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
+              <span>焦段</span>
+              <span className="font-medium text-[var(--nomi-ink)]">{fovToFocalMm(camera.fov)}mm · FOV {Math.round(camera.fov)}°</span>
+            </div>
+            <input
+              className="block h-1.5 w-full accent-[var(--nomi-ink)]"
+              disabled={readOnly}
+              max={FOCAL_MM_MAX}
+              min={FOCAL_MM_MIN}
+              step={1}
+              type="range"
+              value={fovToFocalMm(camera.fov)}
+              onChange={(event) => onFovChange(focalMmToFov(Number(event.currentTarget.value)))}
+            />
+            <div className="mt-1 grid grid-cols-3 text-micro text-[var(--nomi-ink-40)]">
+              <span>{FOCAL_MM_MIN} 广角</span>
+              <span className="text-center">50 标准</span>
+              <span className="text-right">{FOCAL_MM_MAX} 长焦</span>
+            </div>
           </div>
           <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
             <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
@@ -265,6 +279,27 @@ export function CameraPreview({
               <span>-100%</span>
               <span className="text-center">0</span>
               <span className="text-right">100%</span>
+            </div>
+          </div>
+          <div className="mt-3 rounded-nomi-sm border border-[var(--nomi-line-soft)] bg-[var(--nomi-ink-05)] px-2 py-2">
+            <div className="mb-1 flex items-center justify-between gap-2 text-micro text-[var(--nomi-ink-60)]">
+              <span>手持抖动</span>
+              <span className="font-medium text-[var(--nomi-ink)]">{shakeAmplitude > 0 ? `${Math.round(shakeAmplitude)}%` : '关'}</span>
+            </div>
+            <input
+              className="block h-1.5 w-full accent-[var(--nomi-ink)]"
+              disabled={readOnly}
+              max={100}
+              min={0}
+              step={1}
+              type="range"
+              value={shakeAmplitude}
+              onChange={(event) => onShakeAmplitudeChange(Number(event.currentTarget.value))}
+            />
+            <div className="mt-1 grid grid-cols-3 text-micro text-[var(--nomi-ink-40)]">
+              <span>关</span>
+              <span className="text-center">微晃</span>
+              <span className="text-right">剧烈</span>
             </div>
           </div>
         </>

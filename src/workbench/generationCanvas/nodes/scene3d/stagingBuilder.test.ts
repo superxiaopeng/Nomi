@@ -65,18 +65,64 @@ describe('buildStagingScene', () => {
     expect(state.objects[0].rotation[1]).toBeCloseTo(0, 5) // camera = 朝 +Z
     expect(Math.abs(state.objects[1].rotation[1])).toBeCloseTo(Math.PI, 5) // away = 180°
   })
+
+  it('sceneTemplate: 街道布景铺在角色下、角色仍是唯一 mannequin，机位仍取角色', () => {
+    const plain = buildStagingScene({ characters: [{ pose: 'standing' }] })
+    const withStreet = buildStagingScene({ characters: [{ pose: 'standing' }], sceneTemplate: 'street', environment: 'day' })
+    expect(withStreet.objects.length).toBeGreaterThan(plain.objects.length) // 追加了布景
+    expect(withStreet.objects.filter((o) => o.type === 'mannequin')).toHaveLength(1)
+    // 布景含道具（车/树等）
+    expect(withStreet.objects.some((o) => o.type === 'prop')).toBe(true)
+    // 机位仍围绕角色（原点附近），不被远处楼块拉偏
+    expect(Math.hypot(withStreet.cameras[0].target[0], withStreet.cameras[0].target[2])).toBeLessThan(2)
+    // 整场景 normalize 不丢件
+    expect(normalizeScene3DState(withStreet).objects.length).toBe(withStreet.objects.length)
+  })
+
+  it('props: 显式位置/朝向/缩放生效，省略位置自动铺开不与角色堆叠', () => {
+    const state = buildStagingScene({
+      characters: [{ pose: 'standing' }],
+      props: [
+        { kind: 'car', position: [3, -1], rotationY: 90, scale: 1.2 },
+        { kind: 'tree' }, // 省略位置
+        { kind: 'tree' },
+      ],
+    })
+    const props = state.objects.filter((o) => o.type === 'prop')
+    expect(props).toHaveLength(3)
+    const car = props.find((p) => p.propKind === 'car')!
+    expect(car.position).toEqual([3, 0, -1])
+    expect(car.rotation[1]).toBeCloseTo(Math.PI / 2, 5)
+    expect(car.scale[0]).toBeCloseTo(1.2, 5)
+    // 两棵省略位置的树不重叠（自动沿 +X 铺开）
+    const trees = props.filter((p) => p.propKind === 'tree')
+    expect(trees[0].position[0]).not.toBe(trees[1].position[0])
+  })
+
+  it('props: 未知 kind 被丢弃（不整对象崩），已知 kind 保留', () => {
+    const state = buildStagingScene({
+      characters: [{ pose: 'standing' }],
+      // @ts-expect-error 故意传非法 kind
+      props: [{ kind: 'spaceship' }, { kind: 'streetlamp' }],
+    })
+    const props = state.objects.filter((o) => o.type === 'prop')
+    expect(props).toHaveLength(1)
+    expect(props[0].propKind).toBe('streetlamp')
+  })
 })
 
 describe('运行时自检(F3)：姿势 id 解析', () => {
   it('词表 id 原样通过、无 pose=站立(合法,无 note)', () => {
     expect(resolveStagingPose('single-knee')).toEqual({ id: 'single-knee' })
+    expect(resolveStagingPose('crouch')).toEqual({ id: 'crouch' }) // 半蹲现为独立预设,精确命中不再别名到深蹲
     expect(resolveStagingPose(undefined)).toEqual({})
     expect(resolveStagingPose('')).toEqual({})
   })
   it('别名/近似归一到词表 id 并带 note(治静默落站立)', () => {
     expect(resolveStagingPose('kneel').id).toBe('single-knee')
     expect(resolveStagingPose('sitting').id).toBe('sit')
-    expect(resolveStagingPose('crouch').id).toBe('squat')
+    expect(resolveStagingPose('squatting').id).toBe('squat') // 「深蹲」词归深蹲
+    expect(resolveStagingPose('crouching').id).toBe('crouch') // 「半蹲」词归半蹲(不再混到深蹲)
     expect(resolveStagingPose('Kneeling').id).toBe('single-knee') // 大小写无关
     expect(resolveStagingPose('hands on hips').id).toBe('hands-on-hips') // 空格归一
     expect(resolveStagingPose('kneel').note).toBeTruthy()

@@ -3,11 +3,13 @@ import { IconCamera, IconRoute, IconSettings } from '@tabler/icons-react'
 import { toast } from '../../../../ui/toast'
 import type { Scene3DCamera, Scene3DObject, Scene3DSelection, Scene3DState } from './scene3dTypes'
 import type { Scene3DTrajectoryEditing } from './useScene3DTrajectoryEditing'
+import type { CameraMovePresetSpec } from './cameraMovePreset'
 import { PanelButton } from './scene3dToolbar'
 import { PropertyPanel } from './scene3dInspector'
 import { TrajectoryPanel } from './trajectory/TrajectoryPanel'
 import { TrajectoryTimeline } from './trajectory/TrajectoryTimeline'
 import { TrajectoryPlayback } from './trajectory/TrajectoryPlayback'
+import type { Scene3DReferenceTargetSummary } from './scene3dReferenceDirector'
 
 export type Scene3DRightPanelTab = 'properties' | 'trajectory'
 
@@ -97,6 +99,9 @@ export function Scene3DRightPanelBody({
   onObjectPatch,
   onCameraPatch,
   onEnvironmentPatch,
+  onApplyCameraMove,
+  onExportCameraMoveFrames,
+  referenceTarget,
 }: {
   state: Scene3DState
   trajectory: Scene3DTrajectoryEditing
@@ -107,6 +112,9 @@ export function Scene3DRightPanelBody({
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
+  onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
+  onExportCameraMoveFrames: (cameraId: string) => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }): JSX.Element {
   return (
     <>
@@ -130,6 +138,9 @@ export function Scene3DRightPanelBody({
           onObjectPatch={onObjectPatch}
           onCameraPatch={onCameraPatch}
           onEnvironmentPatch={onEnvironmentPatch}
+          onApplyCameraMove={onApplyCameraMove}
+          onExportCameraMoveFrames={onExportCameraMoveFrames}
+          referenceTarget={referenceTarget}
         />
       )}
     </>

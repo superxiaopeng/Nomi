@@ -1,6 +1,7 @@
 import React from 'react'
 import { IconCheck, IconCopy, IconDownload, IconInfoCircle, IconMaximize, IconUpload } from '@tabler/icons-react'
 import ProvenancePanel from './ProvenancePanel'
+import { ShotPreviewOverlays } from './ConvertShotToVideoButton'
 import { resolveNodeRenderKind, isCardRenderKind } from './resolveRenderKind'
 import ShotMountBadges from './render/ShotMountBadges'
 import { getBuiltinCategoryById } from '../../project/projectCategories'
@@ -32,10 +33,7 @@ import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import type { ConnectionAnchorSide } from '../store/canvasStoreTypes'
 import { useWorkbenchStore } from '../../workbenchStore'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
-import {
-  encodeTimelineGenerationNodeDragPayload,
-  TIMELINE_GENERATION_NODE_DRAG_MIME,
-} from '../../timeline/timelineDragPayload'
+import { encodeTimelineGenerationNodeDragPayload, TIMELINE_GENERATION_NODE_DRAG_MIME } from '../../timeline/timelineDragPayload'
 import { getTrackTypeForClipType } from '../../timeline/timelineTypes'
 import { buildClipFromGenerationNode } from '../model/buildClipFromGenerationNode'
 import { toast } from '../../../ui/toast'
@@ -665,6 +663,7 @@ function BaseGenerationNodeImpl({
             prompt={node.prompt}
           />
         )}
+        <ShotPreviewOverlays node={node} selected={selected} readOnly={readOnly} shotIndex={shotIndex} hasResult={hasResult} isGenerating={isGenerating} />
         {imageEditing.editGrid !== null &&
         (node.kind === 'image' || isAssetKind) &&
         node.result?.type === 'image' &&

@@ -18,6 +18,10 @@ export type NomiImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'sr
   thumbnailSrc?: string
   /** 首屏/已确定可见时设 true 走 eager；默认 lazy。 */
   eager?: boolean
+  /** 失败占位的短文案（默认「加载失败」）。参考图等语境可换成「图已失效」这类可理解的表述。 */
+  fallbackLabel?: string
+  /** 失败占位的 hover 详情（默认带失败 URL）。语境方可给「怎么办」的可行动提示。 */
+  fallbackTitle?: string
 }
 
 export function NomiImage({
@@ -28,6 +32,8 @@ export function NomiImage({
   alt = '',
   draggable = false,
   onError,
+  fallbackLabel,
+  fallbackTitle,
   ...rest
 }: NomiImageProps): JSX.Element {
   const resolvedSrc = thumbnailSrc || src
@@ -42,10 +48,10 @@ export function NomiImage({
           'flex flex-col items-center justify-center gap-1 bg-nomi-ink-05 text-nomi-ink-40 select-none',
           className,
         )}
-        title={resolvedSrc ? `图片加载失败：${resolvedSrc}` : '无图片'}
-        aria-label='图片加载失败'>
+        title={fallbackTitle ?? (resolvedSrc ? `图片加载失败：${resolvedSrc}` : '无图片')}
+        aria-label={fallbackLabel ?? '图片加载失败'}>
         <IconPhoto size={18} stroke={1.6} />
-        <span className='text-body-sm'>加载失败</span>
+        <span className='text-body-sm'>{fallbackLabel ?? '加载失败'}</span>
       </div>
     )
   }

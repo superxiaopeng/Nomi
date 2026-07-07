@@ -14,6 +14,7 @@ import {
   cloneScene3DState,
 } from './scene3dSerializer'
 import { ROLE_COLOR_SEQUENCE, LOCOMOTION_CLIP_WALK } from './scene3dConstants'
+import { cameraAimBindingId } from './scene3dBindingIds'
 import { buildPoseTrack, type Scene3DPoseEvent } from './scene3dPoseTrack'
 import type {
   Scene3DState,
@@ -134,6 +135,15 @@ export type RecordedTake = {
   durationSeconds: number
 }
 
+// 相机操控（运镜）录制结果：被操控相机的飞行样本（位置）+ 注视点样本（每帧相机看向哪，
+// position + forward×dist）。无角色——运镜本身就是主内容。两条样本同长同时戳。
+export type RecordedCameraTake = {
+  possessedCameraId: string
+  cameraSamples: TakeSample[]
+  targetSamples: TakeSample[]
+  durationSeconds: number
+}
+
 /**
  * 录制结果 → 一个可被现有离屏捕获管线（Scene3DTrajectoryCapture / CameraMoveCaptureHost）回放的
  * Scene3DState：
@@ -184,6 +194,76 @@ export function buildRecordedTakeScene(base: Scene3DState, take: RecordedTake): 
       trajectories.push(cameraTrajectory)
       bindings.push(buildTakeBinding(cameraTrajectory.id, camera.id, 0, take.durationSeconds))
     }
+  }
+
+  return {
+    ...next,
+    trajectories,
+    trajectoryBindings: bindings,
+    trajectoryGroups: [],
+    sceneTimeline: { totalDuration: take.durationSeconds },
+  }
+}
+
+// 退化兜底：纯转朝向（相机在原地 pan/tilt，不平移）时 samplesToTrajectory 会因点全重合返回 null。
+// 但运镜内容在「朝向」上是真实的——此时仍需一条 ≥2 点的相机位置轨迹来驱动播放头/binding。
+// 用首尾样本造一条「原地静止」位置轨迹（两点几乎相同，曲线退化成一点 → 相机不动、只转头，正是所求）。
+function staticPositionTrajectory(samples: TakeSample[], color: string, name: string): Scene3DTrajectory | null {
+  if (samples.length < 2) return null
+  const first = samples[0]
+  const last = samples[samples.length - 1]
+  return {
+    id: createScene3DTrajectoryId(),
+    name,
+    points: [
+      { id: createScene3DTrajectoryPointId(), position: [...first.position] as Scene3DVector3, timeRatio: 0 },
+      { id: createScene3DTrajectoryPointId(), position: [...last.position] as Scene3DVector3, timeRatio: 1 },
+    ],
+    tension: 0.5,
+    closed: false,
+    color,
+  }
+}
+
+/**
+ * 相机运镜 take → 可被现有离屏捕获管线回放的 Scene3DState（与角色 take 同一条出片链路，P1 无并行版）：
+ * - 复制基础场景；被操控相机搬到 cameras[0]（离屏固定取 cameras[0]）；
+ * - 相机位置轨迹（用户飞镜头的平移路径）+ binding [0,duration]；纯转朝向（没平移）则造一条原地静止位置轨迹；
+ * - 相机注视点轨迹（aimTrajectory，每帧看向哪）+ 以合成 id `${camId}:aim` 绑定；相机 aimTrajectoryId 指向它，
+ *   cameraWithPlaybackPosition 据此忠实还原 free-look 转头（不靠 follow 物体、不靠运动切线）；
+ * - 清掉相机原 followTargetId（aim 轨迹接管朝向，单源），sceneTimeline = 录制时长。
+ * 位置与朝向都没动（全程静止）→ 无可回放运镜，返回 null（调用方提示）。
+ */
+export function buildRecordedCameraTakeScene(base: Scene3DState, take: RecordedCameraTake): Scene3DState | null {
+  const next = cloneScene3DState(base)
+  const cameraIndex = next.cameras.findIndex((camera) => camera.id === take.possessedCameraId)
+  if (cameraIndex < 0) return null
+  // 离屏捕获器固定取 cameras[0]：把被操控相机提到首位（其余顺序不变）。
+  if (cameraIndex > 0) {
+    const [possessed] = next.cameras.splice(cameraIndex, 1)
+    next.cameras.unshift(possessed)
+  }
+  const camera = next.cameras[0]
+
+  const aimTrajectory = samplesToTrajectory(take.targetSamples, ROLE_COLOR_SEQUENCE[1] ?? '#888', '镜头朝向')
+  const positionTrajectory =
+    samplesToTrajectory(take.cameraSamples, ROLE_COLOR_SEQUENCE[2] ?? '#888', '运镜路径') ??
+    (aimTrajectory ? staticPositionTrajectory(take.cameraSamples, ROLE_COLOR_SEQUENCE[2] ?? '#888', '运镜路径') : null)
+  // 位置与朝向都没动 → 没有可回放的运镜。
+  if (!positionTrajectory && !aimTrajectory) return null
+  if (!positionTrajectory) return null
+
+  const trajectories: Scene3DTrajectory[] = [positionTrajectory]
+  const bindings: Scene3DTrajectoryBinding[] = [
+    buildTakeBinding(positionTrajectory.id, camera.id, 0, take.durationSeconds),
+  ]
+  camera.followTargetId = undefined
+  camera.aimTrajectoryId = undefined
+  if (aimTrajectory) {
+    trajectories.push(aimTrajectory)
+    // aim 轨迹绑到合成 id `${camId}:aim`，cameraWithPlaybackPosition 按此采样取每帧注视点。
+    bindings.push(buildTakeBinding(aimTrajectory.id, cameraAimBindingId(camera.id), 0, take.durationSeconds))
+    camera.aimTrajectoryId = aimTrajectory.id
   }
 
   return {

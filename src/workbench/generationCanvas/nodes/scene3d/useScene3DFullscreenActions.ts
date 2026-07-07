@@ -4,9 +4,12 @@
 import React from 'react'
 import { toast } from '../../../../ui/toast'
 import {
+  type CaptureApi,
   type Scene3DCamera,
+  type Scene3DCaptureResult,
   type Scene3DGeometry,
   type Scene3DObject,
+  type Scene3DPropKind,
   type Scene3DSelection,
   type Scene3DState,
   type Scene3DTransformMode,
@@ -26,7 +29,12 @@ import {
 } from './scene3dMath'
 import { nextAvailableObjectPosition } from './scene3dObjects'
 import { useScene3DTrajectoryEditing } from './useScene3DTrajectoryEditing'
-import { trajectoryPointTimeRatio } from './trajectory'
+import { setScene3DPlayheadSeconds, trajectoryPointTimeRatio } from './trajectory'
+import { applyCameraMovePreset, type CameraMovePresetSpec } from './cameraMovePreset'
+import { CAMERA_MOVE_LABEL } from './cameraMoveVocab'
+import { cameraWithPlaybackPosition } from './scene3dPlayback'
+import { makePropObject } from './scene3dPropSpecs'
+import { buildSceneTemplateObjects, SCENE_TEMPLATE_LABEL, type Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 export type Scene3DClipboardItem =
   | { type: 'object'; item: Scene3DObject; pasteCount: number }
@@ -371,9 +379,26 @@ export function useScene3DAddActions({
   exitTrajectoryMode: () => void
 }): {
   addObject: (kind: Scene3DGeometry | 'mannequin' | 'light') => void
+  addProp: (kind: Scene3DPropKind) => void
   addCamera: () => void
   addCrowd: (options: CrowdAddOptions) => void
+  applySceneTemplate: (template: Scene3DSceneTemplate) => void
 } {
+  // 语义道具：与 addObject 同结构（限流 + 避让摆位 + 选中），kind 走 spec 表。
+  const addProp = React.useCallback((kind: Scene3DPropKind) => {
+    if (readOnly) return
+    if (stateRef.current.objects.length >= OBJECT_LIMIT) {
+      toast('单个 3D 场景最多支持 100 个对象', 'warning')
+      return
+    }
+    const object = makePropObject(kind)
+    object.position = nextAvailableObjectPosition(object, stateRef.current.objects)
+    setState((current) => ({ ...current, objects: [...current.objects, object] }))
+    setSelection({ type: 'object', id: object.id })
+    exitTrajectoryMode()
+    setViewLocked(false)
+  }, [exitTrajectoryMode, readOnly, setSelection, setState, setViewLocked, stateRef])
+
   const addObject = React.useCallback((kind: Scene3DGeometry | 'mannequin' | 'light') => {
     if (readOnly) return
     if (stateRef.current.objects.length >= OBJECT_LIMIT) {
@@ -420,5 +445,94 @@ export function useScene3DAddActions({
     setViewLocked(false)
   }, [exitTrajectoryMode, readOnly, setSelection, setState, setViewLocked, stateRef])
 
-  return { addObject, addCamera, addCrowd }
+  // 场景模板：一键搭灰模布景。**追加**进当前场景（绝不清用户已摆的东西），超容量整组拒绝。
+  const applySceneTemplate = React.useCallback((template: Scene3DSceneTemplate) => {
+    if (readOnly) return
+    const additions = buildSceneTemplateObjects(template)
+    if (stateRef.current.objects.length + additions.length > OBJECT_LIMIT) {
+      toast(`场景对象将超过 ${OBJECT_LIMIT} 个上限，请先清理再套模板`, 'warning')
+      return
+    }
+    setState((current) => ({ ...current, objects: [...current.objects, ...additions] }))
+    setSelection(null)
+    exitTrajectoryMode()
+    setViewLocked(false)
+    toast(`已搭好「${SCENE_TEMPLATE_LABEL[template]}」（追加 ${additions.length} 个物体，未动原有内容）`, 'success')
+  }, [exitTrajectoryMode, readOnly, setSelection, setState, setViewLocked, stateRef])
+
+  return { addObject, addProp, addCamera, addCrowd, applySceneTemplate }
+}
+
+// 运镜首尾帧导出：把播放头钉到该相机全部运镜段的整体起点/终点，各截一张相机图（复用相机
+// 截图管线 onScreenshot → 落画布图片节点，可连去镜头的 first_frame 槽）。每次截图前等两帧，
+// 让 demand 渲染把视口对象/相机位姿追上播放头——截到的才是该时刻的真画面（含 fov 渐变/抖动）。
+export function useScene3DMoveFrameExport({
+  stateRef,
+  captureApiRef,
+  trajectory,
+  onScreenshot,
+}: {
+  stateRef: React.MutableRefObject<Scene3DState>
+  captureApiRef: React.MutableRefObject<CaptureApi | null>
+  trajectory: ReturnType<typeof useScene3DTrajectoryEditing>
+  onScreenshot: (capture: Scene3DCaptureResult) => void
+}) {
+  return React.useCallback(async (cameraId: string) => {
+    const camera = stateRef.current.cameras.find((candidate) => candidate.id === cameraId)
+    if (!camera) return
+    const bindings = stateRef.current.trajectoryBindings.filter((binding) => (
+      binding.objects.some((bound) => bound.objectId === cameraId)
+    ))
+    if (bindings.length === 0) {
+      toast('该相机还没有运镜段：先点「运镜预设」或在轨迹模式绑定轨迹', 'warning')
+      return
+    }
+    const start = Math.min(...bindings.map((binding) => binding.startTime))
+    const end = Math.max(...bindings.map((binding) => binding.endTime))
+    const restore = trajectory.playheadRef.current
+    const waitTwoFrames = () => new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
+    })
+    const captures: Scene3DCaptureResult[] = []
+    for (const [time, label] of [[start, '首帧'], [end, '尾帧']] as const) {
+      trajectory.playheadRef.current = time
+      setScene3DPlayheadSeconds(time)
+      await waitTwoFrames()
+      const playbackCamera = cameraWithPlaybackPosition(stateRef.current, camera, time, trajectory.activeTrajectoryIds)
+      const capture = captureApiRef.current?.captureCamera(playbackCamera)
+      if (capture) captures.push({ ...capture, title: `${camera.name} · 运镜${label}` })
+    }
+    trajectory.playheadRef.current = restore
+    setScene3DPlayheadSeconds(restore)
+    if (captures.length < 2) {
+      toast('首尾帧截图失败，请重试', 'error')
+      return
+    }
+    captures.forEach(onScreenshot)
+    toast('已把运镜首帧/尾帧导出为画布图片节点', 'success')
+  }, [captureApiRef, onScreenshot, stateRef, trajectory])
+}
+
+// 运镜预设：按当前机位就地落一段轨迹并追加到时间轴末尾（连点串联）。在 stateRef 上算好再 setState
+// （applyCameraMovePreset 内生成随机 id，不能塞进 updater——StrictMode 双调用会得到两套 id）。
+export function useScene3DCameraMoveAction({
+  readOnly,
+  stateRef,
+  setState,
+  trajectory,
+}: {
+  readOnly: boolean
+  stateRef: React.MutableRefObject<Scene3DState>
+  setState: React.Dispatch<React.SetStateAction<Scene3DState>>
+  trajectory: ReturnType<typeof useScene3DTrajectoryEditing>
+}) {
+  return React.useCallback((cameraId: string, spec: CameraMovePresetSpec) => {
+    if (readOnly) return
+    const result = applyCameraMovePreset(stateRef.current, cameraId, spec)
+    if (!result) return
+    setState(result.state)
+    trajectory.setTimelineOpen(true)
+    const duration = result.endTime - result.startTime
+    toast(`已追加「${CAMERA_MOVE_LABEL[spec.move]} · ${duration}s」到时间轴（${result.startTime}s-${result.endTime}s）`, 'success')
+  }, [readOnly, setState, stateRef, trajectory])
 }

@@ -94,7 +94,13 @@ const storyboardAnchorSchema = z.object({
 
 const storyboardShotSchema = z.object({
   index: z.number().int().describe("1-based shot number in script order."),
-  durationSec: z.number().describe("Shot duration in seconds (clamped to the chosen model's max when it lands)."),
+  shotKind: z
+    .enum(["image", "video"])
+    .optional()
+    .describe(
+      "Shot kind: 'image' = still image-storyboard frame (image-to-image, no duration, no camera move / transition / dialogue), 'video' = video shot (has duration + camera motion). Match ALL shots to the storyboard mode requested by the user; default to 'image' unless the user explicitly wants video.",
+    ),
+  durationSec: z.number().describe("Shot duration in seconds (video shots only; for image shots emit 0). Clamped to the chosen model's max when it lands."),
   anchorIds: z.array(z.string()).describe("Which anchors this shot uses (by anchor.id) → visual anchors become reference edges, text anchors fold into the prompt."),
   prompt: z.string().describe("Directly-generatable prompt: camera move + action progression; do NOT restate the anchors' static descriptions."),
   // P0-9:让 AI 一并产出每镜的模型/模式/参数(含负面词)。取值必须来自用户消息里的「可用模型」清单,
@@ -111,7 +117,7 @@ export const storyboardPlanParamsSchema = z.object({
 })
 
 // ── 站位参考 schema（create_staging_reference 的参数；镜像渲染层 stagingBuilder 的 StagingSpec，
-// 进程隔离故两处各一份，与 storyboardPlan 同例。pose 枚举=已校准的 12 预设 id）。──
+// 进程隔离故两处各一份，与 storyboardPlan 同例。pose 枚举=已校准的预设 id）。──
 export const stagingReferenceParamsSchema = z.object({
   shotClientId: z
     .string()
@@ -125,11 +131,11 @@ export const stagingReferenceParamsSchema = z.object({
         name: z.string().optional().describe("Character label, e.g. '林夏' / '角色A'."),
         pose: z
           .enum([
-            "standing", "t-pose", "walk", "run", "sit", "squat",
+            "standing", "t-pose", "walk", "run", "sit", "squat", "crouch",
             "single-knee", "double-knee", "hands-on-hips", "point", "wave", "cheer",
           ])
           .optional()
-          .describe("Body pose preset (default standing). single-knee=proposal kneel, hands-on-hips, point, wave, cheer=arms up."),
+          .describe("Body pose preset (default standing). squat=deep squat, crouch=upright half-crouch, single-knee=proposal kneel, hands-on-hips, point, wave, cheer=arms up."),
         facing: z
           .enum(["toward", "away", "camera", "left", "right"])
           .optional()
@@ -155,6 +161,23 @@ export const stagingReferenceParamsSchema = z.object({
     .object({ rows: z.number().int(), columns: z.number().int() })
     .optional()
     .describe("Optional background crowd grid behind the main characters."),
+  // 灰模布景（走 UI 同一套 builder）：整套场景模板 + 单件语义道具，给参考图一个可读的环境/尺度背景。
+  sceneTemplate: z
+    .enum(["street", "room"])
+    .optional()
+    .describe("Optional gray-model backdrop laid under the characters: street = city street (road/lane-lines/sidewalk/buildings/trees/streetlamps/cars), room = interior (three walls/bed/table/sofa/ceiling light). Use when the shot needs a legible environment + scale reference. Set environment=day for street (sky) if you want it lit."),
+  props: z
+    .array(
+      z.object({
+        kind: z.enum(["car", "building", "tree", "streetlamp", "wall"]),
+        position: z.array(z.number()).length(2).optional().describe("[x, z] ground position in meters. Character(s) are at origin; omit to auto-spread props to the character's right."),
+        rotationY: z.number().optional().describe("Yaw in degrees."),
+        scale: z.number().optional().describe("Uniform scale (0.1–10, default 1)."),
+      }),
+    )
+    .max(12)
+    .optional()
+    .describe("Optional individual gray-model props (a car beside the character, a tree behind, etc.). Prefer sceneTemplate for a full backdrop; use props for a few specific placed objects."),
   // 词表外逃生口（站位）：词表(layout/pose/facing…)是精确首选，但站位/构图意图不在词表里时
   // 不要硬塞最近的词——填自由文本，执行器不渲站位图、把它当 composition 指令追加进关键帧图 prompt。
   customBlocking: z
@@ -177,11 +200,12 @@ export const cameraMoveParamsSchema = z.object({
     .enum([
       "orbit_left", "orbit_right", "push_in", "pull_out", "crane_up", "crane_down",
       "track_left", "track_right", "arc_left", "arc_right",
+      "zoom_in", "zoom_out", "dolly_zoom",
     ])
     .optional()
     .describe(
-      "The single dominant camera move for this shot. orbit_left/right = camera circles the subject (~300°); push_in/pull_out = dolly toward/away; crane_up/down = boom up/down; track_left/right = lateral tracking; arc_left/right = short arc (~90°). " +
-        "Use ONE of these enum values ONLY when the intended move IS one of them (renders a precise 3D reference). If the move is NOT in this set (e.g. dolly-zoom/vertigo, whip-pan, handheld follow, a compound/sequenced move, or 'match this reference video'), DO NOT force a wrong enum — leave move empty and use customMove instead.",
+      "The single dominant camera move for this shot. orbit_left/right = camera circles the subject (~300°); push_in/pull_out = dolly toward/away; crane_up/down = boom up/down; track_left/right = lateral tracking; arc_left/right = short arc (~90°); zoom_in/zoom_out = lens zoom with the camera static (FOV ramp); dolly_zoom = Hitchcock/vertigo effect (camera pulls back while zooming in, subject size constant, background stretches away). " +
+        "Use ONE of these enum values ONLY when the intended move IS one of them (renders a precise 3D reference). If the move is NOT in this set (e.g. whip-pan, handheld follow, a compound/sequenced move, or 'match this reference video'), DO NOT force a wrong enum — leave move empty and use customMove instead.",
     ),
   // 词表外逃生口（运镜）：enum 是精确首选(确定性渲 3D 参考)，但意图不在 enum 里时
   // 不要硬塞最近的词——填自由文本，执行器不渲小片、把它当运镜指令追加进目标视频 prompt。
@@ -189,7 +213,7 @@ export const cameraMoveParamsSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Natural-language camera-move description for moves OUTSIDE the enum (dolly-zoom/vertigo, whip pan, handheld follow, a compound/sequenced move like 'push in then whip to the window', or 'match this reference video's camerawork'). The tool will NOT 3D-render this — it injects it as a cinematography directive into the shot's video prompt (less precise than the rendered reference; the honest fallback). Use proper film terms. Set move OR customMove, never both for the same intent.",
+      "Natural-language camera-move description for moves OUTSIDE the enum (whip pan, handheld follow, a compound/sequenced move like 'push in then whip to the window', or 'match this reference video's camerawork'). The tool will NOT 3D-render this — it injects it as a cinematography directive into the shot's video prompt (less precise than the rendered reference; the honest fallback). Use proper film terms. Set move OR customMove, never both for the same intent.",
     ),
   speed: z
     .enum(["slow", "medium", "fast"])
@@ -201,11 +225,28 @@ export const cameraMoveParamsSchema = z.object({
     .describe("Framing of the move (wide / medium / close). Default medium."),
   subjectPose: z
     .enum([
-      "standing", "t-pose", "walk", "run", "sit", "squat",
+      "standing", "t-pose", "walk", "run", "sit", "squat", "crouch",
       "single-knee", "double-knee", "hands-on-hips", "point", "wave", "cheer",
     ])
     .optional()
     .describe("Optional body-pose preset id for the subject mannequin the camera moves around (e.g. standing / sit / walk). Default standing."),
+  // 灰模布景（走站位/UI 同一套 builder）：让运镜小片的参考里带上环境/尺度背景。相机仍绕主体运镜。
+  sceneTemplate: z
+    .enum(["street", "room"])
+    .optional()
+    .describe("Optional gray-model backdrop under the subject: street (road/buildings/trees/cars) or room (walls/furniture). Use when the camera move should read as happening in an environment (e.g. 'push in on a person standing on a street'). The camera still orbits/pushes the subject at origin."),
+  props: z
+    .array(
+      z.object({
+        kind: z.enum(["car", "building", "tree", "streetlamp", "wall"]),
+        position: z.array(z.number()).length(2).optional().describe("[x, z] ground position in meters. Subject is at origin; omit to auto-spread props to its right."),
+        rotationY: z.number().optional().describe("Yaw in degrees."),
+        scale: z.number().optional().describe("Uniform scale (0.1–10, default 1)."),
+      }),
+    )
+    .max(12)
+    .optional()
+    .describe("Optional individual gray-model props placed in the move's scene (a car beside the subject, a tree behind). Prefer sceneTemplate for a full backdrop."),
 });
 
 export const canvasToolNames = [
@@ -217,6 +258,7 @@ export const canvasToolNames = [
   "delete_canvas_nodes",
   "run_generation_batch",
   "arrange_storyboard_to_timeline",
+  "tidy_canvas",
   "create_staging_reference",
   "create_camera_move",
 ] as const;
@@ -298,6 +340,18 @@ export const canvasTools = {
         ),
     }),
   }),
+  // 一键整理画布:把当前子画布(默认用户正看的分类)的节点按分镜序/依赖收成整齐网格,消除多批生成+
+  // 手拖累积的「毛线球」。零扣费、非破坏、⌘Z 可撤销。用户说「整理一下/分一下/太乱了」时调它。
+  tidy_canvas: tool({
+    description:
+      "Tidy the canvas: neatly re-layout the nodes of one canvas category into an organized grid (materials on top, shots below in script/shot-number order, derived slices next to their source). Non-destructive, costs nothing, and the user can undo with ⌘Z. Use this when the user says the canvas is messy / piled up / asks you to 'arrange' or 'sort out' the nodes. Omit categoryId to tidy the category the user is currently viewing (the usual case).",
+    parameters: z.object({
+      categoryId: z
+        .string()
+        .optional()
+        .describe("Optional canvas category id to tidy. Omit to tidy the category the user is currently viewing."),
+    }),
+  }),
   // 站位参考：组装 3D 假人场景(站位+动作+机位)离屏出图 → 自动连 composition_ref 到镜头，
   // 锁死视频模型最易崩的「谁站哪/做什么动作/从哪拍」。零扣费(只出灰模参考图)。
   create_staging_reference: tool({
@@ -305,6 +359,7 @@ export const canvasTools = {
       "Create a 3D staging reference image that LOCKS character blocking (who stands where, facing whom), body poses (kneel / sit / squat / point...), and camera angle for a shot — so the video model doesn't break the spatial relationship or the actions. Use it when a shot needs this pinned down: (a) two or more characters with a spatial relationship, (b) a specific physical action / pose, or (c) a director-specified camera angle (low / high / overhead / side). The rendered gray-mannequin reference auto-connects to shotClientId as composition_ref. Do NOT use it for a simple single talking-head shot. One call per shot.\n" +
       "Framing tips so the blocking READS: if the director didn't specify a camera, OMIT the camera field — the system auto-picks a readable angle per layout (circle→high, line→side, behind→3/4 high, facing→3/4). For 'who surrounds whom' use layout=circle (best read from high/overhead). For two characters confronting/addressing each other use layout=facing (they orient toward each other). The 'point'/'wave' poses show a pointing/raised-arm gesture but don't precisely aim at a named target — use them for 'a character is gesturing', not 'A points exactly at B'. Pick the layout that matches the described spatial relationship; only override the camera when the director named one.\n" +
       "shotClientId MUST point to the shot's KEYFRAME IMAGE node (the photoreal first-frame that seeds image-to-video), NOT the video node — video models have no composition slot, so staging only locks blocking when it guides the keyframe image (the video then inherits that first frame). The system renders the keyframe photorealistically from the staging composition (it does not copy the gray mannequins). For an image-first storyboard, that means the shot's image/keyframe node.\n" +
+      "Optional gray-model backdrop: when the shot needs a legible ENVIRONMENT or scale reference (a character on a street, in a room), add sceneTemplate (street/room) and/or props (car/tree/wall...). These lay a gray blockout UNDER the characters; the camera still frames the characters. Use it to make the reference read as 'person standing on a road' rather than a floating figure — the keyframe render fills in the real environment.\n" +
       "Tiered rule: the vocab (characters/layout/pose/facing/camera) is the PRECISE first choice (deterministic 3D staging render). If the blocking is OUTSIDE the vocab, do NOT force the nearest wrong value — use customBlocking (prompt-guided, no staging render, honest about lower fidelity). Never force-map a clearly-different intent into a wrong vocab value.",
     parameters: stagingReferenceParamsSchema,
   }),
@@ -317,7 +372,8 @@ export const canvasTools = {
       "WHEN NOT: a static / locked-off / fixed-tripod shot, or a simple single talking-head — these have no camera motion to lock, so do NOT call it.\n" +
       "Pick the SINGLE dominant move that matches the intent. On models with a reference-video slot (e.g. Seedance 2.0 全能参考) the model copies ONLY the camera movement (content stays driven by the character refs + prompt); on models without one it degrades to a structured camera-move prompt directive.\n" +
       "Tiered rule: the `move` enum is the PRECISE first choice (deterministic 3D camera-path render). If the intended move is OUTSIDE the enum (dolly-zoom/vertigo, whip-pan, handheld follow, a compound/sequenced move, or 'match this reference video'), do NOT force the nearest wrong enum — leave move empty and use customMove (prompt-guided into the video node's prompt, no 3D render, honest about lower fidelity). Never force-map a clearly-different intent into a wrong enum value.\n" +
-      "shotClientId MUST point to the shot's VIDEO node (the node that actually generates the clip) — NOT its keyframe image, and NOT a text/shot note. For an image-first storyboard that is the shot's video node downstream of the keyframe. If no video node exists for the shot yet, create it first; never aim this at an image node.",
+      "shotClientId MUST point to the shot's VIDEO node (the node that actually generates the clip) — NOT its keyframe image, and NOT a text/shot note. For an image-first storyboard that is the shot's video node downstream of the keyframe. If no video node exists for the shot yet, create it first; never aim this at an image node.\n" +
+      "Optional gray-model backdrop: add sceneTemplate (street/room) and/or props when the move should read as happening in an environment (a camera pushing in on a person on a street). The backdrop lays under the subject; the camera path is unchanged (still orbits/pushes the subject).",
     parameters: cameraMoveParamsSchema,
   }),
 } as const;

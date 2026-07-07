@@ -29,7 +29,7 @@ describe('canRunGenerationNode — 视频节点参考判定', () => {
     expect(canRunGenerationNode(videoNode('first', { firstFrameUrl: 'https://cdn/f.png' }), { nodes: [], edges: [] })).toBe(true)
     expect(canRunGenerationNode(videoNode('first'), { nodes: [], edges: [] })).toBe(false)
   })
-  it('image / text 节点始终可生成（prompt 缺失由下游兜底）', () => {
+  it('image / text 节点（无档案上下文）始终可生成（prompt 缺失由下游兜底）', () => {
     expect(canRunGenerationNode({ kind: 'image' } as GenerationCanvasNode)).toBe(true)
     expect(canRunGenerationNode({ kind: 'text' } as GenerationCanvasNode)).toBe(true)
   })
@@ -47,6 +47,35 @@ describe('canRunGenerationNode — 视频节点参考判定', () => {
       meta: { modelKey: 'bytedance/seedance-2.0-global', archetype: { id: 'runninghub-seedance', modeId: 'text' } },
     } as GenerationCanvasNode
     expect(canRunGenerationNode(node, { nodes: [node], edges: [] })).toBe(true)
+  })
+})
+
+// L3 护栏（2026-07-06）：图生图模式（image_edit + 有参考槽）零参考 → 不可生成，
+// 对齐视频节点护栏；此前 image 恒 true，空参考的图生图被静默当纯文生发出去。
+describe('canRunGenerationNode — 图像节点图生图参考判定', () => {
+  function imageNode(modeId: string, meta: Record<string, unknown> = {}): GenerationCanvasNode {
+    return {
+      id: 'i1', kind: 'image', title: 'i', position: { x: 0, y: 0 }, prompt: '放在一起',
+      meta: { modelKey: 'gpt-image-2', archetype: { id: 'gpt-image-2', modeId }, ...meta },
+    } as GenerationCanvasNode
+  }
+  it('i2i（图生图）无任何参考 → 不可生成', () => {
+    expect(canRunGenerationNode(imageNode('i2i'), { nodes: [], edges: [] })).toBe(false)
+  })
+  it('i2i 有 meta 上传参考（referenceImageUrls）→ 可生成', () => {
+    const node = imageNode('i2i', { referenceImageUrls: ['https://cdn/a.png'] })
+    expect(canRunGenerationNode(node, { nodes: [node], edges: [] })).toBe(true)
+  })
+  it('i2i 有连线参考（源已生成）→ 可生成', () => {
+    const source = {
+      id: 's1', kind: 'image', title: 's', position: { x: 0, y: 0 }, prompt: '',
+      result: { id: 'r1', url: 'nomi-local://asset/p/dog.png' },
+    } as unknown as GenerationCanvasNode
+    const node = imageNode('i2i')
+    expect(canRunGenerationNode(node, { nodes: [node, source], edges: [{ id: 'e1', source: 's1', target: 'i1', mode: 'reference' } as never] })).toBe(true)
+  })
+  it('t2i（文生图）无参考照旧可生成', () => {
+    expect(canRunGenerationNode(imageNode('t2i'), { nodes: [], edges: [] })).toBe(true)
   })
 })
 

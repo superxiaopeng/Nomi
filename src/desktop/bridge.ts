@@ -585,6 +585,9 @@ export type DesktopBridge = {
     importPackage: (payload: unknown) => unknown
     testMapping: (id: string, payload: unknown) => Promise<unknown>
     fetchDocs: (payload: unknown) => Promise<unknown>
+    probeComfyui: (baseUrl?: string) => Promise<
+      { ok: true; summary: string; version?: string } | { ok: false; error: string }
+    >
   }
   skill: {
     list: () => unknown[]

@@ -358,34 +358,66 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
   {
     id: 'sit',
     label: '坐姿',
-    // 坐在椅面高度：大腿水平(UpLeg 90)、小腿垂直(Leg 90)、脚掌踩平(foot 仅 +8，治此前 +28 脚尖下垂)，
-    // 躯干微前倾自然坐姿。Hips 归 0（它是骨架根，任何角度都整体歪身）。脚轴向：+ 跖屈(脚尖下)/- 背屈(脚尖上)，
-    // 蒙皮最低点自动落地(scene3dMath lowestMannequinLocalY)。多视角校准见 tests/ux/staging-pose-shots.walk.mjs。
+    // 椅面坐姿：大腿近水平、小腿垂直、脚掌踩平；双臂微屈落在大腿两侧。
+    // 2026-07-05 用 pose-lab 多视角复核，避免坐姿看起来像深蹲或手臂空垂穿腿。
     pose: makePoseOffset({
-      mixamorigSpine: [6, 0, 0],
-      mixamorigLeftUpLeg: [90, 3, 0],
-      mixamorigRightUpLeg: [90, -3, 0],
-      mixamorigLeftLeg: [90, 0, 0],
-      mixamorigRightLeg: [90, 0, 0],
-      mixamorigLeftFoot: [-18, 0, 0],
-      mixamorigRightFoot: [-18, 0, 0],
+      mixamorigSpine: [4, 0, 0],
+      mixamorigLeftArm: [-4, -7, 0],
+      mixamorigRightArm: [-4, 7, 0],
+      mixamorigLeftForeArm: [58, -2, 0],
+      mixamorigRightForeArm: [58, 2, 0],
+      mixamorigLeftHand: [2, 0, -4],
+      mixamorigRightHand: [2, 0, 4],
+      mixamorigLeftUpLeg: [86, 4, 0],
+      mixamorigRightUpLeg: [86, -4, 0],
+      mixamorigLeftLeg: [94, 0, 0],
+      mixamorigRightLeg: [94, 0, 0],
+      mixamorigLeftFoot: [-14, 0, 0],
+      mixamorigRightFoot: [-14, 0, 0],
     }),
   },
   {
     id: 'squat',
     label: '蹲下',
-    // 深蹲：髋/膝深屈、躯干前倾压在膝上、脚掌踩平。脚要背屈(foot -10，脚尖上抬)才能整只脚掌落地——
-    // 此前 +42 跖屈(脚尖下)使其踮脚尖→落地时脚尖点地、脚跟抬高、整体后仰跌坐。脚轴向：+ 跖屈/- 背屈。
+    // 深蹲：髋/膝深屈、躯干前倾压在膝上、脚掌踩平，和坐姿拉开差异。
     pose: makePoseOffset({
-      mixamorigHips: [-6, 0, 0],
-      mixamorigSpine: [26, 0, 0],
-      mixamorigHead: [-8, 0, 0],
-      mixamorigLeftUpLeg: [100, 6, 0],
-      mixamorigRightUpLeg: [100, -6, 0],
-      mixamorigLeftLeg: [106, 0, 0],
-      mixamorigRightLeg: [106, 0, 0],
-      mixamorigLeftFoot: [-30, 0, 0],
-      mixamorigRightFoot: [-30, 0, 0],
+      mixamorigHips: [-2, 0, 0],
+      mixamorigSpine: [20, 0, 0],
+      mixamorigHead: [-6, 0, 0],
+      mixamorigLeftArm: [12, -6, 0],
+      mixamorigRightArm: [12, 6, 0],
+      mixamorigLeftForeArm: [22, -4, 0],
+      mixamorigRightForeArm: [22, 4, 0],
+      mixamorigLeftUpLeg: [116, 8, 0],
+      mixamorigRightUpLeg: [116, -8, 0],
+      mixamorigLeftLeg: [132, 0, 0],
+      mixamorigRightLeg: [132, 0, 0],
+      mixamorigLeftFoot: [-42, 0, 0],
+      mixamorigRightFoot: [-42, 0, 0],
+    }),
+  },
+  {
+    // 游戏式操控 C 键专用「半蹲」（区别于上面的点击式深蹲 squat，两者是不同动作，P1/P4 各有一份数据源）。
+    // 目标：髋/膝屈到大约一半、上身**基本直立**、脚掌**踩平**、重心稳、看着「随时能走/起身」——不是压在膝上的深蹲。
+    // 多视角侧视校准（pose-lab side view）得到的关键规律：
+    //  ① 上身要**略前倾**(Spine +12)——肩膀落在脚上方偏前才像自然半蹲/预备姿势；后仰(负值)会变「往后坐要摔倒」(用户实测「蹲反了」)、
+    //     大幅前倾(如深蹲 +26)又会折成「深鞠躬」。+12 是「直立带一点前倾」的中间态。
+    //  ② 膝屈(Leg 78) 明显大于髋屈(UpLeg 46)：把重心压低而不是把臀往后坐；
+    //  ③ 膝一弯小腿前倾，脚必须大幅**背屈**(Foot −34，脚轴向 +跖屈/−背屈)才能整只脚掌踩平——背屈不够就踮脚尖；
+    //  ④ Hips 不动（它是骨架根，动了整体歪身，蹲会变成坐/后仰）。蒙皮最低点自动落地(scene3dMath)。
+    id: 'crouch',
+    label: '半蹲',
+    pose: makePoseOffset({
+      mixamorigSpine: [20, 0, 0],
+      mixamorigHead: [-5, 0, 0],
+      mixamorigLeftArm: [8, -4, 0],
+      mixamorigRightArm: [8, 4, 0],
+      mixamorigLeftUpLeg: [58, 5, 0],
+      mixamorigRightUpLeg: [58, -5, 0],
+      mixamorigLeftLeg: [86, 0, 0],
+      mixamorigRightLeg: [86, 0, 0],
+      mixamorigLeftFoot: [-34, 0, 0],
+      mixamorigRightFoot: [-34, 0, 0],
     }),
   },
   {
@@ -396,13 +428,13 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
     // 脚轴向：+ 跖屈(脚尖下)/- 背屈(脚尖上)。蒙皮最低点自动落地。
     pose: makePoseOffset({
       mixamorigHips: [-4, 0, 0],
-      mixamorigSpine: [8, 0, 0],
-      mixamorigLeftUpLeg: [90, 4, 0],
+      mixamorigSpine: [5, 0, 0],
+      mixamorigLeftUpLeg: [86, 4, 0],
       mixamorigLeftLeg: [90, 0, 0],
-      mixamorigLeftFoot: [-18, 0, 0],
-      mixamorigRightUpLeg: [-2, -2, 0],
-      mixamorigRightLeg: [118, 0, 0],
-      mixamorigRightFoot: [68, 0, 0],
+      mixamorigLeftFoot: [-14, 0, 0],
+      mixamorigRightUpLeg: [2, -2, 0],
+      mixamorigRightLeg: [122, 0, 0],
+      mixamorigRightFoot: [74, 0, 0],
     }),
   },
   {
@@ -410,13 +442,13 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
     label: '双膝跪',
     pose: makePoseOffset({
       mixamorigHips: [-4, 0, 0],
-      mixamorigSpine: [4, 0, 0],
-      mixamorigLeftUpLeg: [-6, 4, 0],
-      mixamorigRightUpLeg: [-6, -4, 0],
-      mixamorigLeftLeg: [130, 0, 0],
-      mixamorigRightLeg: [130, 0, 0],
-      mixamorigLeftFoot: [45, 0, 0],
-      mixamorigRightFoot: [45, 0, 0],
+      mixamorigSpine: [2, 0, 0],
+      mixamorigLeftUpLeg: [-12, 4, 0],
+      mixamorigRightUpLeg: [-12, -4, 0],
+      mixamorigLeftLeg: [132, 0, 0],
+      mixamorigRightLeg: [132, 0, 0],
+      mixamorigLeftFoot: [66, 0, 0],
+      mixamorigRightFoot: [66, 0, 0],
     }),
   },
   {
@@ -433,26 +465,28 @@ export const MANNEQUIN_POSE_PRESETS: MannequinPosePreset[] = [
     id: 'point',
     label: '指向',
     pose: makePoseOffset({
-      mixamorigRightArm: [-55, 70, 0],
-      mixamorigRightForeArm: [10, 0, 0],
+      mixamorigRightArm: [-76, 30, -8],
+      mixamorigRightForeArm: [8, 0, 0],
+      mixamorigRightHand: [-4, 0, 6],
     }),
   },
   {
     id: 'wave',
     label: '举手',
     pose: makePoseOffset({
-      mixamorigRightArm: [-150, 8, 0],
-      mixamorigRightForeArm: [12, 0, 0],
+      mixamorigRightArm: [-148, 10, -4],
+      mixamorigRightForeArm: [28, 0, 8],
+      mixamorigRightHand: [-8, 0, 10],
     }),
   },
   {
     id: 'cheer',
     label: '举双手',
     pose: makePoseOffset({
-      mixamorigLeftArm: [-148, 0, 0],
-      mixamorigRightArm: [-148, 0, 0],
-      mixamorigLeftForeArm: [6, 0, 0],
-      mixamorigRightForeArm: [6, 0, 0],
+      mixamorigLeftArm: [-138, -18, 8],
+      mixamorigRightArm: [-138, 18, -8],
+      mixamorigLeftForeArm: [18, 0, -4],
+      mixamorigRightForeArm: [18, 0, 4],
     }),
   },
 ]

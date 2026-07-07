@@ -19,11 +19,15 @@ function knownBones(): Set<string> {
 }
 
 describe('staging pose presets', () => {
-  it('恰好 12 个预设、id 唯一、与词汇表单源一致', () => {
-    expect(MANNEQUIN_POSE_PRESETS).toHaveLength(12)
+  it('恰好 13 个预设、id 唯一、与词汇表单源一致', () => {
+    // 13 = 原 12 个 + 游戏式操控 C 键专用「半蹲」(crouch，区别于点击式深蹲 squat，见 scene3dConstants)。
+    expect(MANNEQUIN_POSE_PRESETS).toHaveLength(13)
     const ids = MANNEQUIN_POSE_PRESETS.map((preset) => preset.id)
     expect(new Set(ids).size).toBe(ids.length)
     expect(STAGING_POSE_IDS).toEqual(ids)
+    // 深蹲与半蹲是两份独立数据源（P1/P4，不复用），两者都必须在库里。
+    expect(ids).toContain('squat')
+    expect(ids).toContain('crouch')
   })
 
   it('每个预设的骨骼名都是已知合法骨骼（防拼错=死骨骼静默丢失）', () => {
@@ -59,5 +63,15 @@ describe('staging pose presets', () => {
       .map((token) => token.trim().replace(/^['"]|['"]$/g, ''))
       .filter(Boolean)
     expect(new Set(enumIds)).toEqual(new Set(STAGING_POSE_IDS))
+  })
+
+  it('pose-lab 全量截图脚本按预设数量自动分批（防新增姿势漏截图）', () => {
+    const shotScriptPath = fileURLToPath(new URL('../../../../../scripts/pose-lab-shot-all.mjs', import.meta.url))
+    const source = readFileSync(shotScriptPath, 'utf8')
+    expect(source).toContain('MANNEQUIN_POSE_PRESETS')
+    expect(source).toContain('presetIds.length')
+    expect(source).toContain('from += batchSize')
+    expect(source).not.toMatch(/全部\s+(12|13)\s+个预设/)
+    expect(source).not.toMatch(/shoot\(view,\s*(0|4|8|12),/)
   })
 })

@@ -1,8 +1,8 @@
 import React from 'react'
 import { Html } from '@react-three/drei'
-import { IconManFilled } from '@tabler/icons-react'
+import { IconManFilled, IconVideo } from '@tabler/icons-react'
 import { cn } from '../../../../utils/cn'
-import type { Scene3DObject } from './scene3dTypes'
+import type { Scene3DCamera, Scene3DObject } from './scene3dTypes'
 
 // 「操控」入口贴近被选中的角色（用户反馈 #6）：选中假人时，在角色头顶浮出一个画布内「操控」按钮，
 // 而不是只藏在右上角顶栏（用户点的是画面里的角色，按钮却在天边）。用 drei <Html> 锚到角色世界坐标，
@@ -45,6 +45,45 @@ export function Scene3DPossessPrompt({
         }}
       >
         <IconManFilled size={14} />
+        <span>操控</span>
+      </button>
+    </Html>
+  )
+}
+
+// 「操控镜头」入口贴近被选中的相机（与角色一视同仁，P4）：选中相机时在相机机身旁浮出画布内
+// 「操控」按钮，点它进相机运镜操控（WASD 飞 + 转朝向 + 滚轮）。锚到相机世界坐标，常显易点。
+export function Scene3DCameraPossessPrompt({
+  camera,
+  onPossess,
+}: {
+  camera: Scene3DCamera
+  onPossess: (cameraId: string) => void
+}): JSX.Element {
+  return (
+    <Html
+      position={[camera.position[0], camera.position[1] + 0.55, camera.position[2]]}
+      center
+      distanceFactor={8}
+      zIndexRange={[20, 0]}
+      occlude={false}
+    >
+      <button
+        type="button"
+        title="操控该镜头（WASD 飞 + 鼠标转朝向 + 滚轮推拉 → 录运镜）"
+        className={cn(
+          'inline-flex select-none items-center gap-1.5 whitespace-nowrap rounded-nomi px-3 py-1.5',
+          'border-0 bg-[var(--nomi-ink)] text-caption font-semibold text-[var(--nomi-paper)]',
+          'shadow-[var(--nomi-shadow-md)] transition hover:opacity-90',
+          'cursor-pointer',
+        )}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPossess(camera.id)
+        }}
+      >
+        <IconVideo size={14} />
         <span>操控</span>
       </button>
     </Html>

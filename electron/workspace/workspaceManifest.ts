@@ -32,6 +32,10 @@ function toProjectRecordObject(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function isWorkspaceBoundaryError(error: unknown): boolean {
+  return error instanceof Error && /inside the selected workspace/i.test(error.message);
+}
+
 function uniqueEmbeddedAssetPath(rootPath: string, fileName: string): { absolutePath: string; relativePath: string } {
   const assetDir = workspaceAssetsGeneratedDir(rootPath);
   fs.mkdirSync(assetDir, { recursive: true });
@@ -152,13 +156,23 @@ export function readProjectJsonTopLevelFields(
 }
 
 export function readWorkspaceManifest(rootPath: string): WorkspaceProjectRecordV2 | null {
-  const filePath = workspaceProjectFile(rootPath);
-  if (!fs.existsSync(filePath)) {
+  let filePath: string;
+  try {
+    filePath = workspaceProjectFile(rootPath);
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    return normalizeWorkspaceProjectRecord(
+      readProjectJsonFileWithEmbeddedMediaSlimming(rootPath, filePath),
+    );
+  } catch (error) {
+    if (isWorkspaceBoundaryError(error)) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[workspace] failed to read workspace manifest: ${rootPath} (${message})`);
     return null;
   }
-  return normalizeWorkspaceProjectRecord(
-    readProjectJsonFileWithEmbeddedMediaSlimming(rootPath, filePath),
-  );
 }
 
 export function readWorkspaceManifestSummary(

@@ -5,10 +5,13 @@ import {
   recordingDurationSeconds,
   frameCountForDuration,
   buildRecordedTakeScene,
+  buildRecordedCameraTakeScene,
   type TakeSample,
   type RecordedTake,
+  type RecordedCameraTake,
 } from './takeRecording'
-import { createDefaultScene3DState } from './scene3dSerializer'
+import { cameraAimBindingId } from './scene3dBindingIds'
+import { createDefaultScene3DState, normalizeScene3DState } from './scene3dSerializer'
 
 const sample = (time: number, position: [number, number, number]): TakeSample => ({ time, position })
 
@@ -235,5 +238,120 @@ describe('buildRecordedTakeScene', () => {
       ],
     }))
     expect(scene!.objects.find((o) => o.id === characterId)!.poseTrack).toBeUndefined()
+  })
+})
+
+describe('buildRecordedCameraTakeScene', () => {
+  function cameraTake(cameraId: string, overrides: Partial<RecordedCameraTake> = {}): RecordedCameraTake {
+    return {
+      possessedCameraId: cameraId,
+      cameraSamples: [
+        sample(0, [4, 2, 5]),
+        sample(2000, [2, 2, 6]),
+        sample(4000, [0, 2, 5]),
+      ],
+      targetSamples: [
+        sample(0, [0, 1, 0]),
+        sample(2000, [0, 1, -1]),
+        sample(4000, [1, 1, -2]),
+      ],
+      durationSeconds: 4,
+      ...overrides,
+    }
+  }
+
+  it('binds the possessed camera to its recorded dolly path over the full duration', () => {
+    const state = createDefaultScene3DState()
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId))
+    expect(scene).not.toBeNull()
+    const positionBinding = scene!.trajectoryBindings.find((b) =>
+      b.objects.some((o) => o.objectId === cameraId),
+    )
+    expect(positionBinding).toBeTruthy()
+    expect(positionBinding!.startTime).toBe(0)
+    expect(positionBinding!.endTime).toBe(4)
+    expect(scene!.sceneTimeline.totalDuration).toBe(4)
+  })
+
+  it('records the per-frame look direction as an aim trajectory the camera points at (free-look fidelity)', () => {
+    const state = createDefaultScene3DState()
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId))
+    const camera = scene!.cameras[0]
+    expect(camera.aimTrajectoryId).toBeTruthy()
+    const aimBinding = scene!.trajectoryBindings.find((b) =>
+      b.objects.some((o) => o.objectId === cameraAimBindingId(cameraId)),
+    )
+    expect(aimBinding).toBeTruthy()
+    expect(aimBinding!.trajectoryId).toBe(camera.aimTrajectoryId)
+  })
+
+  it('clears followTargetId so aim trajectory is the single source of camera orientation', () => {
+    const state = createDefaultScene3DState()
+    state.cameras[0].followTargetId = state.objects[0].id
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId))
+    expect(scene!.cameras[0].followTargetId).toBeUndefined()
+  })
+
+  it('handles a pure pan (no translation) by synthesizing a static position path so it still plays back', () => {
+    const state = createDefaultScene3DState()
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId, {
+      // camera stays in place; only the look direction sweeps
+      cameraSamples: [sample(0, [4, 2, 5]), sample(4000, [4, 2, 5])],
+    }))
+    expect(scene).not.toBeNull()
+    const positionBinding = scene!.trajectoryBindings.find((b) =>
+      b.objects.some((o) => o.objectId === cameraId),
+    )
+    expect(positionBinding).toBeTruthy()
+    expect(scene!.cameras[0].aimTrajectoryId).toBeTruthy()
+  })
+
+  it('puts the possessed camera at cameras[0] so the offscreen capture uses it', () => {
+    const state = createDefaultScene3DState()
+    // add a second camera and possess it
+    const second = { ...state.cameras[0], id: 'cam-second', name: '相机2' }
+    state.cameras.push(second)
+    const scene = buildRecordedCameraTakeScene(state, cameraTake('cam-second'))
+    expect(scene!.cameras[0].id).toBe('cam-second')
+  })
+
+  it('returns null when neither position nor look direction ever moved (no camera move)', () => {
+    const state = createDefaultScene3DState()
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId, {
+      cameraSamples: [sample(0, [4, 2, 5]), sample(4000, [4, 2, 5])],
+      targetSamples: [sample(0, [0, 1, 0]), sample(4000, [0, 1, 0])],
+    }))
+    expect(scene).toBeNull()
+  })
+
+  it('returns null when the possessed camera is missing', () => {
+    const state = createDefaultScene3DState()
+    expect(buildRecordedCameraTakeScene(state, cameraTake('nope'))).toBeNull()
+  })
+
+  it('preserves all base objects (recording is additive)', () => {
+    const state = createDefaultScene3DState()
+    const cameraId = state.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(state, cameraTake(cameraId))
+    expect(scene!.objects).toHaveLength(state.objects.length)
+  })
+
+  it('survives serialize round-trip: aimTrajectoryId + `${cam}:aim` binding both persist (存盘重载后相机朝向不退化)', () => {
+    const base = createDefaultScene3DState()
+    const cameraId = base.cameras[0].id
+    const scene = buildRecordedCameraTakeScene(base, cameraTake(cameraId))!
+    const aimBindingId = cameraAimBindingId(cameraId)
+    // 归一（模拟存盘→重载）后：相机标志与 aim 绑定对象都还在（此前被 serializer 静默丢弃）。
+    const reloaded = normalizeScene3DState(scene)
+    const camera = reloaded.cameras.find((c) => c.id === cameraId)!
+    expect(camera.aimTrajectoryId).toBe(scene.cameras[0].aimTrajectoryId)
+    const aimBinding = reloaded.trajectoryBindings.find((b) => b.objects.some((o) => o.objectId === aimBindingId))
+    expect(aimBinding, 'aim 绑定应保留其合成对象 id').toBeTruthy()
+    expect(aimBinding!.trajectoryId).toBe(camera.aimTrajectoryId)
   })
 })

@@ -416,6 +416,16 @@ export function parseAccountStatus(stdout: string, stderr = ""): DreaminaAccount
   };
 }
 
+/** dreamina CLI 在已有登录态时可能直接复用本地 OAuth，不再返回设备码。 */
+export function isReusingLogin(text: string): boolean {
+  return /已复用.*登录态|already logged in|already authenticated|reusing.*login/i.test(String(text || ""));
+}
+
+/** dreamina 输出/报错里是否含网络超时类错误（Go context deadline / ETIMEDOUT / fetch failed）。 */
+export function isNetworkTimeout(text: string): boolean {
+  return /context deadline exceeded|etimedout|eai_again|econnreset|und_err_headers_timeout|und_err_connect_timeout|headers timeout|connect timeout|timeout exceeded|fetch failed|request timeout|network timeout|i\/o timeout|执行超时/i.test(String(text || ""));
+}
+
 /** dreamina 输出/报错里是否含「非高级会员」闸（生成被拒的诚实信号）。 */
 export function isNotMaestroVip(text: string): boolean {
   return /not maestro vip|maestro vip|没有 dreamina_cli 使用权限|会员|membership|subscrib/i.test(String(text || ""));
@@ -428,6 +438,12 @@ export function isNotMaestroVip(text: string): boolean {
  */
 export function isComplianceConfirmationRequired(text: string): boolean {
   return /AigcComplianceConfirmationRequired|ComplianceConfirmationRequired|内容安全.*授权|授权确认/i.test(String(text || ""));
+}
+
+/** 是否命中「登录态失效/未登录」签名。实测（2026-07-06）：token 刷新失败时 CLI **exit=0** 只打
+ *  `authsdk: refresh failed: protocol transport: do request` 一行——必须按文本识别，不能靠退出码。 */
+export function isLoginExpired(text: string): boolean {
+  return /authsdk|refresh failed|not logged in|please login|login required|未登录|登录已过期|token (expired|invalid)/i.test(String(text || ""));
 }
 
 /**
@@ -444,12 +460,18 @@ export function describeDreaminaFailure(code: number, stdout: string, stderr: st
   if (isComplianceConfirmationRequired(text)) {
     return "即梦该模型首次使用需先在网页端完成一次性内容安全授权。请打开 jimeng.jianying.com 用同一账号生成一次（完成授权确认）后，再回 Nomi 重试。";
   }
+  if (isNetworkTimeout(text)) {
+    return "即梦服务端响应超时，任务可能仍在即梦侧继续处理。请稍后刷新任务结果，或去即梦网页端的生成记录确认；如果没有结果，再重试该任务。";
+  }
   if (isNotMaestroVip(text)) {
     return "当前即梦账号不是高级会员，无法生成。即梦免费试用已于 2026-05-01 结束——请在即梦开通会员后重试（光登录、光充积分不够）。";
   }
+  if (isLoginExpired(text)) {
+    return "即梦登录态失效或未登录：请到「模型接入 · 即梦会员」卡重新登录（或终端运行 dreamina login），完成后重试。";
+  }
   if (!text) {
-    // 静默失败：CLI 给不出原因（最常见 = 非会员被拒 / 需网页端授权）。
-    return `即梦生成被拒，但 CLI 未返回任何原因（exit=${code}）。最常见两种原因：① 当前即梦账号不是高级会员（免费试用 2026-05-01 已结束，需开通即梦会员）；② 该模型首次使用需先在 jimeng.jianying.com 网页端授权一次。请确认会员状态 / 完成网页端授权后重试。`;
+    // 静默失败：CLI 给不出原因。保留会员/授权两条高频指引，同时补上参数组合与服务端异常的排查方向。
+    return `即梦生成被拒，但 CLI 未返回任何原因（exit=${code}）。常见原因：① 当前即梦账号不是高级会员（免费试用 2026-05-01 已结束，需开通即梦会员）；② model_version / resolution 等参数组合不被当前模型支持；③ 该模型首次使用需先在 jimeng.jianying.com 网页端授权一次；④ 即梦服务端临时异常。请按以上顺序排查后重试。`;
   }
   return `即梦 CLI 调用失败：${text.slice(0, 600)}`;
 }

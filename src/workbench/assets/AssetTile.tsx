@@ -67,7 +67,18 @@ export function AssetThumb({ asset, playSize = 22 }: { asset: AssetRef; playSize
       </>
     )
   }
-  return <NomiImage className={cn('w-full h-full object-cover')} thumbnailSrc={asset.thumbUrl} src={asset.renderUrl} alt={asset.name} />
+  return (
+    <NomiImage
+      className={cn('w-full h-full object-cover')}
+      thumbnailSrc={asset.thumbUrl}
+      src={asset.renderUrl}
+      alt={asset.name}
+      // 参考语境的失效占位说「怎么办」：泛化的「加载失败」会被当成无害缩略图问题忽略，
+      // 而这张图随后就是发不出去（预览与发送同一份 URL 口径）。
+      fallbackLabel="图已失效"
+      fallbackTitle={`参考图已失效（源文件缺失或链接过期）：${asset.renderUrl}。点「×」移除后重新添加，或重新生成源节点。`}
+    />
+  )
 }
 
 export default function AssetTile({ asset, index, onRemove, onClick, dragProps, className }: AssetTileProps): JSX.Element {

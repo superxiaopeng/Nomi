@@ -7,6 +7,8 @@ import {
   resolveAssetIngestion,
   resolveAssetIngestionWithFallback,
   isLocalAssetUrl,
+  trustedOriginalUrl,
+  ORIGINAL_URL_TRUST_MS,
   LITTERBOX_INGESTION,
   TMPFILES_INGESTION,
   ANON_UPLOAD_CHAIN,
@@ -439,5 +441,40 @@ describe("resolveAssetIngestion", () => {
   it("returns null for unknown vendors with no declaration", () => {
     expect(resolveAssetIngestion({ key: "mystery" })).toBeNull();
     expect(resolveAssetIngestion(null)).toBeNull();
+  });
+});
+
+describe("sidecar originalUrl 新鲜度门（L2：参考图永不过期）", () => {
+  const FRESH = 60_000;
+  const STALE = ORIGINAL_URL_TRUST_MS + 1;
+  const withSidecar = (ageMs: number): LocalAsset => ({ ...fakeAsset("a.png"), originalUrl: "https://cdn.example.com/orig-a.png", ageMs });
+
+  it("trustedOriginalUrl：新鲜→直用；过窗→null；ageMs 未知→按新鲜（兼容旧调用方/stat 失败）", () => {
+    expect(trustedOriginalUrl(withSidecar(FRESH))).toBe("https://cdn.example.com/orig-a.png");
+    expect(trustedOriginalUrl(withSidecar(STALE))).toBeNull();
+    expect(trustedOriginalUrl({ originalUrl: "https://cdn.example.com/orig-a.png" })).toBe("https://cdn.example.com/orig-a.png");
+    expect(trustedOriginalUrl(null)).toBeNull();
+  });
+
+  it("localize：新鲜 sidecar 直接用公网直链，零上传", async () => {
+    const post = vi.fn();
+    const readFresh = () => withSidecar(FRESH);
+    const out = await localizeAssetsForVendor({ input_urls: [localUrl("a.png")] }, () => ({ ingestion: { strategy: "upload-url", endpoint: "https://up/x", base64Field: "b", urlPath: "u" }, uploadApiKey: "k" }), readFresh, post, noMultipart);
+    expect((out.value as { input_urls: string[] }).input_urls).toEqual(["https://cdn.example.com/orig-a.png"]);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("localize：过窗 sidecar 忽略 → 用本地字节走上传通道换新链（治「发过期临时链」整类）", async () => {
+    const post = vi.fn().mockResolvedValue({ u: "https://fresh.example.com/new-a.png" });
+    const readStale = () => withSidecar(STALE);
+    const out = await localizeAssetsForVendor({ input_urls: [localUrl("a.png")] }, () => ({ ingestion: { strategy: "upload-url", endpoint: "https://up/x", base64Field: "b", urlPath: "u" }, uploadApiKey: "k" }), readStale, post, noMultipart);
+    expect((out.value as { input_urls: string[] }).input_urls).toEqual(["https://fresh.example.com/new-a.png"]);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolveLocalAsset：过窗 sidecar 不短路，inline-base64 落 data URI", async () => {
+    const readStale = () => withSidecar(STALE);
+    const out = await resolveLocalAsset(localUrl("a.png"), { strategy: "inline-base64" }, "k", readStale, vi.fn(), noMultipart);
+    expect(out.startsWith("data:image/png;base64,")).toBe(true);
   });
 });

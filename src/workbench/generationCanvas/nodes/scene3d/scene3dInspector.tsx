@@ -39,12 +39,16 @@ import {
   clonePoseValue,
   poseMatchesPreset,
   cameraLookAtRotation,
+  fovToFocalMm,
   roleColorForIndex,
   mannequinRoleLabel,
   updateVectorValue,
   numberInputValue,
 } from './scene3dMath'
 import { Scene3DEnvironmentPanel } from './scene3dEnvironmentPanel'
+import { CameraMovePanel } from './scene3dCameraMovePanel'
+import type { CameraMovePresetSpec } from './cameraMovePreset'
+import type { Scene3DReferenceTargetSummary } from './scene3dReferenceDirector'
 
 function VectorInputs({
   label,
@@ -441,6 +445,9 @@ export function PropertyPanel({
   onObjectPatch,
   onCameraPatch,
   onEnvironmentPatch,
+  onApplyCameraMove,
+  onExportCameraMoveFrames,
+  referenceTarget,
 }: {
   state: Scene3DState
   selection: Scene3DSelection
@@ -448,6 +455,9 @@ export function PropertyPanel({
   onObjectPatch: (id: string, patch: Partial<Scene3DObject>) => void
   onCameraPatch: (id: string, patch: Partial<Scene3DCamera>) => void
   onEnvironmentPatch: (patch: Partial<Scene3DState['environment']>) => void
+  onApplyCameraMove: (cameraId: string, spec: CameraMovePresetSpec) => void
+  onExportCameraMoveFrames: (cameraId: string) => void
+  referenceTarget?: Scene3DReferenceTargetSummary
 }): JSX.Element {
   const selectedObject = selection?.type === 'object'
     ? state.objects.find((object) => object.id === selection.id)
@@ -537,7 +547,7 @@ export function PropertyPanel({
               ))}
             </div>
           ) : null}
-          {(selectedObject.type === 'mesh' || selectedObject.type === 'mannequin') ? (
+          {(selectedObject.type === 'mesh' || selectedObject.type === 'mannequin' || selectedObject.type === 'prop') ? (
             <ColorField
               label="颜色"
               value={selectedObject.color || '#808080'}
@@ -615,11 +625,13 @@ export function PropertyPanel({
           <div className="grid grid-cols-3 gap-2">
             {(['fov', 'near', 'far'] as const).map((field) => (
               <label key={field} className="grid gap-1">
-                <span className="text-micro text-[var(--nomi-ink-60)]">{field.toUpperCase()}</span>
+                <span className="text-micro text-[var(--nomi-ink-60)]">
+                  {field === 'fov' ? `FOV ≈${fovToFocalMm(selectedCamera.fov)}mm` : field.toUpperCase()}
+                </span>
                 <input
                   className="h-8 min-w-0 rounded-nomi-sm border border-[var(--nomi-line)] bg-[var(--nomi-paper)] px-2 text-caption text-[var(--nomi-ink)] outline-none"
                   disabled={readOnly}
-                  min={field === 'fov' ? 12 : 0.01}
+                  min={field === 'fov' ? 6 : 0.01}
                   step={field === 'fov' ? 1 : 0.1}
                   type="number"
                   value={selectedCamera[field]}
@@ -628,6 +640,12 @@ export function PropertyPanel({
               </label>
             ))}
           </div>
+          <CameraMovePanel
+            readOnly={readOnly}
+            onApply={(spec) => onApplyCameraMove(selectedCamera.id, spec)}
+            onExportFrames={() => onExportCameraMoveFrames(selectedCamera.id)}
+            referenceTarget={referenceTarget}
+          />
         </div>
       ) : (
         <Scene3DEnvironmentPanel

@@ -201,6 +201,14 @@ export type HttpOperation = {
   response_mapping?: Record<string, unknown>;
   provider_meta_mapping?: Record<string, unknown>;
   /**
+   * **命名响应变换**（P4 声明驱动，不 hardcode vendor 进 runtime）。当上游响应形状不是点路径
+   * response_mapping 能直接读的（如 ComfyUI /history：顶层键是动态 prompt_id、取图要从
+   * filename+subfolder+type 拼 /view URL），声明一个已注册的变换名，buildProfileTaskResult 会在跑
+   * response_mapping **之前**对 raw response 应用它、归一成稳定形状。变换住各自 vendor 模块、注册进
+   * electron/tasks/responseTransforms.ts，runtime 只按名查表、不含 vendor 逻辑。
+   */
+  response_transform?: string;
+  /**
    * **wire 必填参数的兜底默认值**（headless/MCP 路专用）。UI 路由 NodeGenerationComposer 会按档案
    * (src/config/modelArchetypes) 把用户选的 size/voice/model 等填进 request.params；但 MCP/CLI 的
    * `generate` 不经 UI、调用方也无从知道每家 vendor 的必填参数（nomi_generate 根本不暴露 params）。
@@ -344,6 +352,15 @@ export function selectExecutableModel(
   );
 }
 
+/** ProfileKind → 计费/目录口径（纯查表；从 runtime 下沉，R12 巨壳净减，runtime re-export 保 API）。 */
+export function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
+  if (kind === "text_to_video" || kind === "image_to_video") return "video";
+  if (kind === "chat" || kind === "prompt_refine" || kind === "image_to_prompt") return "text";
+  if (kind === "text_to_audio" || kind === "image_to_audio" || kind === "transcribe") return "audio"; // 音频族走第四路同步收口
+  if (kind === "text_to_3d" || kind === "image_to_3d") return "model3d"; // 3D 族（RunningHub 混元/HiTem/Meshy，输出 glb）
+  return "image";
+}
+
 /** Catalog version.
  *  v2 added Model.onboarding + ApiKeyRecord.enc.
  *  v3 collapsed Mapping.{requestMapping,responseMapping} (which used to wrap
@@ -354,8 +371,11 @@ export function selectExecutableModel(
 /*  v4 给自建中转(relay)的旧图像/视频 op 补「中性参数→线缆字段」翻译表(paramMap)——存量用户已接入的
  *  OpenAI 兼容中转其 op 是迁移前持久化的(读 size 像素却无 paramMap)，档案中性化后比例/清晰度发不出去。
  *  见 docs/plan/2026-06-24-model-param-consistency-invariant.md。 */
-export type CatalogVersion = 1 | 2 | 3 | 4;
-export const CURRENT_CATALOG_VERSION: CatalogVersion = 4;
+/*  v5 给存量中转 image 条目补图生图能力(image_edit mapping + supportsReferenceImages + 老标准参数升级成
+ *  比例/清晰度)。8c711f0c 起新接入才写这些字段，老条目此前只能「删了重加」——迁移根治，见
+ *  docs/plan/2026-07-06-i2i-reference-reliability.md（L1）。只碰非内置 vendor + OpenAI 兼容形状。 */
+export type CatalogVersion = 1 | 2 | 3 | 4 | 5;
+export const CURRENT_CATALOG_VERSION: CatalogVersion = 5;
 
 export type CatalogState = {
   version: CatalogVersion;

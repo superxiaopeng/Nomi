@@ -28,6 +28,7 @@ import {
   valuesFromMapping,
 } from "./tasks/responseParsing";
 import { extractAssetUrl } from "./tasks/assetUrlExtract";
+import { applyResponseTransform } from "./tasks/responseTransforms";
 import { TtlLruCache } from "./tasks/taskCache";
 import { markTaskAdmitted } from "./tasks/taskAdmission";
 import { collectFilesRecursively, parseDataUrl } from "./assets/assetBytes";
@@ -61,8 +62,8 @@ export { createProject, deleteProject, listProjects, readProject, resolveProject
 import { extractVendorExtraHeaders, readCatalog } from "./catalog/catalogStore";
 
 import type { BillingModelKind, HttpOperation, Mapping, Model, ProfileKind, Vendor } from "./catalog/types";
-import { selectExecutableModel, selectTaskMapping } from "./catalog/types";
-import { applyHeadlessParamDefaults, taskTemplateParams } from "./catalog/taskParams";
+import { billingKindForTaskKind, selectExecutableModel, selectTaskMapping } from "./catalog/types";
+import { applyHeadlessParamDefaults, imageEditGuardError, taskTemplateParams } from "./catalog/taskParams";
 import { applyParamMap, type ParamMap } from "./catalog/paramTranslate";
 import { assertAndConsumeSpendGrant } from "./spendGrant";
 export type {
@@ -386,7 +387,8 @@ export function listProjectAssets(payload: unknown): { items: LocalAssetRecord[]
         const contentType = contentTypeFromPath(absolutePath);
         const sidecarMeta = readAssetSidecarMeta(absolutePath);
         const mediaKind = assetKindFromContentType(contentType);
-        const sidecarKind = typeof sidecarMeta.kind === "string" && sidecarMeta.kind.trim() ? sidecarMeta.kind.trim() : "";
+        const sidecarKind =
+          typeof sidecarMeta.kind === "string" && sidecarMeta.kind.trim() ? sidecarMeta.kind.trim() : "";
         const kind = sidecarKind || mediaKind;
         if (kindFilter && kind !== kindFilter) return [];
         const createdAt = new Date(stat.birthtimeMs || stat.mtimeMs).toISOString();
@@ -465,14 +467,8 @@ function authHeaders(vendor: Vendor, apiKey: string): Record<string, string> {
 
 // endpoint() 已抽到 electron/vendorEndpoint.ts（纯函数，便于无 electron 的单测）
 
-export function billingKindForTaskKind(kind: ProfileKind): BillingModelKind {
-  if (kind === "text_to_video" || kind === "image_to_video") return "video";
-  if (kind === "chat" || kind === "prompt_refine" || kind === "image_to_prompt") return "text";
-  if (kind === "text_to_audio" || kind === "image_to_audio" || kind === "transcribe") return "audio"; // 音频族走第四路同步收口
-  if (kind === "text_to_3d" || kind === "image_to_3d") return "model3d"; // 3D 族（RunningHub 混元/HiTem/Meshy，输出 glb）
-  return "image";
-}
-
+// billingKindForTaskKind 下沉到 catalog/types（R12 净减）；re-export 保住既有消费方 import 面。
+export { billingKindForTaskKind } from "./catalog/types";
 export { extractAssetUrl } from "./tasks/assetUrlExtract";
 
 export async function localizeTaskAsset(
@@ -628,12 +624,7 @@ export async function executeProfileOperation(input: {
   };
 }
 
-/**
- * If `value` is a string that looks like serialized JSON ({...} or [...]),
- * parse it. Some providers (kie.ai) return nested results as JSON strings
- * (e.g. `data.resultJson = "{\"resultUrls\":[...]}"`) and the mapping path
- * `data.resultJson.resultUrls.0` only works if we transparently parse.
- */
+/** 归一上游响应成 TaskResult：命名响应变换（可选）→ 点路径 mapping（kie 等返 JSON 字符串已透明 parse）。 */
 export async function buildProfileTaskResult(input: {
   response: unknown;
   mapping: Mapping;
@@ -647,28 +638,32 @@ export async function buildProfileTaskResult(input: {
   vendor?: Vendor;
   model?: Model;
 }): Promise<{ result: TaskResult; providerMeta: JsonRecord }> {
+  // 命名响应变换（P4，如 ComfyUI /history 归一）：response_mapping 前对 raw response 应用一次；未声明→原样。
+  const response = applyResponseTransform(input.operation.response_transform, input.response, {
+    baseUrl: String(input.vendor?.baseUrlHint || ""),
+  });
   const responseMapping = isJsonRecord(input.operation.response_mapping) ? input.operation.response_mapping : null;
   const providerMetaMapping = isJsonRecord(input.operation.provider_meta_mapping)
     ? input.operation.provider_meta_mapping
     : null;
-  const providerMeta = providerMetaFromResponse(input.response, providerMetaMapping);
+  const providerMeta = providerMetaFromResponse(response, providerMetaMapping);
   const taskId = firstString(
-    firstMappedString(input.response, responseMapping, "task_id"),
+    firstMappedString(response, responseMapping, "task_id"),
     providerMeta.task_id,
     providerMeta.query_id,
-    extractTaskIdShared(input.response),
+    extractTaskIdShared(response),
     input.taskIdFallback,
   );
   const mappedAssetValues = [
-    ...valuesFromMapping(input.response, responseMapping, "assets"),
-    ...valuesFromMapping(input.response, responseMapping, "image_url"),
-    ...valuesFromMapping(input.response, responseMapping, "video_url"),
-    ...valuesFromMapping(input.response, responseMapping, "model_url"),
+    ...valuesFromMapping(response, responseMapping, "assets"),
+    ...valuesFromMapping(response, responseMapping, "image_url"),
+    ...valuesFromMapping(response, responseMapping, "video_url"),
+    ...valuesFromMapping(response, responseMapping, "model_url"),
   ];
   const assetUrls = Array.from(
-    new Set([...mappedAssetValues.flatMap(collectAssetUrls), ...collectAssetUrls(extractAssetUrl(input.response))]),
+    new Set([...mappedAssetValues.flatMap(collectAssetUrls), ...collectAssetUrls(extractAssetUrl(response))]),
   );
-  const status = taskStatusFromResponse(input.response, responseMapping, input.mapping.statusMapping, assetUrls);
+  const status = taskStatusFromResponse(response, responseMapping, input.mapping.statusMapping, assetUrls);
   const type: "image" | "video" | "model3d" =
     input.wantedKind === "video" ? "video" : input.wantedKind === "model3d" ? "model3d" : "image";
   const assets = input.projectId
@@ -718,6 +713,9 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
     vendorKey,
     mapping?.create?.defaultParams,
   ); // headless 缺参兜底(档案默认+mapping)
+  // L3 诚实护栏：图生图/图生视频缺参考或缺 mapping → 付费守卫之前拒发人话，绝不静默退化纯文生（判定在 taskParams.imageEditGuardError）。
+  const guardError = imageEditGuardError(kind, request, Boolean(mapping), model.labelZh || model.modelKey);
+  if (guardError) throw new Error(guardError);
   // 第四路 audio：TTS/Whisper 同步收口（二进制/multipart）。付费守卫：必发 vendor，进来即校验消费令牌。
   if (wantedKind === "audio") {
     assertAndConsumeSpendGrant(grantId, nodeId);

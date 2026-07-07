@@ -12,9 +12,13 @@ export function asUrl(value: unknown): string {
   return /^https?:\/\//i.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('blob:') || trimmed.startsWith('nomi-local://') ? trimmed : ''
 }
 
-/** 从一条 result 取可用 URL：优先 providerUrl（原始 CDN https），退回 nomi-local://（base64 端点用）。 */
+/** 从一条 result 取可用 URL：**优先本地持久文件**（nomi-local://）——chip 预览永不腐烂；发送前由
+ *  localizeAssetsForVendor 换成 vendor 可达值（sidecar originalUrl 新鲜则零成本直用，过期则用本地字节
+ *  重新上传换新链）。providerUrl 只在无本地拷贝时兜底（#4「providerUrl-only 被生成侧丢」仍覆盖）。
+ *  旧口径 providerUrl 优先，是「过期临时链发给服务商→报错/无视原图 + chip 加载失败」整类问题的根因
+ *  （2026-07-06 根治，docs/plan/2026-07-06-i2i-reference-reliability.md L2）。 */
 export function resultUrl(result: GenerationNodeResult | undefined): string {
-  return asUrl(result?.providerUrl) || asUrl(result?.url) || asUrl(result?.thumbnailUrl)
+  return asUrl(result?.url) || asUrl(result?.providerUrl) || asUrl(result?.thumbnailUrl)
 }
 
 /** 按 `nodeId` 或 `nodeId:resultId` 引用定位一条 result 的 URL；定位不到 → ''。 */

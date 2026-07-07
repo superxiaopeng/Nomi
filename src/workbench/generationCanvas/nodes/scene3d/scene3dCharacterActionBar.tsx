@@ -2,8 +2,10 @@ import React from 'react'
 import {
   IconHandStop,
   IconManFilled,
+  IconVideo,
   IconArmchair,
   IconArrowBarToDown,
+  IconArrowBarToUp,
   IconCircleFilled,
   IconPlayerStopFilled,
   IconX,
@@ -11,43 +13,86 @@ import {
 import { cn } from '../../../../utils/cn'
 import { PanelButton, SceneAddToolbar } from './scene3dToolbar'
 import { MANNEQUIN_POSE_PRESETS, type CrowdAddOptions } from './scene3dConstants'
-import type { Scene3DGeometry, Scene3DObject } from './scene3dTypes'
+import type { Scene3DCamera, Scene3DGeometry, Scene3DObject, Scene3DPropKind } from './scene3dTypes'
+import type { Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 type CharacterDriveApi = {
   possessId: string | null
   selectedMannequin: Scene3DObject | undefined
   enterPossess: (objectId: string) => void
   exitPossess: () => void
+  // 相机操控（运镜）：与角色操控一视同仁（P4 通用第一），同一个「操控」动词。
+  cameraPossessId: string | null
+  selectedCamera: Scene3DCamera | undefined
+  enterCameraPossess: (cameraId: string) => void
+  exitCameraPossess: () => void
 }
 
-// 头部工具栏「操控」入口：选中单个假人时出现，进入/退出操控态。整块逻辑+可见性自闭合，
-// 让 Scene3DFullscreen 壳只写一行接线（R9 防巨壳）。
+// 头部工具栏「操控」入口：选中单个假人 → 操控走位；选中单个相机 → 操控运镜。进入/退出操控态。
+// 一个动词对角色和相机一视同仁（P4）。整块逻辑+可见性自闭合，让 Scene3DFullscreen 壳只写一行接线（R9）。
 export function CharacterPossessButton({ drive }: { drive: CharacterDriveApi }): JSX.Element | null {
-  const possessing = Boolean(drive.possessId)
-  if (!possessing && !drive.selectedMannequin) return null
-  return (
-    <div className="flex items-center gap-1 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-0.5">
-      <PanelButton
-        title={possessing ? '退出操控' : '操控该角色（WASD 走位 + 动作库）'}
-        active={possessing}
-        onClick={() => {
-          if (possessing) drive.exitPossess()
-          else if (drive.selectedMannequin) drive.enterPossess(drive.selectedMannequin.id)
-        }}
-      >
-        <IconManFilled size={15} />
-        <span>操控</span>
-      </PanelButton>
-    </div>
-  )
+  const possessingCharacter = Boolean(drive.possessId)
+  const possessingCamera = Boolean(drive.cameraPossessId)
+
+  if (possessingCamera) {
+    return (
+      <div className="flex items-center gap-1 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-0.5">
+        <PanelButton title="退出操控镜头" active onClick={drive.exitCameraPossess}>
+          <IconVideo size={15} />
+          <span>操控</span>
+        </PanelButton>
+      </div>
+    )
+  }
+  if (possessingCharacter) {
+    return (
+      <div className="flex items-center gap-1 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-0.5">
+        <PanelButton title="退出操控" active onClick={drive.exitPossess}>
+          <IconManFilled size={15} />
+          <span>操控</span>
+        </PanelButton>
+      </div>
+    )
+  }
+  if (drive.selectedMannequin) {
+    return (
+      <div className="flex items-center gap-1 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-0.5">
+        <PanelButton
+          title="操控该角色（WASD 走位 + 动作库）"
+          onClick={() => drive.selectedMannequin && drive.enterPossess(drive.selectedMannequin.id)}
+        >
+          <IconManFilled size={15} />
+          <span>操控</span>
+        </PanelButton>
+      </div>
+    )
+  }
+  if (drive.selectedCamera) {
+    return (
+      <div className="flex items-center gap-1 rounded-nomi border border-[var(--nomi-line-soft)] bg-[var(--nomi-paper)] p-0.5">
+        <PanelButton
+          title="操控该镜头（WASD 飞 + 鼠标转朝向 + 滚轮推拉 → 录运镜）"
+          onClick={() => drive.selectedCamera && drive.enterCameraPossess(drive.selectedCamera.id)}
+        >
+          <IconVideo size={15} />
+          <span>操控</span>
+        </PanelButton>
+      </div>
+    )
+  }
+  return null
 }
 
 // 动作库：动作名 → 现有静态姿势预设 key 的映射（不造新预设）。
 // 某动作没有对应预设就不会进列表（诚实，见 ACTION_LIBRARY 过滤）。
 // 注意：待机/行走/奔跑（idle/walk/run）已改由「移动自动播迈腿动画」驱动（possess 态按 WASD 速度自动切 clip），
 // 不再放进静态动作库——否则一个「行走」会有「静态摆腿姿势」和「真迈腿动画」两套心智、互相打架（P1）。
-// 这里只留 locomotion 之外的静态摆姿（下蹲/挥手/坐下）。
+// 这里只留 locomotion 之外的静态摆姿（下蹲/挥手/坐下/站立）。
+// 「站立」= #B 修复：此前点了挥手/坐下没有任何按钮能回站姿(除非重新走动触发 locomotion 接管，站着不动就
+// 永久卡住)。复用现成 standing 预设(pose 缺省=rest)，不新造姿势数据。另外——再点一次已激活的那个动作按钮
+// 也会自动顶成站立（toggle，见 useScene3DCharacterDrive.applyActionPreset），点它=顶它，不用特地找这个按钮。
 const ACTION_DEFS: Array<{ label: string; presetId: string; icon: typeof IconManFilled }> = [
+  { label: '站立', presetId: 'standing', icon: IconArrowBarToUp },
   { label: '下蹲', presetId: 'squat', icon: IconArrowBarToDown },
   { label: '挥手', presetId: 'wave', icon: IconHandStop },
   { label: '坐下', presetId: 'sit', icon: IconArmchair },
@@ -125,7 +170,7 @@ export function CharacterActionBar({
 }): JSX.Element {
   return (
     <div
-      className="absolute bottom-5 left-1/2 z-[5] max-w-[calc(100%-32px)] -translate-x-1/2"
+      className="absolute bottom-5 left-1/2 z-[8] max-w-[calc(100%-32px)] -translate-x-1/2"
       aria-label="角色操控动作库"
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -187,24 +232,87 @@ export function CharacterActionBar({
       <div className="mt-1.5 text-center text-micro text-[var(--nomi-ink-60)]">
         {recorder?.isRecording
           ? '录制中 · WASD 走位、绕看摆机位都会录进参考视频 · 点停止出片'
-          : 'WASD 走位 · 自动面向 · 点动作切换姿势 · 点「录 take」录成参考视频'}
+          : 'WASD 走位 · Shift 加速 · Space 跳 · C 蹲 · 自动面向 · 点动作切换姿势 · 点「录 take」录成参考视频'}
       </div>
     </div>
   )
 }
 
-// 画布底部条：操控态显示动作库，否则显示原添加工具栏。把这层「显示哪个条」的判断从
-// Scene3DFullscreen 壳里抽出（R9 防巨壳），壳只传 possessedObject + 两套回调。
+// 相机操控（运镜）底部条：被操控相机名 + 录 take + 退出。无动作库（运镜没有「动作」概念），
+// 只录飞行 + 转朝向。与 CharacterActionBar 同款式，复用 TakeRecordButton。
+export function CameraPossessActionBar({
+  cameraName,
+  onExit,
+  recorder,
+}: {
+  cameraName: string
+  onExit: () => void
+  recorder?: ActionBarRecorder
+}): JSX.Element {
+  return (
+    <div
+      className="absolute bottom-5 left-1/2 z-[8] max-w-[calc(100%-32px)] -translate-x-1/2"
+      aria-label="镜头操控工具栏"
+      onPointerDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
+    >
+      <div
+        className={cn(
+          'inline-flex max-w-full items-center gap-1 overflow-x-auto p-[6px]',
+          'rounded-nomi border border-[var(--workbench-border)] bg-[var(--nomi-paper)] text-[var(--nomi-ink)] shadow-[var(--nomi-shadow-md)]',
+        )}
+        role="toolbar"
+      >
+        <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-nomi bg-[var(--nomi-ink)] px-2.5 text-caption text-[var(--nomi-paper)]" title="正在操控的镜头">
+          <IconVideo size={15} />
+          <span className="max-w-[120px] truncate">{cameraName}</span>
+        </span>
+        {recorder ? (
+          <>
+            <span className="h-5 w-px shrink-0 bg-[var(--workbench-border)]" />
+            <TakeRecordButton recorder={recorder} />
+          </>
+        ) : null}
+        <span className="h-5 w-px shrink-0 bg-[var(--workbench-border)]" />
+        <button
+          className={cn(
+            'inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-nomi px-2 whitespace-nowrap',
+            'border-0 bg-transparent text-caption text-[var(--nomi-ink-60)] transition',
+            'hover:bg-[var(--nomi-ink-05)] hover:text-[var(--nomi-ink)]',
+          )}
+          type="button"
+          title="退出操控镜头"
+          onClick={onExit}
+        >
+          <IconX size={15} />
+          <span>退出操控</span>
+        </button>
+      </div>
+      <div className="mt-1.5 text-center text-micro text-[var(--nomi-ink-60)]">
+        {recorder?.isRecording
+          ? '录制中 · WASD 飞镜头、鼠标转朝向、滚轮推拉都会录进运镜参考视频 · 点停止出片'
+          : 'WASD 飞镜头 · Shift 加速 · 鼠标转朝向 · 滚轮推拉 · 点「录 take」录成运镜参考视频'}
+      </div>
+    </div>
+  )
+}
+
+// 画布底部条：角色操控显示动作库、相机操控显示运镜条，否则显示原添加工具栏。把这层「显示哪个条」的判断从
+// Scene3DFullscreen 壳里抽出（R9 防巨壳），壳只传 possessedObject/possessedCamera + 各套回调。
 export function Scene3DBottomBar({
   readOnly,
   possessedObject,
+  possessedCamera,
   activePresetId,
   recorder,
   onApplyPreset,
   onExitPossess,
+  onExitCameraPossess,
   onAddObject,
+  onAddProp,
   onAddCrowd,
   onAddCamera,
+  onApplySceneTemplate,
   trajectoryMode,
   onToggleTrajectoryMode,
   canvasFocusMode,
@@ -212,13 +320,17 @@ export function Scene3DBottomBar({
 }: {
   readOnly: boolean
   possessedObject?: Scene3DObject
+  possessedCamera?: Scene3DCamera
   activePresetId?: string
   recorder?: ActionBarRecorder
   onApplyPreset: (presetId: string) => void
   onExitPossess: () => void
+  onExitCameraPossess: () => void
   onAddObject: (kind: Scene3DGeometry | 'mannequin' | 'light') => void
+  onAddProp: (kind: Scene3DPropKind) => void
   onAddCrowd: (options: CrowdAddOptions) => void
   onAddCamera: () => void
+  onApplySceneTemplate: (template: Scene3DSceneTemplate) => void
   trajectoryMode: boolean
   onToggleTrajectoryMode: () => void
   canvasFocusMode: boolean
@@ -235,12 +347,23 @@ export function Scene3DBottomBar({
       />
     )
   }
+  if (possessedCamera) {
+    return (
+      <CameraPossessActionBar
+        cameraName={possessedCamera.name}
+        onExit={onExitCameraPossess}
+        recorder={recorder}
+      />
+    )
+  }
   if (readOnly) return null
   return (
     <SceneAddToolbar
       onAddObject={onAddObject}
+      onAddProp={onAddProp}
       onAddCrowd={onAddCrowd}
       onAddCamera={onAddCamera}
+      onApplySceneTemplate={onApplySceneTemplate}
       trajectoryMode={trajectoryMode}
       onToggleTrajectoryMode={onToggleTrajectoryMode}
       canvasFocusMode={canvasFocusMode}

@@ -14,8 +14,11 @@ import {
   parseDeviceFlow,
   parseAccountStatus,
   isNotMaestroVip,
+  isNetworkTimeout,
+  isReusingLogin,
   isComplianceConfirmationRequired,
   describeDreaminaFailure,
+  isLoginExpired,
 } from "./dreaminaCodec";
 
 describe("extractDreaminaJson", () => {
@@ -224,6 +227,12 @@ describe("登录 / 账户状态解析", () => {
     expect(isNotMaestroVip("当前账号没有 dreamina_cli 使用权限")).toBe(true);
     expect(isNotMaestroVip("success")).toBe(false);
   });
+
+  it("isReusingLogin 识别已有登录态复用", () => {
+    expect(isReusingLogin("已复用当前本地 OAuth 登录态")).toBe(true);
+    expect(isReusingLogin("already authenticated")).toBe(true);
+    expect(isReusingLogin("verification_uri: https://jimeng.jianying.com")).toBe(false);
+  });
 });
 
 describe("describeDreaminaFailure（治「用不了」黑洞）", () => {
@@ -245,6 +254,13 @@ describe("describeDreaminaFailure（治「用不了」黑洞）", () => {
     expect(describeDreaminaFailure(1, "", "current account is not maestro vip")).toMatch(/会员/);
   });
 
+  it("命中网络超时 → 提示任务可能仍在即梦侧继续处理", () => {
+    expect(isNetworkTimeout("context deadline exceeded")).toBe(true);
+    const msg = describeDreaminaFailure(1, "", "fetch failed: ETIMEDOUT");
+    expect(msg).toMatch(/超时/);
+    expect(msg).toMatch(/刷新|生成记录|重试/);
+  });
+
   it("有原始错误文本时透传（截断保护）", () => {
     expect(describeDreaminaFailure(2, "", "invalid param: duration out of range")).toMatch(/invalid param/);
   });
@@ -252,5 +268,16 @@ describe("describeDreaminaFailure（治「用不了」黑洞）", () => {
   it("isComplianceConfirmationRequired 识别授权闸", () => {
     expect(isComplianceConfirmationRequired("AigcComplianceConfirmationRequired")).toBe(true);
     expect(isComplianceConfirmationRequired("一切正常")).toBe(false);
+  });
+});
+
+describe("describeDreaminaFailure — 登录态失效签名（2026-07-06 实测 exit=0 只打一行）", () => {
+  it("authsdk refresh failed → 登录指引", () => {
+    expect(describeDreaminaFailure(0, "", "authsdk: refresh failed: protocol transport: do request")).toMatch(/登录/);
+  });
+  it("isLoginExpired 认 authsdk/未登录/token expired；不误伤普通输出", () => {
+    expect(isLoginExpired("authsdk: refresh failed")).toBe(true);
+    expect(isLoginExpired("please login first")).toBe(true);
+    expect(isLoginExpired('{"submit_id":"x"}')).toBe(false);
   });
 });

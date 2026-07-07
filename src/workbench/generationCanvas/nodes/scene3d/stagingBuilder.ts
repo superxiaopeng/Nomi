@@ -23,6 +23,8 @@ import {
   type StagingShot,
   type StagingEnvironment,
 } from './stagingVocab'
+import { buildPlacedProps, type ScenePropPlacement } from './scene3dPropSpecs'
+import { buildSceneTemplateObjects, type Scene3DSceneTemplate } from './scene3dSceneTemplates'
 
 export type StagingCharacterSpec = {
   name?: string
@@ -36,6 +38,9 @@ export type StagingSpec = {
   camera?: { angle?: StagingCameraAngle; height?: StagingCameraHeight; shot?: StagingShot }
   environment?: StagingEnvironment
   crowd?: { rows: number; columns: number } | null
+  // 灰模布景（走 UI/运镜同一套 builder，P4 一套能力两入口）：整套场景模板 + 单件道具。
+  sceneTemplate?: Scene3DSceneTemplate
+  props?: ScenePropPlacement[]
 }
 
 const DEG = Math.PI / 180
@@ -182,7 +187,11 @@ export function buildStagingScene(spec: StagingSpec, spacingScale = 1): Scene3DS
   const centerX = objects.reduce((sum, o) => sum + o.position[0], 0) / Math.max(1, objects.length)
   const backZ = Math.min(...objects.map((o) => o.position[2]), 0)
   const crowd = buildCrowdObject(spec, centerX, backZ)
-  const allObjects = crowd ? [...objects, crowd] : objects
+  // 灰模布景（backdrop）铺在最前，角色/群众叠其上。相机取景只看角色位置（buildStagingCamera），
+  // 布景纯背景不影响构图。走 UI 同一套 builder（P4），无并行版。
+  const templateObjects = spec.sceneTemplate ? buildSceneTemplateObjects(spec.sceneTemplate) : []
+  const propObjects = buildPlacedProps(spec.props)
+  const allObjects = [...templateObjects, ...propObjects, ...objects, ...(crowd ? [crowd] : [])]
   const camera = buildStagingCamera(objects, spec.camera, layout)
   const env = ENV_PRESET[spec.environment ?? 'studio']
   return {
@@ -216,7 +225,9 @@ const POSE_ALIASES: Record<string, string> = {
   kneel: 'single-knee', kneeling: 'single-knee', 'one-knee': 'single-knee', propose: 'single-knee', proposal: 'single-knee',
   'both-knees': 'double-knee', 'two-knees': 'double-knee',
   sitting: 'sit', seated: 'sit',
-  crouch: 'squat', crouching: 'squat', squatting: 'squat',
+  // 'crouch' 现在是独立预设（游戏式半蹲），由上面 KNOWN_POSE_IDS 精确命中，不再走别名到深蹲。
+  // 「crouching」按半蹲、「squatting」按深蹲——两个词各归其真身（P4 语义不混）。
+  crouching: 'crouch', squatting: 'squat',
   stand: 'standing', idle: 'standing',
   walking: 'walk', running: 'run', sprint: 'run',
   pointing: 'point', waving: 'wave', 'raise-hand': 'wave', cheering: 'cheer', celebrate: 'cheer',

@@ -410,6 +410,23 @@ export function normalizeMannequinModel(root: THREE.Object3D): THREE.Group {
   return normalized
 }
 
+// ── 焦段 mm ↔ 竖直 FOV（35mm 全幅等效，片高 24mm；three.js 的 fov 就是竖直向）──
+// mm 是给摄影师心智的**派生视图**，fov 才是唯一真相（存储/序列化只有 fov）。
+// 200mm 长焦 ↔ fov≈6.9°，故相机 fov 域下限为 6（serializer/inspector 同步）。
+export const FOCAL_MM_MIN = 12
+export const FOCAL_MM_MAX = 200
+
+export function fovToFocalMm(fov: number): number {
+  const mm = 12 / Math.tan(THREE.MathUtils.degToRad(fov / 2))
+  return Math.round(Math.min(FOCAL_MM_MAX, Math.max(FOCAL_MM_MIN, mm)))
+}
+
+export function focalMmToFov(mm: number): number {
+  const clamped = Math.min(FOCAL_MM_MAX, Math.max(FOCAL_MM_MIN, mm))
+  // 保留 2 位：长焦端 1° 内差好几档 mm，1 位小数会让 mm↔fov 往返漂档（135→134）。
+  return Number(THREE.MathUtils.radToDeg(2 * Math.atan(12 / clamped)).toFixed(2))
+}
+
 export function aspectDimensions(aspectRatio: Scene3DAspectRatio): { width: number; height: number } {
   const ratio = SCENE3D_ASPECT_RATIOS[aspectRatio]
   const width = 1920

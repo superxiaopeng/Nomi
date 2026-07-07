@@ -80,11 +80,18 @@ export function readNomiLocalAsset(url: string): LocalAsset | null {
         originalUrl = sidecar.originalUrl;
       }
     } catch { /* sidecar 不存在或格式异常，忽略 */ }
+    // ageMs：资产落盘至今的毫秒数（mtime 推；生成素材落盘即写、之后不改 → mtime≈providerUrl 铸造时刻）。
+    // 供 assetLocalization 判 sidecar originalUrl 是否仍在新鲜窗内（服务商临时链会过期）。
+    let ageMs: number | undefined;
+    try {
+      ageMs = Math.max(0, Date.now() - fs.statSync(absolutePath).mtimeMs);
+    } catch { /* stat 失败按未知处理 */ }
     return {
       bytes: fs.readFileSync(absolutePath),
       contentType: contentTypeFromPath(absolutePath),
       fileName: relativePath.split("/").pop() || "asset",
       originalUrl,
+      ...(typeof ageMs === "number" ? { ageMs } : {}),
     };
   } catch {
     return null;

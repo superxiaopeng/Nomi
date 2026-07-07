@@ -467,6 +467,11 @@ function registerIpc(): void {
   registerSyncIpc("nomi:model-catalog:mapping:delete", deleteModelCatalogMapping);
   registerSyncIpc("nomi:model-catalog:export", exportModelCatalogPackage);
   registerSyncIpc("nomi:model-catalog:import", importModelCatalogPackage);
+  // 本地 ComfyUI 健康探测（接入卡启用/重检调用；async，直连 localhost /system_stats）。
+  ipcMain.handle("nomi:model-catalog:comfyui:probe", (_event, baseUrl: unknown) => {
+    const { probeComfyuiSystemStats } = require("./comfyuiProbe") as typeof import("./comfyuiProbe");
+    return probeComfyuiSystemStats(String(baseUrl || ""));
+  });
 
   // Skill / Playbook 域（业务函数在 electron/skills/*，这里只接同步 IPC 管道）。
   registerSyncIpc("nomi:skill:list", () => {

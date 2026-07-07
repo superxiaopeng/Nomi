@@ -14,6 +14,8 @@ import { arrangeStoryboardToTimeline } from './sendStoryboardToTimeline'
 import { parseStoryboardPlan } from './storyboardPlan'
 import type { StagingSpec, StagingCharacterSpec } from '../nodes/scene3d/stagingBuilder'
 import type { CameraMoveSpec } from '../nodes/scene3d/cameraMoveBuilder'
+import type { ScenePropPlacement } from '../nodes/scene3d/scene3dPropSpecs'
+import type { Scene3DSceneTemplate } from '../nodes/scene3d/scene3dSceneTemplates'
 import type { CameraSpeed } from '../nodes/scene3d/cameraMoveVocab'
 import { useWorkbenchStore } from '../../workbenchStore'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -100,9 +102,39 @@ function appendDirectiveToNodePrompt(
   return { found: true, applied: true, alreadyApplied: false }
 }
 
-/** create_staging_reference 的参数 → StagingSpec（容错提取；非法枚举值由 builder 兜默认）。 */
-function parseStagingSpec(record: Record<string, unknown>): StagingSpec {
-  const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+const strValue = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+
+/** 灰模布景字段（sceneTemplate + props）容错提取——站位/运镜两工具共用（P4）。 */
+function parseSceneBackdrop(record: Record<string, unknown>): {
+  sceneTemplate?: Scene3DSceneTemplate
+  props?: ScenePropPlacement[]
+} {
+  const rawProps = Array.isArray(record.props) ? record.props : []
+  const props: ScenePropPlacement[] = rawProps
+    .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
+    .flatMap((p) => {
+      const kind = strValue(p.kind)
+      if (!kind) return []
+      const pos = Array.isArray(p.position) && p.position.length >= 2
+        && typeof p.position[0] === 'number' && typeof p.position[1] === 'number'
+        ? [p.position[0], p.position[1]] as [number, number]
+        : undefined
+      return [{
+        kind: kind as ScenePropPlacement['kind'],
+        position: pos,
+        rotationY: typeof p.rotationY === 'number' ? p.rotationY : undefined,
+        scale: typeof p.scale === 'number' ? p.scale : undefined,
+      }]
+    })
+  return {
+    sceneTemplate: strValue(record.sceneTemplate) as Scene3DSceneTemplate | undefined,
+    props: props.length > 0 ? props : undefined,
+  }
+}
+
+/** create_staging_reference 的参数 → StagingSpec（容错提取；非法枚举值由 builder 兜默认）。导出供单测。 */
+export function parseStagingSpec(record: Record<string, unknown>): StagingSpec {
+  const str = strValue
   const rawChars = Array.isArray(record.characters) ? record.characters : []
   const characters: StagingCharacterSpec[] = rawChars
     .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
@@ -114,6 +146,7 @@ function parseStagingSpec(record: Record<string, unknown>): StagingSpec {
   if (characters.length === 0) characters.push({})
   const cameraRaw = record.camera && typeof record.camera === 'object' ? (record.camera as Record<string, unknown>) : null
   const crowdRaw = record.crowd && typeof record.crowd === 'object' ? (record.crowd as Record<string, unknown>) : null
+  const backdrop = parseSceneBackdrop(record)
   return {
     characters,
     layout: str(record.layout) as StagingSpec['layout'],
@@ -129,6 +162,8 @@ function parseStagingSpec(record: Record<string, unknown>): StagingSpec {
       crowdRaw && typeof crowdRaw.rows === 'number' && typeof crowdRaw.columns === 'number'
         ? { rows: crowdRaw.rows, columns: crowdRaw.columns }
         : undefined,
+    sceneTemplate: backdrop.sceneTemplate,
+    props: backdrop.props,
   }
 }
 
@@ -141,14 +176,19 @@ export function parseCameraMoveSpec(record: Record<string, unknown>): {
   shot?: CameraMoveSpec['shot']
   subjectPose?: string
   customMove?: string
+  sceneTemplate?: Scene3DSceneTemplate
+  props?: ScenePropPlacement[]
 } {
-  const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+  const str = strValue
+  const backdrop = parseSceneBackdrop(record)
   return {
     move: str(record.move) as CameraMoveSpec['move'] | undefined,
     speed: str(record.speed) as CameraMoveSpec['speed'],
     shot: str(record.shot) as CameraMoveSpec['shot'],
     subjectPose: str(record.subjectPose),
     customMove: str(record.customMove),
+    sceneTemplate: backdrop.sceneTemplate,
+    props: backdrop.props,
   }
 }
 
@@ -216,7 +256,10 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
       const kind = plannedKinds[index]
       const positionRecord =
         node.position && typeof node.position === 'object' ? (node.position as Record<string, unknown>) : null
-      const meta = buildPlannedNodeMeta(node, entryByKey)
+      const plannedMeta = buildPlannedNodeMeta(node, entryByKey)
+      // 参考卡身份透传（分镜方案的角色/场景/道具锚）→ node.meta.referenceSheet，编号分配处据此跳过。
+      const meta =
+        node.referenceSheet === true ? { ...(plannedMeta ?? {}), referenceSheet: true } : plannedMeta
       // 单节点：尊重 agent 指定位置（增量添加可能要贴近某节点），否则同走避让布局。
       const position =
         total > 1
@@ -360,6 +403,8 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
       speed: parsed.speed,
       shot: parsed.shot,
       subjectPose: parsed.subjectPose,
+      sceneTemplate: parsed.sceneTemplate,
+      props: parsed.props,
     }
     const [{ buildCameraMoveScene }, { CAMERA_SPEED_DURATION, CAMERA_MOVE_LABEL }] = await Promise.all([
       import('../nodes/scene3d/cameraMoveBuilder'),
@@ -467,6 +512,22 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
       placed: result.sent.map((item) => ({ nodeId: item.nodeId, role: item.role, startFrame: item.startFrame })),
       ...(result.skipped.length ? { skipped: result.skipped } : {}),
     }
+  }
+
+  if (toolName === 'tidy_canvas') {
+    // 助手「整理画布」：复用 store 的 tidyCategory（与右下角整理按钮同一实现，P1 无并行版）。
+    // categoryId 缺省 = 用户当前正看的子画布（activeCategoryId 在 workbenchStore）；aspect 用视口比例兜底。
+    const categoryId =
+      (typeof record.categoryId === 'string' && record.categoryId.trim()) ||
+      useWorkbenchStore.getState().activeCategoryId ||
+      'shots'
+    const aspect =
+      typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerWidth / window.innerHeight : 16 / 9
+    const count = useGenerationCanvasStore
+      .getState()
+      .nodes.filter((node) => (node.categoryId || 'shots') === categoryId).length
+    inCtx(() => useGenerationCanvasStore.getState().tidyCategory(categoryId, aspect))
+    return { tidied: categoryId, nodeCount: count }
   }
 
   throw new Error(`unknown tool ${toolName}`)

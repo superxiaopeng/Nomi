@@ -7,7 +7,25 @@ import type { AssetIngestion, AssetMediaKind } from "./types";
 
 const NOMI_LOCAL_PREFIX = "nomi-local://";
 
-export type LocalAsset = { bytes: Buffer; contentType: string; fileName: string; originalUrl?: string };
+export type LocalAsset = {
+  bytes: Buffer;
+  contentType: string;
+  fileName: string;
+  originalUrl?: string;
+  /** 资产落盘至今的毫秒数（文件 mtime 推）。用于判 originalUrl（服务商临时直链）是否仍新鲜。 */
+  ageMs?: number;
+};
+
+/** sidecar originalUrl 的信任窗：kie ~3 天 / apimart 72h 的安全下界。窗内直接用公网直链（零上传
+ *  零延迟）；过窗视为可能已死 → 走上传链用本地字节换新链。ageMs 未知（老调用方/stat 失败）按新鲜
+ *  处理（保持既有行为，不为不可知情况加惩罚）。 */
+export const ORIGINAL_URL_TRUST_MS = 48 * 60 * 60 * 1000;
+
+export function trustedOriginalUrl(asset: Pick<LocalAsset, "originalUrl" | "ageMs"> | null | undefined): string | null {
+  if (!asset?.originalUrl) return null;
+  if (typeof asset.ageMs === "number" && asset.ageMs > ORIGINAL_URL_TRUST_MS) return null;
+  return asset.originalUrl;
+}
 export type LocalAssetReader = (url: string) => LocalAsset | null;
 export type HttpPostJson = (url: string, headers: Record<string, string>, body: unknown) => Promise<unknown>;
 // extraFields：multipart 里除 file 外的文本字段(如 KIE stream 的 uploadPath/fileName)。
@@ -111,9 +129,11 @@ export async function resolveLocalAsset(
     throw new Error(`所有免配置上传 host 都失败：${errors.join("；") || "(链为空)"}`);
   }
   const asset = read(localUrl);
-  if (!asset) throw new Error(`本地素材读取失败：${localUrl}`);
-  // sidecar originalUrl 优先：公网 URL 所有 vendor 直接使用，不转 base64、不需供应商上传 API。
-  if (asset.originalUrl) return asset.originalUrl;
+  if (!asset) throw new Error(`参考素材的本地文件读取失败（可能已被删除或随项目迁移）：${localUrl}。请重新生成该节点或重新导入这张素材。`);
+  // sidecar originalUrl **新鲜窗内**优先：公网 URL 所有 vendor 直接使用，不转 base64、不需供应商上传 API。
+  // 过窗（服务商临时链可能已死）→ 落到下面的上传/内联路径，用本地字节换新值（参考图永不过期的关键）。
+  const trusted = trustedOriginalUrl(asset);
+  if (trusted) return trusted;
   const base64 = asset.bytes.toString("base64");
   const dataUrl = `data:${asset.contentType};base64,${base64}`;
 
@@ -207,9 +227,11 @@ export async function localizeAssetsForVendor(
   const urlMap = new Map<string, string>();
   for (const url of urls) {
     const asset = read(url);
-    // sidecar originalUrl 优先:已是公网 URL,不需任何上传通道,任意媒体类型直接用。
-    if (asset?.originalUrl) {
-      urlMap.set(url, asset.originalUrl);
+    // sidecar originalUrl（新鲜窗内，见 trustedOriginalUrl）优先:已是公网 URL,不需任何上传通道,
+    // 任意媒体类型直接用。过窗 → 走下面的通道解析用本地字节重新换链。
+    const trusted = trustedOriginalUrl(asset);
+    if (trusted) {
+      urlMap.set(url, trusted);
       continue;
     }
     const mediaKind = mediaKindFromContentType(asset?.contentType);

@@ -7,7 +7,7 @@ import type { PlanAnchor, PlanShot } from '../../generationCanvas/agent/storyboa
 import { DURATION_OPTIONS_SEC } from '../../generationCanvas/agent/storyboardPlanEdits'
 import type { ModelOption } from '../../../config/models'
 import { useDedupedModelSelect } from '../../common/useDedupedModelSelect'
-import ShotParamControls from './ShotParamControls'
+import { ShotParamsInline, ShotParamsDrawer } from './ShotParamControls'
 
 /**
  * 镜卡（白底主轴）。重设计 v4：白卡 + shadow-nomi-sm + 放大镜号,做成视觉主轴(比锚区设定面更有存在感)。
@@ -18,7 +18,7 @@ import ShotParamControls from './ShotParamControls'
 type Props = {
   shot: PlanShot
   anchors: PlanAnchor[]
-  /** 可选视频模型清单（父组件拉一次传入，完整 ModelOption 供解析档案参数）；空 → 不显模型选择器，落画布用默认视频模型兜底。 */
+  /** 可选模型清单（父组件按镜头种类传图片/视频清单，完整 ModelOption 供解析档案参数）；空 → 不显模型选择器，落画布按种类用默认模型兜底。 */
   modelOptions?: ModelOption[]
   /** 这镜引用了、但锚已不存在的 id（红标 + 阻断确认）。 */
   danglingIds: string[]
@@ -40,11 +40,25 @@ type Props = {
 export default function StoryboardShotCard(props: Props): JSX.Element {
   const { shot, anchors, modelOptions, danglingIds, onUpdate, onToggleAnchor, onRemove, promptInvalid, onApplyParamsToAll } = props
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  // 参数抽屉 open 态提升到镜卡：inline 选择器并进 header 同一行，抽屉 full-width 落在下方（用户反馈「参数换行多」）。
+  const [paramsOpen, setParamsOpen] = React.useState(false)
   const byId = new Map(anchors.map((anchor) => [anchor.id, anchor]))
   const selected = shot.anchorIds.filter((id) => byId.has(id))
   const unselected = anchors.filter((anchor) => !shot.anchorIds.includes(anchor.id))
 
+  // 镜头种类：image=静态画面（无时长、图片模型）；video=带时长运镜。缺省（旧方案无字段）按 video。
+  // 切种类清掉模型/模式/参数——两种类的模型目录不通用，留着会张冠李戴（落画布按种类取默认兜底）；
+  // 切回 video 时时长兜底 5s（图片镜头的 durationSec 是 0）。
+  const shotKind = shot.shotKind ?? 'video'
+  const isImageShot = shotKind === 'image'
+  const onKindChange = (value: string): void => {
+    if (value === shotKind) return
+    if (value === 'image') onUpdate({ shotKind: 'image', modelKey: undefined, modeId: undefined, params: undefined })
+    else onUpdate({ shotKind: 'video', durationSec: shot.durationSec > 0 ? shot.durationSec : 5, modelKey: undefined, modeId: undefined, params: undefined })
+  }
+
   const durationOptions = [...new Set([...DURATION_OPTIONS_SEC, shot.durationSec])]
+    .filter((sec) => Number.isFinite(sec) && sec > 0)
     .sort((a, b) => a - b)
     .map((sec) => ({ value: String(sec), label: `${sec} 秒` }))
   // 模型选择器：空值=默认（落画布用默认视频模型兜底）。选了具体模型 → 写 modelKey，清 modeId
@@ -76,58 +90,86 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
         props.isDragOver ? 'border-nomi-accent' : 'border-nomi-line',
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 cursor-grab text-nomi-ink-20 active:cursor-grabbing" aria-hidden>
-          <IconGripVertical size={15} stroke={1.6} />
-        </span>
-        <span className="text-title font-semibold text-nomi-ink tabular-nums">镜 {shot.index}</span>
-        <NomiSelect
-          ariaLabel="时长"
-          leadingLabel="时长"
-          size="xs"
-          value={String(shot.durationSec)}
-          options={durationOptions}
-          onChange={(value) => onUpdate({ durationSec: Number(value) })}
-        />
-        {modelSelectOptions ? (
+      {/* header 一行：镜号/时长/模型/供应商/inline 参数全并进同一 flex-wrap 区，删除钉右上（不参与折行）。 */}
+      <div className="flex items-start gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          <span className="shrink-0 cursor-grab text-nomi-ink-20 active:cursor-grabbing" aria-hidden>
+            <IconGripVertical size={15} stroke={1.6} />
+          </span>
+          <span className="text-title font-semibold text-nomi-ink tabular-nums mr-0.5">镜 {shot.index}</span>
           <NomiSelect
-            ariaLabel="视频模型"
-            leadingLabel="模型"
+            ariaLabel="镜头类型"
+            leadingLabel="类型"
             size="xs"
-            value={shot.modelKey ? modelSelect.modelValue : ''}
-            options={modelSelectOptions}
-            onChange={onModelSelect}
+            value={shotKind}
+            options={[
+              { value: 'image', label: '图片' },
+              { value: 'video', label: '视频' },
+            ]}
+            onChange={onKindChange}
           />
-        ) : null}
-        {modelSelect.providerOptions.length > 1 ? (
-          <NomiSelect
-            ariaLabel="供应商"
-            leadingLabel="供应商"
-            size="xs"
-            value={modelSelect.providerValue}
-            options={modelSelect.providerOptions}
-            onChange={modelSelect.onProviderPick}
+          {!isImageShot ? (
+            <NomiSelect
+              ariaLabel="时长"
+              leadingLabel="时长"
+              size="xs"
+              value={String(shot.durationSec)}
+              options={durationOptions}
+              onChange={(value) => onUpdate({ durationSec: Number(value) })}
+            />
+          ) : null}
+          {modelSelectOptions ? (
+            <NomiSelect
+              ariaLabel={isImageShot ? '图片模型' : '视频模型'}
+              leadingLabel="模型"
+              size="xs"
+              triggerMaxWidth={150}
+              value={shot.modelKey ? modelSelect.modelValue : ''}
+              options={modelSelectOptions}
+              onChange={onModelSelect}
+            />
+          ) : null}
+          {modelSelect.providerOptions.length > 1 ? (
+            <NomiSelect
+              ariaLabel="供应商"
+              leadingLabel="供应商"
+              size="xs"
+              triggerMaxWidth={110}
+              value={modelSelect.providerValue}
+              options={modelSelect.providerOptions}
+              onChange={modelSelect.onProviderPick}
+            />
+          ) : null}
+          {/* inline 参数（archetype 派生）：常用 select + 「参数」抽屉开关，并进同一行。默认模型/无档案 → 不渲染。 */}
+          <ShotParamsInline
+            modelOption={selectedModelOption}
+            modeId={shot.modeId}
+            params={shot.params || {}}
+            onUpdate={(patch) => onUpdate(patch)}
+            open={paramsOpen}
+            onToggleOpen={() => setParamsOpen((o) => !o)}
           />
-        ) : null}
-        <span className="flex-1" />
+        </div>
         <button
           type="button"
           aria-label="删除镜头"
           onClick={onRemove}
-          className="size-7 grid place-items-center rounded-nomi-sm text-nomi-ink-30 hover:bg-nomi-ink-10 hover:text-nomi-ink-60"
+          className="shrink-0 size-7 grid place-items-center rounded-nomi-sm text-nomi-ink-30 hover:bg-nomi-ink-10 hover:text-nomi-ink-60"
         >
           <IconTrash size={14} stroke={1.6} />
         </button>
       </div>
 
-      {/* 模型参数（archetype 派生）：常用 inline + 抽屉，渐进展开。默认模型/无档案 → 不渲染。 */}
-      <ShotParamControls
-        modelOption={selectedModelOption}
-        modeId={shot.modeId}
-        params={shot.params || {}}
-        onUpdate={(patch) => onUpdate(patch)}
-        {...(onApplyParamsToAll ? { onApplyToAll: onApplyParamsToAll } : {})}
-      />
+      {/* 参数抽屉：open 时才渲染，full-width 落在 header 下方（模式/其余参数/套用全部）。 */}
+      {paramsOpen ? (
+        <ShotParamsDrawer
+          modelOption={selectedModelOption}
+          modeId={shot.modeId}
+          params={shot.params || {}}
+          onUpdate={(patch) => onUpdate(patch)}
+          {...(onApplyParamsToAll ? { onApplyToAll: onApplyParamsToAll } : {})}
+        />
+      ) : null}
 
       <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
         <span className="text-micro text-nomi-ink-40 mr-0.5">参考</span>
@@ -206,7 +248,7 @@ export default function StoryboardShotCard(props: Props): JSX.Element {
         value={shot.prompt}
         onChange={(event) => onUpdate({ prompt: event.target.value })}
         aria-label={`镜 ${shot.index} 提示词`}
-        placeholder="这镜画什么：运镜 + 动作演进（不复述锚的静态描述）"
+        placeholder={isImageShot ? '这镜画什么：构图 + 景别 + 人物姿态/表情（静态画面，不写运镜）' : '这镜画什么：运镜 + 动作演进（不复述锚的静态描述）'}
         className={cn(
           'mt-2.5 px-2 py-2 rounded-nomi-sm border bg-nomi-paper',
           'text-body-sm text-nomi-ink-80 leading-normal focus:border-nomi-accent',

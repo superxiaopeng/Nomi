@@ -69,10 +69,12 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
   // 导致 body 的 duration 为空（实测）。数字原样保留，字符串走 trim，缺省 ""。
   const durationRaw = extras.duration ?? extras.durationSeconds ?? extras.videoDuration;
   const duration = typeof durationRaw === "number" ? durationRaw : firstString(durationRaw);
+  const refInput = referenceInputParams(extras);
   return {
     ...extras,
     size,
-    n: extras.n ?? 1,
+    // n 强制数字（OpenAI images 要 int；UI number 参数可能存成字符串 "1"，整 token 会原样发 → 严格端点 400）。
+    n: Number(extras.n) || 1,
     width: request.width,
     height: request.height,
     seed: request.seed,
@@ -81,9 +83,66 @@ export function taskTemplateParams(request: TaskParamsInput): JsonRecord {
     cfg_scale: request.cfgScale,
     negative_prompt: request.negativePrompt,
     duration,
-    image_url: firstReferenceImage(request),
+    // 空→undefined（不是 ""）：body 的 `image: "{{request.params.image_url}}"` 整 token 渲染时，
+    // undefined 会被丢弃、"" 却会当空字段发出去（纯文生图/文生视频误带 image:"" 会被部分中转拒）。
+    image_url: firstReferenceImage(request) || undefined,
     // 参考输入（单图首/尾帧 + 多参考数组）—— 构建逻辑在 electron/catalog/archetypeInput（M5）。
-    ...referenceInputParams(extras),
+    ...refInput,
+    // chat/completions 多模态图生图（通用中转 gemini/nano-banana 系）：参考图 → content 里的 image_url 项数组。
+    // 声明式模板展不开变长数组，故在此把 reference_images 建成 parts 数组；op body 用整 token 引用，
+    // renderTemplateValue 会把它摊平进 content（见 requestPipeline flatMap）。空数组 → content 只剩 text 项。
+    chat_image_parts: chatImageParts(refInput.reference_images),
     max_tokens: extras.maxTokens ?? extras.max_tokens,
   };
+}
+
+// 参考值的 URL 形状（http/nomi-local/data/blob/绝对路径）。护栏判定只认它——archetypeInput 里还混着
+// model enum（如 "gpt-image-2-image-to-image"）和 fixedParams 常量，按「有任意值」判会误报有参考。
+const REF_URL_RE = /^(https?:\/\/|nomi-local:\/\/|data:|blob:|\/)/i;
+
+function containsRefUrl(value: unknown): boolean {
+  if (typeof value === "string") return REF_URL_RE.test(value.trim());
+  if (Array.isArray(value)) return value.some(containsRefUrl);
+  if (value && typeof value === "object") return Object.values(value).some(containsRefUrl);
+  return false;
+}
+
+/**
+ * 图生图/图生视频请求里是否真的带了 ≥1 张参考素材（L3 诚实护栏，纯函数可测）。
+ * 两路口径：① firstReferenceImage 单图聚合（image_url/firstFrameUrl/referenceImages[0]…）；
+ * ② referenceInputParams 产出（档案 archetypeInput 的 input_urls/image_urls/volcengine content 项…
+ *   或非档案的 reference_image_urls/reference_images），递归扫 URL 形状的值。
+ * false = 用户意图「拿图改/拿图生」但一张图都递不出去 → 调用方拒发报人话，绝不静默退化纯文生。
+ */
+export function hasImageEditReferences(request: TaskParamsInput): boolean {
+  if (firstReferenceImage(request)) return true;
+  const extras = request.extras || {};
+  // extras.image：headless/老调用方的裸键口径（部分 curated body 直读 {{request.params.image}}）。
+  return containsRefUrl([extras.image, referenceInputParams(extras)]);
+}
+
+/**
+ * L3 诚实护栏（runTask 前置闸，纯函数）：图生图/图生视频「参考图缺失」或「无传输 mapping」→ 返回
+ * 人话错误（调用方在付费守卫/vendor 调用之前拒发，零扣费）；其余情况 null。此前会静默退化成纯文生
+ * ——模板引擎丢空键 / fallback body 根本没有图片位——生成成功、扣费成功、和原图毫无关系，
+ * 正是「图生图不按原图」的用户体感（docs/plan/2026-07-06-i2i-reference-reliability.md）。
+ */
+export function imageEditGuardError(kind: string, request: TaskParamsInput, hasMapping: boolean, modelLabel: string): string | null {
+  if (kind !== "image_edit" && kind !== "image_to_video") return null;
+  const what = kind === "image_edit" ? "图生图" : "图生视频";
+  if (!hasImageEditReferences(request)) {
+    return `${what}缺少参考图：这次请求里没有任何图片可以发给模型。请连接一张图片节点（或在参考槽添加图片）后再生成${kind === "image_edit" ? "，或切回「文生图」" : ""}。`;
+  }
+  if (!hasMapping) {
+    return `模型「${modelLabel}」在本机没有配置「${kind === "image_edit" ? "图生图（改图）" : "图生视频"}」通道，参考图不会生效。旧版本接入的模型不含此能力：请在「模型接入」里删除该模型后重新接入一次，或改用支持${what}的模型。`;
+  }
+  return null;
+}
+
+/** 参考图 URL 数组 → chat/completions content 的 image_url 项数组。非字符串/空 URL 剔除。 */
+export function chatImageParts(referenceImages: unknown): Array<{ type: "image_url"; image_url: { url: string } }> {
+  if (!Array.isArray(referenceImages)) return [];
+  return referenceImages
+    .filter((u): u is string => typeof u === "string" && u.trim() !== "")
+    .map((url) => ({ type: "image_url", image_url: { url } }));
 }

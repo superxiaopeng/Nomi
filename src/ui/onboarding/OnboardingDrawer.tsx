@@ -19,9 +19,12 @@ import { OnboardingWizard } from './OnboardingWizard'
 import { FoldableModelCard } from './FoldableModelCard'
 import { VendorOnboardCard } from './VendorOnboardCard'
 import { AvailableGroup } from './AvailableGroup'
-import { ModelChipGroups, type ChipModel } from './ModelChipGroups'
+import { type ChipModel } from './ModelChipGroups'
+import { ModelEnableEditor } from './ModelEnableEditor'
+import { CustomVendorManage } from './CustomVendorManage'
 import { ConnectAssistantCard, type McpInfo } from './ConnectAssistantCard'
 import { DreaminaMemberCard, type DreaminaStatus } from './DreaminaMemberCard'
+import { ComfyuiLocalCard, COMFYUI_VENDOR_KEY } from './ComfyuiLocalCard'
 import { KNOWN_VENDORS, isKnownVendor } from '../../config/knownVendors'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { notifyModelOptionsRefresh } from '../../config/useModelOptions'
@@ -31,6 +34,7 @@ type VendorMeta = {
   name: string
   hasApiKey: boolean
   baseUrl: string
+  enabled: boolean
 }
 
 // 能力概览：四类产物 → 图标/文案。covered 由已连通供应商的模型 kind 派生（derive 不 hardcode）。
@@ -68,6 +72,7 @@ export function OnboardingDrawer(): JSX.Element {
           name: String(v.name || v.key),
           hasApiKey: Boolean(v.hasApiKey),
           baseUrl: String(v.baseUrlHint || ''),
+          enabled: v.enabled !== false,
         })
       }
       const rows: ChipModel[] = ms.map((m) => ({
@@ -75,6 +80,8 @@ export function OnboardingDrawer(): JSX.Element {
         vendorKey: String(m.vendorKey),
         labelZh: String(m.labelZh || m.modelKey),
         kind: m.kind as ChipModel['kind'],
+        // enabled 缺省视为 true（老快照/DTO 未带时不误停用）。
+        enabled: m.enabled !== false,
       }))
       setVendorMeta(metaMap)
       setModels(rows)
@@ -114,7 +121,7 @@ export function OnboardingDrawer(): JSX.Element {
     if (!bridge) return
     const ok = await confirmDialog({
       title: '删除模型',
-      message: `删除「${row.labelZh}」？此操作不可恢复。`,
+      message: `删除「${row.labelZh}」？此操作不可恢复，之后要用需重新拉取。`,
       confirmLabel: '删除',
       danger: true,
     })
@@ -124,6 +131,22 @@ export function OnboardingDrawer(): JSX.Element {
       refresh()
     } catch (e) {
       void alertDialog({ title: '删除失败', message: e instanceof Error ? e.message : String(e) })
+    }
+  }, [refresh])
+
+  // 启用/停用模型（可逆，保留清单）：逐行只翻 enabled（upsert 保留其余字段），末尾一次 refresh。
+  // enabled:false 的模型天然从生成下拉/runtime 消失（selectExecutableModel 只选 enabled）。
+  // 单个 = 传 1 行；批量（全选/全不选）= 传多行，避免 N 次 refresh。
+  const handleSetEnabled = React.useCallback((rows: ChipModel[], enabled: boolean) => {
+    const bridge = getDesktopBridge()
+    if (!bridge || rows.length === 0) return
+    try {
+      for (const row of rows) {
+        bridge.modelCatalog.upsertModel({ vendorKey: row.vendorKey, modelKey: row.modelKey, enabled })
+      }
+      refresh()
+    } catch (e) {
+      void alertDialog({ title: '操作失败', message: e instanceof Error ? e.message : String(e) })
     }
   }, [refresh])
 
@@ -143,7 +166,15 @@ export function OnboardingDrawer(): JSX.Element {
   // 其他模型：用户自定义接入（有 key 才存在）→ 视为已接入。排除有专属卡的内置家：
   // 5 个 KNOWN_VENDORS + 即梦 dreamina（走 DreaminaMemberCard，其 seeded 模型不是"自定义"，
   // 否则与即梦会员卡重复且被误标"已配置"——真机走查抓到，dreamina 种了 4 个模型）。
-  const otherModels = models.filter((m) => !isKnownVendor(m.vendorKey) && m.vendorKey !== 'dreamina')
+  // 排除有专属卡的内置家：dreamina（会员卡）+ comfyui-local（本地后端启用卡）。否则本地 ComfyUI 会落进
+  // 通用「自定义中转」卡（那卡的 key/BaseURL 手填隐喻对无 key 本地后端是错的）。
+  const otherModels = models.filter((m) => !isKnownVendor(m.vendorKey) && m.vendorKey !== 'dreamina' && m.vendorKey !== COMFYUI_VENDOR_KEY)
+
+  // 本地 ComfyUI（无 key 本地后端，专属卡）：种子存在才显；enabled 决定归「已接入 / 可接入」。
+  const comfyuiMeta = vendorMeta.get(COMFYUI_VENDOR_KEY)
+  const comfyuiAvailable = comfyuiMeta !== undefined
+  const comfyuiEnabled = !!comfyuiMeta?.enabled
+  const comfyuiModels = models.filter((m) => m.vendorKey === COMFYUI_VENDOR_KEY)
 
   // 即梦 / 编程助手连接判定 + 可用性（卡是否该出现）。
   const dreaminaAvailable = dreaminaStatus !== null
@@ -155,6 +186,7 @@ export function OnboardingDrawer(): JSX.Element {
   const hasConnected =
     connectedKnown.length > 0 ||
     otherModels.length > 0 ||
+    comfyuiEnabled ||
     dreaminaConnected ||
     assistantConnected
 
@@ -166,6 +198,23 @@ export function OnboardingDrawer(): JSX.Element {
     }
     return set
   }, [models, vendorMeta])
+
+  // 其他（自定义中转）按 vendor 拆成每家一张卡，卡名用用户在接入时填的「来源名称」（vendorMeta.name）。
+  // 根因修复：此前全塞进单张「其他模型」卡、只按 kind 分组，多家糊一起分不清哪个 key 对哪家。
+  // name 字段本就存在（接入向导「来源名称」→ Vendor.name），这里只是把它显示出来、按家拆开。
+  const otherVendorGroups: Array<{ vendorKey: string; name: string; models: ChipModel[] }> = []
+  {
+    const indexByVendor = new Map<string, number>()
+    for (const m of otherModels) {
+      let idx = indexByVendor.get(m.vendorKey)
+      if (idx === undefined) {
+        idx = otherVendorGroups.length
+        indexByVendor.set(m.vendorKey, idx)
+        otherVendorGroups.push({ vendorKey: m.vendorKey, name: vendorMeta.get(m.vendorKey)?.name || m.vendorKey, models: [] })
+      }
+      otherVendorGroups[idx].models.push(m)
+    }
+  }
 
   const renderVendorCard = (card: typeof knownCards[number]) => (
     <VendorOnboardCard
@@ -217,18 +266,34 @@ export function OnboardingDrawer(): JSX.Element {
           <>
             <div className="text-micro font-semibold text-nomi-ink-40 pt-1 px-0.5">已接入</div>
             {connectedKnown.map(renderVendorCard)}
-            {otherModels.length > 0 ? (
-              <FoldableModelCard
-                glyph={<IconStack2 size={16} stroke={1.6} />}
-                glyphTone="soft"
-                name="其他模型"
-                subtitle={`${otherModels.length} 个自定义模型`}
-                status="ok"
-                statusLabel="已配置"
-                defaultExpanded={false}
-              >
-                <ModelChipGroups models={otherModels} connected onDelete={handleDelete} />
-              </FoldableModelCard>
+            {otherVendorGroups.map((group) => {
+              const enabledN = group.models.filter((m) => m.enabled).length
+              const meta = vendorMeta.get(group.vendorKey)
+              return (
+                <FoldableModelCard
+                  key={group.vendorKey}
+                  glyph={<IconStack2 size={16} stroke={1.6} />}
+                  glyphTone="soft"
+                  name={group.name}
+                  subtitle={`${enabledN} / ${group.models.length} 个模型已启用`}
+                  status="ok"
+                  statusLabel="已配置"
+                  defaultExpanded={false}
+                >
+                  <ModelEnableEditor models={group.models} onToggle={handleSetEnabled} onDelete={handleDelete} />
+                  <CustomVendorManage
+                    vendorKey={group.vendorKey}
+                    vendorName={group.name}
+                    baseUrl={meta?.baseUrl ?? ''}
+                    hasApiKey={meta?.hasApiKey ?? true}
+                    modelCount={group.models.length}
+                    onChanged={refresh}
+                  />
+                </FoldableModelCard>
+              )
+            })}
+            {comfyuiAvailable && comfyuiEnabled ? (
+              <ComfyuiLocalCard enabled={comfyuiEnabled} baseUrl={comfyuiMeta?.baseUrl ?? ''} models={comfyuiModels} onChanged={refresh} />
             ) : null}
             {dreaminaAvailable && dreaminaConnected ? (
               <DreaminaMemberCard status={dreaminaStatus} onChanged={refresh} />
@@ -259,6 +324,12 @@ export function OnboardingDrawer(): JSX.Element {
           </button>
           <div className="text-micro text-nomi-ink-40 px-1 -mt-0.5">new-api 一次拉全图·视频·文本 · 也可接官方厂商 / 自定义接口</div>
         </AvailableGroup>
+
+        {comfyuiAvailable && !comfyuiEnabled ? (
+          <AvailableGroup title="有本地 ComfyUI？" count={1} defaultExpanded={false}>
+            <ComfyuiLocalCard enabled={comfyuiEnabled} baseUrl={comfyuiMeta?.baseUrl ?? ''} models={comfyuiModels} onChanged={refresh} />
+          </AvailableGroup>
+        ) : null}
 
         {dreaminaAvailable && !dreaminaConnected ? (
           <AvailableGroup title="有即梦会员？" count={1} defaultExpanded={false}>

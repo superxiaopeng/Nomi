@@ -716,3 +716,19 @@ describe('火山方舟 Seedance — 档案投影', () => {
     })
   })
 })
+
+describe('asArray:false 的数组路由槽 → 单图字符串（Agnes i2v，2026-07-06 Windows 用户群反馈）', () => {
+  const AGNES = getArchetypeById('agnes-video')!
+  it('i2v 模式 image 槽（image_ref + asArray:false + max 1）发字符串，不发数组——Agnes Go 后端 Alias.image 是 string', () => {
+    const meta = { archetype: { id: 'agnes-video', modeId: 'i2v' } }
+    const out = buildArchetypeInputParams(meta, AGNES, { referenceImages: ['https://cdn/first.png'] })
+    expect(out.image).toBe('https://cdn/first.png')
+    expect(Array.isArray(out.image)).toBe(false)
+  })
+  it('未声明 asArray 的数组槽照旧发数组（Seedance omni 不受影响）', () => {
+    const meta = { archetype: { id: 'seedance-2', modeId: 'omni' }, referenceImageUrls: ['https://cdn/a.png', 'https://cdn/b.png'] }
+    const out = buildArchetypeInputParams(meta, SEEDANCE)
+    const arrayValues = Object.values(out).filter((v) => Array.isArray(v))
+    expect(arrayValues.length).toBeGreaterThan(0)
+  })
+})

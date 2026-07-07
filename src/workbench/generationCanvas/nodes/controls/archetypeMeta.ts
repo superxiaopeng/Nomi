@@ -484,6 +484,12 @@ export function buildArchetypeInputParams(
           out[inputKey] = capped.map((url) => ({ type: 'video_url', video_url: { url } }))
         } else if (inputKey === 'volcengine_audio_contents') {
           out[inputKey] = capped.map((url) => ({ type: 'audio_url', audio_url: { url } }))
+        } else if (!slotAsArray(slot) && slot.max === 1) {
+          // 声明 asArray:false 的单容量数组路由槽（Agnes i2v 的 image）→ 发**单图字符串**，声明说话算话。
+          // 旧实现无视 asArray 恒发数组 → Agnes Go 后端 Alias.image(string) 解析失败，Windows 用户
+          // 只能手改 asar 把模板打成 image.0 顶着（2026-07-06 群反馈实锤）。修在构造层而非各家模板：
+          // 声明层的 asArray 从此对数组路由槽也生效，同类档案不再逐个踩。
+          out[inputKey] = capped[0]
         } else {
           out[inputKey] = capped
         }

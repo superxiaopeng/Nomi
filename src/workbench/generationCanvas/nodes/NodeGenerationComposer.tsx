@@ -590,7 +590,9 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
                 ? '需要先添加参考素材（拖入 / 连线 / 点 +）'
                 : '需要先连接一个图片节点作为首帧'
               : nodeExecutionKind === 'image'
-                ? undefined
+                ? acceptsDrop
+                  ? '图生图需要参考图（拖入 / 连线 / 点 +），或切回「文生图」'
+                  : '图生图需要参考图：请连接图片节点或添加参考，或切回「文生图」'
                 : `「${node.kind}」类型暂不支持直接生成`
             : undefined
           const title = disabledReason

@@ -1,5 +1,7 @@
 # 快速启动
 
+> 官网图文版新手指南已上线到：<https://nomiaqm.com/quickstart.html>
+
 ## 方式一：桌面版（推荐，双击即用）
 
 从 [GitHub Releases](https://github.com/aqm857886159/Nomi/releases/latest) 下载安装包：
