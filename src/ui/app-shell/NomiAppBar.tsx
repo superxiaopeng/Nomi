@@ -6,29 +6,13 @@ import { NomiBrand, NomiStepper, WorkbenchButton } from '../../design'
 import { OnboardingChecklist } from '../../workbench/onboarding/OnboardingChecklist'
 import { AboutNomiPopover } from './AboutNomiPopover'
 import { cn } from '../../utils/cn'
-import { dispatchContextualAssetPopoverOpen, getGlobalAssetPopoverAnchorRect } from '../browser/globalAssetPopoverEvents'
-import { BROWSER_ASSET_LIBRARY_UPDATED_EVENT, readBrowserAssetLibraryState } from '../browser/browserAssetLibraryStorage'
-import { getDesktopActiveProjectId } from '../../desktop/activeProject'
+import { dispatchContextualAssetPopoverOpen, getGlobalAssetPopoverAnchorRect } from '../browser/overlay/globalAssetPopoverEvents'
+import { useGlobalBrowserAssetCount } from '../browser/assets/useGlobalBrowserAssets'
+import { handleWindowTitlebarDoubleClick } from './windowTitlebarDoubleClick'
 
 // 平台分流：win32 下品牌/关于 + 上手清单都让位给 WorkbenchShell 的自绘标题栏（windowbar），
 // 本栏不重复渲染；非 win32（mac/Linux）保持原生窗口，品牌与清单仍住这里——两平台都有家、不丢失、不重复。
 const isWindows = window.nomiDesktop?.platform === 'win32'
-
-function readAssetCount(): number {
-  const projectId = getDesktopActiveProjectId()
-  const state = readBrowserAssetLibraryState(projectId)
-  return state.folders.length + state.promptCards.length
-}
-
-function useAssetCount(): number {
-  const [count, setCount] = React.useState(readAssetCount)
-  React.useEffect(() => {
-    const update = (): void => setCount(readAssetCount())
-    window.addEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-    return () => window.removeEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-  }, [])
-  return count
-}
 
 function AssetCountBadge({ count }: { count: number }): JSX.Element | null {
   if (count <= 0) return null
@@ -67,7 +51,7 @@ export default function NomiAppBar({
   const [projectTitle, setProjectTitle] = React.useState(projectName || '未命名 Nomi 项目')
   const [aboutOpen, setAboutOpen] = React.useState(false)
   const brandRef = React.useRef<HTMLButtonElement | null>(null)
-  const assetCount = useAssetCount()
+  const assetCount = useGlobalBrowserAssetCount()
 
   React.useEffect(() => {
     if (!editingProjectName && projectName) setProjectTitle(projectName)
@@ -97,6 +81,7 @@ export default function NomiAppBar({
         'max-[700px]:grid-cols-[auto_minmax(0,1fr)_auto] max-[700px]:gap-x-1.5 max-[700px]:px-2',
       )}
       aria-label="Nomi 工作台"
+      onDoubleClick={handleWindowTitlebarDoubleClick}
     >
       <div
         className={cn(

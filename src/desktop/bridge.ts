@@ -251,6 +251,9 @@ export type DesktopBridge = {
     minimize: () => Promise<void>
     maximize: () => Promise<void>
     close: () => Promise<void>
+    confirmClose?: (requestId: string) => void
+    cancelClose?: (requestId: string) => void
+    onCloseRequest?: (cb: (payload: { requestId: string }) => void) => () => void
     onMaximized: (cb: (maximized: boolean) => void) => () => void
   }
   app?: {
@@ -266,6 +269,10 @@ export type DesktopBridge = {
     openFolder: (payload: { rootPath: string; initialize?: boolean; name?: string }) => Promise<unknown>
     listFiles: (payload: { projectId: string; limit?: number }) => Promise<WorkspaceFileListResult>
     revealFile: (payload: { projectId: string; relativePath: string }) => Promise<{ ok: boolean }>
+    deleteFiles?: (payload: {
+      projectId: string
+      relativePaths: string[]
+    }) => Promise<{ ok: boolean; deletedCount: number; failedCount: number }>
     revealProjectFolder: (payload: { projectId: string }) => Promise<{ ok: boolean }>
   }
   projects: {
@@ -370,7 +377,7 @@ export type DesktopBridge = {
     }) => Promise<DesktopBrowserChromeMenuResult>
     assetOverlay?: {
       open: (payload: {
-        viewId: number
+        viewId: number | null
         bounds: DesktopBrowserViewBounds
         captureRequest?: DesktopBrowserAssetOverlayCaptureRequest
         promptRequest?: unknown

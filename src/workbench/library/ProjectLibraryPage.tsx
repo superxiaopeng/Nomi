@@ -16,12 +16,12 @@ import { ActionCard, NomiLogoMark, NomiWordmark, DesignEmptyState, DesignSearchI
 import { NomiImage } from '../../design/media'
 import { ThemeToggleButton } from '../../ui/theme/ThemeToggleButton'
 import { WindowControls } from '../../ui/app-shell/WindowControls'
+import { handleWindowTitlebarDoubleClick } from '../../ui/app-shell/windowTitlebarDoubleClick'
 import {
   dispatchContextualAssetPopoverOpen,
   getGlobalAssetPopoverAnchorRect,
-} from '../../ui/browser/globalAssetPopoverEvents'
-import { BROWSER_ASSET_LIBRARY_UPDATED_EVENT, readBrowserAssetLibraryState } from '../../ui/browser/browserAssetLibraryStorage'
-import { getDesktopActiveProjectId } from '../../desktop/activeProject'
+} from '../../ui/browser/overlay/globalAssetPopoverEvents'
+import { useGlobalBrowserAssetCount } from '../../ui/browser/assets/useGlobalBrowserAssets'
 import type { LocalProjectSummary } from './localProjectStore'
 import type { ProjectTemplateId } from './projectTemplates'
 
@@ -90,18 +90,7 @@ export default function ProjectLibraryPage({
 }: Props): JSX.Element {
   const [query, setQuery] = React.useState('')
   const [sourceFilter, setSourceFilter] = React.useState<'all' | 'native' | 'folder'>('all')
-  const [assetCount, setAssetCount] = React.useState(() => {
-    const state = readBrowserAssetLibraryState(getDesktopActiveProjectId())
-    return state.folders.length + state.promptCards.length
-  })
-  React.useEffect(() => {
-    const update = (): void => {
-      const state = readBrowserAssetLibraryState(getDesktopActiveProjectId())
-      setAssetCount(state.folders.length + state.promptCards.length)
-    }
-    window.addEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-    return () => window.removeEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-  }, [])
+  const assetCount = useGlobalBrowserAssetCount()
   const normalizedQuery = query.trim().toLowerCase()
   const searchedProjects = normalizedQuery
     ? projects.filter((project) => project.name.toLowerCase().includes(normalizedQuery))
@@ -206,7 +195,10 @@ export default function ProjectLibraryPage({
   return (
     <div className="nomi-library-page flex flex-col h-screen overflow-hidden bg-nomi-bg text-nomi-ink font-nomi-sans text-body-sm leading-normal antialiased">
       {isWindows ? (
-        <div className="nomi-library-page__windowbar app-drag relative shrink-0 flex items-center gap-2 h-8 w-full bg-nomi-bg pl-3">
+        <div
+          className="nomi-library-page__windowbar app-drag relative shrink-0 flex items-center gap-2 h-8 w-full bg-nomi-bg pl-3"
+          onDoubleClick={handleWindowTitlebarDoubleClick}
+        >
           <div
             className="app-drag relative z-[1] h-full min-w-0 flex-1"
             data-window-drag-region="true"

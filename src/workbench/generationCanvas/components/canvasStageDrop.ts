@@ -4,13 +4,17 @@
 
 import type { DragEvent } from 'react'
 import { WORKSPACE_FILE_DRAG_MIME, buildWorkspaceFileUrl, parseWorkspaceFileDrag } from '../../explorer/workspaceFileDrag'
-import { ASSET_LIBRARY_DRAG_MIME, parseAssetLibraryDrag } from '../../assets/assetLibraryDrag'
+import {
+  ASSET_LIBRARY_DRAG_MIME,
+  parseAssetLibraryDragItems,
+  type AssetLibraryDragPayload,
+} from '../../assets/assetLibraryDrag'
 import { importLocalMediaFilesToGenerationCanvas } from '../adapters/assetImportAdapter'
-import { getGenerationNodeFootprintSize } from '../model/generationNodeKinds'
+import { getGenerationNodeDefaultSize, getGenerationNodeFootprintSize } from '../model/generationNodeKinds'
 import { dropKindFromMime } from '../model/nodeAssetDrop'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { toast } from '../../../ui/toast'
-import type { BrowserAssetCanvasImportItem } from '../../../ui/browser/globalAssetPopoverEvents'
+import type { BrowserAssetCanvasImportItem } from '../../../ui/browser/overlay/globalAssetPopoverEvents'
 import type { TiptapDocJson } from '../model/generationCanvasTypes'
 
 export const BROWSER_ASSET_DRAG_MIME = 'application/x-nomi-assets'
@@ -53,6 +57,18 @@ export function layoutBrowserAssetDropPositions(
     x: clampNodePos(basePosition.x + (index % columns) * cellWidth),
     y: clampNodePos(basePosition.y + Math.floor(index / columns) * cellHeight),
   }))
+}
+
+export function resolveAssetLibraryDropPosition(
+  cursorPosition: { x: number; y: number },
+  dragAnchor?: AssetLibraryDragPayload['dragAnchor'],
+): { x: number; y: number } {
+  if (!dragAnchor) return cursorPosition
+  const size = getGenerationNodeDefaultSize('asset')
+  return {
+    x: cursorPosition.x - size.width * dragAnchor.xRatio,
+    y: cursorPosition.y - size.height * dragAnchor.yRatio,
+  }
 }
 
 function cleanBrowserAssetTitle(value: unknown, fallback: string): string {
@@ -243,33 +259,44 @@ export function handleCanvasStageDrop(event: DragEvent<HTMLDivElement>, ctx: Can
   }
 
   // 2) 素材库拖入：素材已在池里（画布产出/项目文件），直接引用 renderUrl 建 asset 节点（图片/视频）。
-  const assetDrag = parseAssetLibraryDrag(event.dataTransfer.getData(ASSET_LIBRARY_DRAG_MIME))
-  if (assetDrag) {
+  const assetDragItems = parseAssetLibraryDragItems(event.dataTransfer.getData(ASSET_LIBRARY_DRAG_MIME))
+  if (assetDragItems.length) {
     event.preventDefault()
     event.stopPropagation()
-    // 音频无画布节点（不渲染画面），引导到时间轴音频轨而不是在画布建个哑节点。
-    if (assetDrag.kind === 'audio') {
+    const mediaItems = assetDragItems.filter((asset) => asset.kind !== 'audio')
+    if (!mediaItems.length) {
       toast('音频请拖到时间轴的「音频轨」当配乐', 'info')
       return
     }
     const store = useGenerationCanvasStore.getState()
-    const node = store.addNode({
-      kind: 'asset',
-      title: assetDrag.name.replace(/\.[^.]+$/, '') || (assetDrag.kind === 'video' ? '参考视频' : '参考图片'),
-      prompt: '',
-      position: { x: clampNodePos(basePosition.x), y: clampNodePos(basePosition.y) },
-      categoryId: ctx.activeCategoryId,
+    const dragAnchor = assetDragItems.find((asset) => asset.dragAnchor)?.dragAnchor
+    const anchoredPosition = resolveAssetLibraryDropPosition(basePosition, dragAnchor)
+    const positions = layoutBrowserAssetDropPositions(anchoredPosition, mediaItems.length)
+    const nodeIds: string[] = []
+    mediaItems.forEach((assetDrag, index) => {
+      const node = store.addNode({
+        kind: 'asset',
+        title: assetDrag.name.replace(/\.[^.]+$/, '') || (assetDrag.kind === 'video' ? '参考视频' : '参考图片'),
+        prompt: '',
+        position: positions[index],
+        categoryId: ctx.activeCategoryId,
+        exactPosition: true,
+        select: false,
+      })
+      const result = { id: `asset-ref-${node.id}-${Date.now()}`, type: assetDrag.kind, url: assetDrag.renderUrl, createdAt: Date.now() }
+      const originMeta = assetDrag.origin.source === 'project'
+        ? { source: 'workspace-file', fileName: assetDrag.name, workspaceRelativePath: assetDrag.origin.relativePath }
+        : { source: 'asset-library', fileName: assetDrag.name, referencedNodeId: assetDrag.origin.nodeId }
+      store.updateNode(node.id, {
+        result,
+        history: [result],
+        status: 'success',
+        meta: { ...(node.meta || {}), ...originMeta },
+      })
+      nodeIds.push(node.id)
     })
-    const result = { id: `asset-ref-${node.id}-${Date.now()}`, type: assetDrag.kind, url: assetDrag.renderUrl, createdAt: Date.now() }
-    const originMeta = assetDrag.origin.source === 'project'
-      ? { source: 'workspace-file', fileName: assetDrag.name, workspaceRelativePath: assetDrag.origin.relativePath }
-      : { source: 'asset-library', fileName: assetDrag.name, referencedNodeId: assetDrag.origin.nodeId }
-    store.updateNode(node.id, {
-      result,
-      history: [result],
-      status: 'success',
-      meta: { ...(node.meta || {}), ...originMeta },
-    })
+    nodeIds.forEach((nodeId, index) => store.selectNode(nodeId, index > 0))
+    if (mediaItems.length < assetDragItems.length) toast('音频请拖到时间轴的「音频轨」当配乐', 'info')
     return
   }
 

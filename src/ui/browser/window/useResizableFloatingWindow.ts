@@ -75,6 +75,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+function capturePointer(event: React.PointerEvent<HTMLElement>): void {
+  try {
+    event.currentTarget.setPointerCapture(event.pointerId)
+  } catch {
+    // Pointer capture can fail if the target is detached during the gesture.
+  }
+}
+
 function anchorKey(anchorRect: FloatingWindowAnchorRect | null | undefined): string {
   if (!anchorRect) return 'default'
   return `${Math.round(anchorRect.left)}:${Math.round(anchorRect.top)}:${Math.round(anchorRect.right)}:${Math.round(anchorRect.bottom)}`
@@ -291,6 +299,7 @@ export function useResizableFloatingWindow(
     (event: React.PointerEvent<HTMLElement>) => {
       if (event.button !== 0) return
       event.preventDefault()
+      capturePointer(event)
       gestureRef.current = {
         type: 'move',
         startX: event.clientX,
@@ -307,6 +316,7 @@ export function useResizableFloatingWindow(
       if (event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
+      capturePointer(event)
       gestureRef.current = {
         type: 'resize',
         edge,

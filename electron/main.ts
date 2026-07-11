@@ -24,6 +24,7 @@ import { runTaskWithIdempotency } from "./submissionLedger";
 import { mintSpendGrant } from "./spendGrant";
 import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspaceIpc";
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
+import { registerWorkspaceFileDeleteIpc } from "./workspace/workspaceFileDelete";
 import { installCrashHandlers, logCrash } from "./crashLog";
 import { registerExportJobIpc } from "./export/exportJobIpc";
 import { registerAgentChatV2Ipc } from "./ai/agentChatV2Ipc";
@@ -33,14 +34,15 @@ import { setEventLogSecretsProvider } from "./events/eventLogRepository";
 import { registerEventsIpc } from "./events/eventsIpc";
 import { registerMemoryIpc } from "./memory/memoryIpc";
 import { registerPromptLibraryIpc } from "./promptLibrary/promptLibraryIpc";
-import { registerBrowserViewIpc } from "./browser/browserViews";
-import { registerBrowserPromptExtractionSettingsIpc } from "./browser/browserPromptExtractionSettings";
+import { registerBrowserViewIpc } from "./browser/core/browserViews";
+import { registerBrowserPromptExtractionSettingsIpc } from "./browser/settings/browserPromptExtractionSettings";
 import { catalogSecretsProvider } from "./events/secretsProvider";
 import { registerOnboardingIpc } from "./ai/onboarding/onboardingIpc";
 import { registerUpdaterIpc } from "./update/autoUpdater";
 import { setRendererTarget } from "./capabilityCore/rendererBridge";
 import { readMcpInfo, installMcp, uninstallMcp } from "./capabilityCore/mcpConfig";
 import { registerLocalProtocol } from "./protocol/localProtocol";
+import { installWindowCloseConfirmation } from "./windowCloseConfirmation";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
@@ -300,6 +302,7 @@ async function createWindow(
     },
   });
   mainWindowRef = mainWindow;
+  installWindowCloseConfirmation(mainWindow);
   mainWindow.on("closed", () => {
     if (mainWindowRef === mainWindow) mainWindowRef = null;
   });
@@ -563,6 +566,7 @@ function registerIpc(): void {
     shell.showItemInFolder(absolutePath);
     return { ok: true };
   });
+  registerWorkspaceFileDeleteIpc({ readProject });
   ipcMain.handle("nomi:workspace:reveal-project-folder", (_event, payload) => {
     const projectId = String((payload as { projectId?: unknown } | null)?.projectId || "").trim();
     if (!projectId) throw new Error("projectId is required");

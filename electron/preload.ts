@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     minimize: () => ipcRenderer.invoke("nomi:window:minimize"),
     maximize: () => ipcRenderer.invoke("nomi:window:maximize"),
     close: () => ipcRenderer.invoke("nomi:window:close"),
+    confirmClose: (requestId: string) =>
+      ipcRenderer.send("nomi:window:close-response", { requestId, confirmed: true }),
+    cancelClose: (requestId: string) =>
+      ipcRenderer.send("nomi:window:close-response", { requestId, confirmed: false }),
+    onCloseRequest: (cb: (payload: { requestId: string }) => void) => {
+      const listener = (_: unknown, payload: { requestId: string }) => cb(payload);
+      ipcRenderer.on("nomi:window:close-request", listener);
+      return () => ipcRenderer.removeListener("nomi:window:close-request", listener);
+    },
     onMaximized: (cb: (maximized: boolean) => void) => {
       const listener = (_: unknown, v: boolean) => cb(v);
       ipcRenderer.on("nomi:window:maximized", listener);
@@ -37,6 +46,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     openFolder: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:open-folder", payload),
     listFiles: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:list-files", payload),
     revealFile: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:reveal-file", payload),
+    deleteFiles: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:delete-files", payload),
     revealProjectFolder: (payload: unknown) => ipcRenderer.invoke("nomi:workspace:reveal-project-folder", payload),
   },
   projects: {

@@ -1,8 +1,8 @@
 import { ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { readProject } from "../projects/repository";
-import { workspaceNomiDir } from "../workspace/workspacePaths";
+import { readProject } from "../../projects/repository";
+import { workspaceNomiDir } from "../../workspace/workspacePaths";
 
 const SETTINGS_FILE_NAME = "browser-prompt-extraction.json";
 

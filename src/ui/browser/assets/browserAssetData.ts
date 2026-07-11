@@ -5,7 +5,7 @@ import {
   IconPhoto,
   IconVideo,
   type Icon as TablerIcon,
-} from '../../vendor/tablerIcons'
+} from '../../../vendor/tablerIcons'
 
 export type NomiBrowserAssetKind = 'image' | 'video' | 'prompt' | 'folder'
 export type NomiBrowserAssetTab = 'all' | NomiBrowserAssetKind
@@ -25,6 +25,8 @@ export type NomiBrowserAsset = {
   previewMediaType?: 'image' | 'video'
   parentFolderId?: string | null
   status?: 'loading' | 'ready' | 'error'
+  createdAt?: string
+  updatedAt?: string
   promptCard?: {
     referenceImages: readonly {
       url: string
@@ -58,7 +60,7 @@ export const NOMI_BROWSER_ASSET_TABS: readonly NomiBrowserAssetTabDefinition[] =
 ]
 
 export const NOMI_BROWSER_ASSET_SOURCES: readonly NomiBrowserAssetSourceDefinition[] = [
-  { key: 'my', label: '我的素材' },
+  { key: 'my', label: '项目素材' },
   { key: 'transcript', label: '提示词库' },
 ]
 

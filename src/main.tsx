@@ -1,7 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import NomiRouterApp from './NomiRouterApp'
-import { BrowserAssetOverlayApp } from './ui/browser/BrowserAssetOverlayApp'
+import { BrowserAssetOverlayApp } from './ui/browser/overlay/BrowserAssetOverlayApp'
 // 自托管品牌字体（本地优先：不依赖系统是否装 Inter/Fraunces，保证任意机器一致）。
 // 变量字体族名为 'Inter Variable' / 'Fraunces Variable'，已在 nomi-tokens.css 字栈置首。
 import '@fontsource-variable/inter/wght.css'

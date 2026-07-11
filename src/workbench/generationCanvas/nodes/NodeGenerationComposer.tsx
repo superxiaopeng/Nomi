@@ -9,7 +9,7 @@ import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import {
   readBrowserPromptLibraryItems,
   type BrowserPromptLibraryItem,
-} from '../../../ui/browser/browserAssetLibraryStorage'
+} from '../../../ui/browser/assets/browserAssetLibraryStorage'
 import PromptEditor from '../../assets/PromptEditor'
 import { promptToContent } from '../../assets/promptEditorContent'
 import { resolveReferenceSlots } from '../runner/referenceSlots'

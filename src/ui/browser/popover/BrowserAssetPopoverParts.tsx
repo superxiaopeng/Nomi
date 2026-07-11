@@ -1,7 +1,7 @@
 import React from 'react'
-import { IconCheck, IconFileText, IconFolder, IconPhoto, IconPlayerPlayFilled, IconPlus, IconVideo } from '../../vendor/tablerIcons'
-import { cn } from '../../utils/cn'
-import type { NomiBrowserAsset, NomiBrowserAssetTab, NomiBrowserAssetTabDefinition } from './browserAssetData'
+import { IconCheck, IconFileText, IconFolder, IconPhoto, IconPlayerPlayFilled, IconPlus, IconVideo } from '../../../vendor/tablerIcons'
+import { cn } from '../../../utils/cn'
+import type { NomiBrowserAsset, NomiBrowserAssetTab, NomiBrowserAssetTabDefinition } from '../assets/browserAssetData'
 
 type AssetTileProps = {
   asset: NomiBrowserAsset
@@ -245,7 +245,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
         <div className="relative isolate aspect-video overflow-hidden rounded-nomi-sm">
           <FolderShape selected={selected} />
           {folderHasPreview ? (
-            <div className="absolute bottom-[9%] left-[6%] right-[6%] top-[34%] z-[1] overflow-hidden rounded-[4px] bg-nomi-ink-05">
+            <div className="absolute bottom-[9%] left-[6%] right-[6%] top-[34%] z-[1] overflow-hidden rounded-nomi-sm bg-nomi-ink-05">
               {renderAssetPreview(asset, 'block size-full object-contain')}
             </div>
           ) : null}
@@ -377,7 +377,7 @@ export const BrowserAssetFilterPopover = React.memo(function BrowserAssetFilterP
                 aria-selected={active}
                 disabled={disabled}
                 className={cn(
-                  'grid h-8 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-nomi-sm border-0 px-1.5',
+                  'grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-nomi-sm border-0 px-1.5',
                   'bg-transparent text-left text-caption transition-colors duration-[var(--nomi-transition-fast)]',
                   disabled
                     ? 'cursor-default text-nomi-ink-30'
@@ -388,6 +388,18 @@ export const BrowserAssetFilterPopover = React.memo(function BrowserAssetFilterP
                 >
                   <Icon size={15} stroke={1.8} aria-hidden="true" />
                   <span className="min-w-0 truncate">{tab.label}</span>
+                  <span
+                    className={cn(
+                      'justify-self-end rounded-nomi-sm px-1.5 py-0.5 text-micro leading-none tabular-nums',
+                      active
+                        ? 'bg-nomi-paper text-nomi-accent'
+                        : disabled
+                          ? 'text-nomi-ink-30'
+                          : 'bg-nomi-ink-05 text-nomi-ink-45',
+                    )}
+                  >
+                    {count}
+                  </span>
               </button>
             )
           })}
@@ -459,7 +471,7 @@ export const BrowserPromptCategoryFilterPopover = React.memo(function BrowserPro
               aria-selected={active}
               disabled={disabled}
               className={cn(
-                'grid h-8 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-nomi-sm border-0 px-1.5',
+                'grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-nomi-sm border-0 px-1.5',
                 'bg-transparent text-left text-caption transition-colors duration-[var(--nomi-transition-fast)]',
                 disabled
                   ? 'cursor-default text-nomi-ink-30'
@@ -470,6 +482,18 @@ export const BrowserPromptCategoryFilterPopover = React.memo(function BrowserPro
             >
               <IconFileText size={15} stroke={1.8} aria-hidden="true" />
               <span className="min-w-0 truncate">{category.label}</span>
+              <span
+                className={cn(
+                  'justify-self-end rounded-nomi-sm px-1.5 py-0.5 text-micro leading-none tabular-nums',
+                  active
+                    ? 'bg-nomi-paper text-nomi-accent'
+                    : disabled
+                      ? 'text-nomi-ink-30'
+                      : 'bg-nomi-ink-05 text-nomi-ink-45',
+                )}
+              >
+                {count}
+              </span>
             </button>
           )
         })}

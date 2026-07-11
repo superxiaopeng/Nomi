@@ -1,4 +1,4 @@
-import type { TaskResultDto } from '../../workbench/api/taskApi'
+import type { TaskResultDto } from '../../../workbench/api/taskApi'
 
 export type BrowserPromptExtraction = {
   title: string

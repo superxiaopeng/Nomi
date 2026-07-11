@@ -6,7 +6,6 @@ import {
   IconFolderSearch,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
-  IconPhoto,
   IconPlus,
   IconTags,
 } from '@tabler/icons-react'
@@ -17,7 +16,6 @@ import { useWorkbenchStore } from '../workbenchStore'
 import { lazyWithChunkBoundary } from '../../ui/chunkBoundary'
 
 const CategoryTree = lazyWithChunkBoundary('分类面板', () => import('../sidebar/CategoryTree'))
-const WorkspaceFileExplorerPanel = lazyWithChunkBoundary('项目文件面板', () => import('./WorkspaceFileExplorerPanel'))
 const PromptLibraryContent = lazyWithChunkBoundary('提示词库', () =>
   import('../promptLibrary/PromptLibraryPanel').then((module) => ({
     default: module.PromptLibraryContent,
@@ -40,7 +38,7 @@ type Props = {
   projectId?: string | null
 }
 
-type ProjectSidebarTab = 'find' | 'categories' | 'files' | 'prompt-library' | 'skill-library' | 'asset-library'
+type ProjectSidebarTab = 'find' | 'categories' | 'prompt-library' | 'skill-library' | 'asset-library'
 
 const PROJECT_SIDEBAR_COLLAPSED_WIDTH = 60
 const PROJECT_SIDEBAR_EXPANDED_WIDTH = 300
@@ -63,7 +61,6 @@ const PANEL_ICON_BUTTON_CLASS = cn(
 )
 
 function sidebarPanelTitle(tab: ProjectSidebarTab): string {
-  if (tab === 'files') return '素材'
   if (tab === 'find') return '找素材'
   if (tab === 'categories') return '分类'
   if (tab === 'prompt-library') return '提示词库'
@@ -76,14 +73,13 @@ function isLibraryTab(tab: ProjectSidebarTab): boolean {
 }
 
 export default function ProjectExplorerSidebar({ categories, projectId = null }: Props): JSX.Element {
-  const [tab, setTab] = React.useState<ProjectSidebarTab>('files')
+  const [tab, setTab] = React.useState<ProjectSidebarTab>('asset-library')
   const [createCategoryNonce, setCreateCategoryNonce] = React.useState(0)
   const collapsed = useWorkbenchStore((s) => s.sidebarCollapsed)
   const toggle = useWorkbenchStore((s) => s.toggleSidebarCollapsed)
   const setSidebarCollapsed = useWorkbenchStore((s) => s.setSidebarCollapsed)
 
-  // 加号 = 新建一个顶层分类。若停在「文件」tab，先切回「分类」让用户看见新建结果。
-  // （建子组改走分类行右键「新建子组」。）
+  // 加号 = 新建一个顶层分类（建子组改走分类行右键「新建子组」）。
   const handleAddCategory = React.useCallback(() => {
     setTab('categories')
     setSidebarCollapsed(false)
@@ -99,10 +95,10 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
     setSidebarCollapsed(false)
   }, [collapsed, setSidebarCollapsed, tab])
 
-  // picker 的「浏览全部 →」→ 展开侧栏 + 切到文件面板(全量浏览在面板,弹层只做快速取,规范 §5)。
+  // picker 的「浏览全部 →」→ 展开侧栏 + 切到素材库（弹层只做快速取）。
   React.useEffect(() => {
     const open = () => {
-      setTab('files')
+      setTab('asset-library')
       setSidebarCollapsed(false)
     }
     window.addEventListener('nomi-open-files-panel', open)
@@ -112,8 +108,8 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
   const railItems = React.useMemo(
     () => [
       {
-        id: 'files' as const,
-        label: '素材',
+        id: 'asset-library' as const,
+        label: '素材库',
         icon: IconFolder,
       },
       {
@@ -141,11 +137,6 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
         id: 'skill-library' as const,
         label: '技能库',
         icon: IconBooks,
-      },
-      {
-        id: 'asset-library' as const,
-        label: '素材库',
-        icon: IconPhoto,
       },
     ],
     [],
@@ -235,13 +226,8 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
 
         {!collapsed ? (
           <section className="relative flex min-w-0 flex-1 flex-col bg-nomi-paper" aria-label={panelTitle}>
-            {tab === 'files' ? (
-              <React.Suspense fallback={null}>
-                <WorkspaceFileExplorerPanel projectId={projectId} />
-              </React.Suspense>
-            ) : (
-              <>
-                <header className="flex h-12 shrink-0 items-center border-b border-nomi-line-soft px-3">
+            <>
+              <header className="flex h-12 shrink-0 items-center border-b border-nomi-line-soft px-3">
                   <h2 className="m-0 min-w-0 flex-1 truncate text-body-sm font-bold leading-none text-nomi-ink">
                     {panelTitle}
                   </h2>
@@ -273,8 +259,8 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
                     </TooltipTrigger>
                     <TooltipContent side="bottom">收起侧栏</TooltipContent>
                   </Tooltip>
-                </header>
-                {tab === 'find' ? (
+              </header>
+              {tab === 'find' ? (
                   <AssetFinderPanel />
                 ) : tab === 'categories' ? (
                   <React.Suspense fallback={null}>
@@ -292,9 +278,8 @@ export default function ProjectExplorerSidebar({ categories, projectId = null }:
                   <React.Suspense fallback={null}>
                     <AssetLibraryContent projectId={projectId} compact showHeader={false} />
                   </React.Suspense>
-                )}
-              </>
-            )}
+              )}
+            </>
           </section>
         ) : null}
       </TooltipProvider>

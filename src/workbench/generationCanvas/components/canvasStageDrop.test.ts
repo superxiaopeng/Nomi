@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getGenerationNodeFootprintSize } from '../model/generationNodeKinds'
+import { getGenerationNodeDefaultSize, getGenerationNodeFootprintSize } from '../model/generationNodeKinds'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
-import { importBrowserAssetsToGenerationCanvas, layoutBrowserAssetDropPositions } from './canvasStageDrop'
+import {
+  importBrowserAssetsToGenerationCanvas,
+  layoutBrowserAssetDropPositions,
+  resolveAssetLibraryDropPosition,
+} from './canvasStageDrop'
 
 describe('layoutBrowserAssetDropPositions', () => {
   it('lays multiple browser assets into a non-overlapping grid', () => {
@@ -24,6 +28,16 @@ describe('layoutBrowserAssetDropPositions', () => {
         expect(separatedX || separatedY).toBe(true)
       }
     }
+  })
+
+  it('keeps the grabbed point under the mouse cursor', () => {
+    const size = getGenerationNodeDefaultSize('asset')
+    const cursor = { x: 640, y: 480 }
+    const anchor = { xRatio: 0.25, yRatio: 0.75 }
+    const position = resolveAssetLibraryDropPosition(cursor, anchor)
+
+    expect(position.x + size.width * anchor.xRatio).toBe(cursor.x)
+    expect(position.y + size.height * anchor.yRatio).toBe(cursor.y)
   })
 })
 

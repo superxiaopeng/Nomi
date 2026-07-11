@@ -3,9 +3,10 @@ import {
   dispatchGlobalAssetPopoverOpen,
   subscribeGlobalAssetPopoverOpen,
   type GlobalAssetPopoverAnchorRect,
-} from './globalAssetPopoverEvents'
-import { NomiBrowserAssetPopover } from './NomiBrowserAssetPopover'
+} from '../overlay/globalAssetPopoverEvents'
+import { NomiBrowserAssetPopover } from '../popover/NomiBrowserAssetPopover'
 import type { FloatingWindowBoundsRect } from './useResizableFloatingWindow'
+import { useGlobalBrowserAssets } from '../assets/useGlobalBrowserAssets'
 
 const GLOBAL_ASSET_POPOVER_BOUNDARY_SELECTORS = [
   '.workbench-shell__body',
@@ -46,14 +47,16 @@ export function GlobalAssetFloatingWindow(): JSX.Element {
   const [opened, setOpened] = React.useState(false)
   const [anchorRect, setAnchorRect] = React.useState<GlobalAssetPopoverAnchorRect | null>(null)
   const [boundsRect, setBoundsRect] = React.useState<FloatingWindowBoundsRect | null>(null)
+  const { assets, refresh } = useGlobalBrowserAssets()
 
   React.useEffect(
     () =>
       subscribeGlobalAssetPopoverOpen((nextOpened, detail) => {
         setOpened(nextOpened)
+        if (nextOpened) refresh()
         if (detail.anchorRect !== undefined) setAnchorRect(detail.anchorRect ?? null)
       }),
-    [],
+    [refresh],
   )
 
   const handleOpenChange = React.useCallback((opened: boolean): void => {
@@ -106,6 +109,8 @@ export function GlobalAssetFloatingWindow(): JSX.Element {
       boundsRect={boundsRect}
       dockable
       showTrigger={false}
+      libraryProjectId=""
+      assets={assets}
       onOpenChange={handleOpenChange}
     />
   )

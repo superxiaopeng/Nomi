@@ -35,7 +35,7 @@ import {
   dispatchBrowserAssetPopoverOpen,
   dispatchGlobalAssetPopoverOpen,
   subscribeContextualAssetPopoverOpen,
-} from '../ui/browser/globalAssetPopoverEvents'
+} from '../ui/browser/overlay/globalAssetPopoverEvents'
 import { releaseWorkbenchProjectRuntimeState } from './project/releaseWorkbenchProjectSession'
 import { useSpendConfirmStore } from './generationCanvas/spend/spendConfirm'
 import { useFilePreviewStore } from './explorer/useFilePreviewStore'
@@ -106,12 +106,12 @@ const FilePreviewPanel = lazyWithChunkBoundary('文件预览', () =>
   })),
 )
 const NomiBrowserDialog = lazyWithChunkBoundary('浏览器', () =>
-  import('../ui/browser/NomiBrowserDialog').then((module) => ({
+  import('../ui/browser/dialog/NomiBrowserDialog').then((module) => ({
     default: module.NomiBrowserDialog,
   })),
 )
 const GlobalAssetFloatingWindow = lazyWithChunkBoundary('全局素材浮窗', () =>
-  import('../ui/browser/GlobalAssetFloatingWindow').then((module) => ({
+  import('../ui/browser/window/GlobalAssetFloatingWindow').then((module) => ({
     default: module.GlobalAssetFloatingWindow,
   })),
 )
@@ -166,12 +166,42 @@ export default function NomiStudioApp(): JSX.Element {
   const projectPersistenceUnbindRef = React.useRef<(() => void) | null>(null)
   const hardReloadingRef = React.useRef(false)
   const browserOpenedRef = React.useRef(false)
+  const pendingCloseRequestRef = React.useRef<string | null>(null)
   const routeProjectId = React.useMemo(() => readProjectIdFromSearch(location.search), [location.search])
   const activeProjectPersistenceKey = activeProject ? `${activeProject.id}\u0000${activeProject.name}` : ''
 
   React.useEffect(() => {
     browserOpenedRef.current = browserOpened
   }, [browserOpened])
+
+  React.useEffect(() => {
+    const windowBridge = getDesktopBridge()?.window
+    if (!windowBridge?.onCloseRequest) return undefined
+    return windowBridge.onCloseRequest((payload) => {
+      const requestId = typeof payload?.requestId === 'string' ? payload.requestId.trim() : ''
+      if (!requestId) return
+      if (pendingCloseRequestRef.current) {
+        windowBridge.cancelClose?.(requestId)
+        return
+      }
+      pendingCloseRequestRef.current = requestId
+      void confirmDialog({
+        title: '关闭 Nomi？',
+        message: '当前窗口将关闭，未完成的生成或导出任务可能会中断。',
+        confirmLabel: '关闭',
+        cancelLabel: '取消',
+        tone: 'info',
+      })
+        .then((confirmed) => {
+          const latestWindowBridge = getDesktopBridge()?.window
+          if (confirmed) latestWindowBridge?.confirmClose?.(requestId)
+          else latestWindowBridge?.cancelClose?.(requestId)
+        })
+        .finally(() => {
+          if (pendingCloseRequestRef.current === requestId) pendingCloseRequestRef.current = null
+        })
+    })
+  }, [])
 
   React.useEffect(() => {
     const handleOpenModelCatalog = () => setModelCatalogOpened(true)
@@ -603,11 +633,8 @@ export default function NomiStudioApp(): JSX.Element {
     </React.Suspense>
   )
 
-  if (view === 'library') {
-    return (
+  const viewContent = view === 'library' ? (
       <>
-        {globalBrowserDialog}
-        {globalAssetFloatingWindow}
         <ProjectLibraryPage
           projects={projects}
           onOpenProject={openProject}
@@ -646,13 +673,7 @@ export default function NomiStudioApp(): JSX.Element {
         ) : null}
         <ConfirmDialogHost />
       </>
-    )
-  }
-
-  return (
-    <>
-      {globalBrowserDialog}
-      {globalAssetFloatingWindow}
+    ) : (
       <div className={cn('nomi-studio-app w-full h-screen min-h-0 bg-nomi-bg')} aria-label="Nomi Studio">
         <WorkbenchShell
           generation={
@@ -729,6 +750,13 @@ export default function NomiStudioApp(): JSX.Element {
 
         <ConfirmDialogHost />
       </div>
+    )
+
+  return (
+    <>
+      {globalBrowserDialog}
+      {globalAssetFloatingWindow}
+      {viewContent}
     </>
   )
 }

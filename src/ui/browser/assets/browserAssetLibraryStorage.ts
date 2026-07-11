@@ -236,6 +236,8 @@ export function saveBrowserPromptCard(input: SaveBrowserPromptCardInput): NomiBr
     previewUrl,
     previewMediaType: previewUrl ? 'image' : undefined,
     status: 'ready',
+    createdAt: savedAt,
+    updatedAt: savedAt,
     promptCard: {
       referenceImages,
       prompt,

@@ -8,7 +8,7 @@ import {
   readBrowserPromptCategories,
   saveBrowserPromptCard,
   type SaveBrowserPromptCardInput,
-} from '../../../ui/browser/browserAssetLibraryStorage'
+} from '../../../ui/browser/assets/browserAssetLibraryStorage'
 import { toast } from '../../../ui/toast'
 import { cn } from '../../../utils/cn'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'

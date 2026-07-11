@@ -1,6 +1,6 @@
 import React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { getDesktopActiveProjectId } from '../../desktop/activeProject'
+import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import {
   getDesktopBridge,
   type DesktopAssetDto,
@@ -8,17 +8,17 @@ import {
   type DesktopBrowserAssetOverlayConfig,
   type DesktopBrowserAssetOverlayDockMode,
   type DesktopBrowserAssetOverlayRect,
-} from '../../desktop/bridge'
-import type { NomiBrowserAsset } from './browserAssetData'
+} from '../../../desktop/bridge'
+import type { NomiBrowserAsset } from '../assets/browserAssetData'
 import {
   NomiBrowserAssetPopover,
   type BrowserAssetCaptureRequest,
   type BrowserAssetPromptCaptureRequest,
   type BrowserAssetPromptReference,
   type BrowserAssetRemoteImportInput,
-} from './NomiBrowserAssetPopover'
+} from '../popover/NomiBrowserAssetPopover'
 import { subscribeBrowserAssetsImportToCanvas } from './globalAssetPopoverEvents'
-import type { FloatingWindowBoundsRect } from './useResizableFloatingWindow'
+import type { FloatingWindowBoundsRect } from '../window/useResizableFloatingWindow'
 
 type OverlayCaptureFlyoutRect = {
   left: number
@@ -51,6 +51,8 @@ function browserAssetFromDesktopAsset(asset: DesktopAssetDto, fallbackTitle: str
     previewUrl: url,
     previewMediaType: mediaType,
     tags: ['网页素材'],
+    createdAt: asset.createdAt,
+    updatedAt: asset.updatedAt,
   }
 }
 

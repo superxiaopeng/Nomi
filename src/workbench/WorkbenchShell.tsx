@@ -15,13 +15,13 @@ import { cn } from "../utils/cn";
 import ProjectExplorerSidebar from "./explorer/ProjectExplorerSidebar";
 import { lazyWithChunkBoundary } from "../ui/chunkBoundary";
 import { WindowControls } from "../ui/app-shell/WindowControls";
+import { handleWindowTitlebarDoubleClick } from "../ui/app-shell/windowTitlebarDoubleClick";
 import { OnboardingChecklist } from "./onboarding/OnboardingChecklist";
 import {
     dispatchContextualAssetPopoverOpen,
     getGlobalAssetPopoverAnchorRect,
-} from "../ui/browser/globalAssetPopoverEvents";
-import { BROWSER_ASSET_LIBRARY_UPDATED_EVENT, readBrowserAssetLibraryState } from "../ui/browser/browserAssetLibraryStorage";
-import { getDesktopActiveProjectId } from "../desktop/activeProject";
+} from "../ui/browser/overlay/globalAssetPopoverEvents";
+import { useGlobalBrowserAssetCount } from "../ui/browser/assets/useGlobalBrowserAssets";
 
 // 工作区懒加载走容错域（审计 A5）：单个工作区 chunk 失败不拖死其余工作区。
 const CreationWorkspace = lazyWithChunkBoundary(
@@ -146,19 +146,7 @@ export default function WorkbenchShell({
     >(() => [workspaceMode]);
     const [aboutOpen, setAboutOpen] = React.useState(false);
     const brandRef = React.useRef<HTMLButtonElement | null>(null);
-    const [assetCount, setAssetCount] = React.useState(() => {
-        const state = readBrowserAssetLibraryState(getDesktopActiveProjectId())
-        return state.folders.length + state.promptCards.length
-    });
-
-    React.useEffect(() => {
-        const update = (): void => {
-            const state = readBrowserAssetLibraryState(getDesktopActiveProjectId())
-            setAssetCount(state.folders.length + state.promptCards.length)
-        }
-        window.addEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-        return () => window.removeEventListener(BROWSER_ASSET_LIBRARY_UPDATED_EVENT, update)
-    }, []);
+    const assetCount = useGlobalBrowserAssetCount();
 
     // 仅 win32 自绘标题栏：mac/Linux 保持原生窗口 chrome，不渲染 windowbar（P4 通用·按平台分流）。
     const isWindows = window.nomiDesktop?.platform === "win32";
@@ -213,6 +201,7 @@ export default function WorkbenchShell({
                         "bg-workbench-surface text-workbench-ink",
                     )}
                     aria-label="窗口标题栏"
+                    onDoubleClick={handleWindowTitlebarDoubleClick}
                 >
                     <button
                         ref={brandRef}
