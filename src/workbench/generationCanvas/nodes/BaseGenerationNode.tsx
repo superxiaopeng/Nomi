@@ -59,6 +59,7 @@ import {
   computeMediaMetaPatch,
   resolveNodeVisualSize,
 } from './nodeSizing'
+import { useNodeVideoHoverPreview } from './useNodeVideoHoverPreview'
 
 export type BaseGenerationNodeProps = {
   node: GenerationCanvasNode
@@ -89,10 +90,7 @@ function BaseGenerationNodeImpl({
   const commitPersistedChange = useGenerationCanvasStore((state) => state.commitPersistedChange)
   const moveNode = useGenerationCanvasStore((state) => state.moveNode)
   const moveSelectedNodes = useGenerationCanvasStore((state) => state.moveSelectedNodes)
-  // v0.7.2 perf: 订阅 boolean primitive 而不是整个 selectedNodeIds 数组
-  // 之前数组引用每次变都触发所有节点 rerender；现在仅当 multi-select 状态翻转时触发
   const isMultiSelectActive = useGenerationCanvasStore((state) => state.selectedNodeIds.length > 1)
-  // v0.7.2 perf: sourceNode 拆成两个 primitive 订阅，避免对象引用引发的伪 update
   const sourceNodeTitle = useGenerationCanvasStore((state) => {
     if (!node.derivedFrom) return undefined
     return state.nodes.find((candidate) => candidate.id === node.derivedFrom)?.title
@@ -107,7 +105,6 @@ function BaseGenerationNodeImpl({
   })
   const startConnection = useGenerationCanvasStore((state) => state.startConnection)
   const updateNode = useGenerationCanvasStore((state) => state.updateNode)
-  // v0.7.2 perf: 只关心 "this node 是否是 pending source"，boolean
   const isPendingConnectionSource = useGenerationCanvasStore((state) => state.pendingConnectionSourceId === node.id)
   const pendingConnectionSourceSide = useGenerationCanvasStore((state) =>
     state.pendingConnectionSourceId === node.id ? state.pendingConnectionSourceSide : null,
@@ -115,18 +112,14 @@ function BaseGenerationNodeImpl({
   const isPendingConnectionTarget = useGenerationCanvasStore(
     (state) => state.pendingConnectionSourceId !== '' && state.pendingConnectionSourceId !== node.id,
   )
-  // perf：canvasZoom 仅事件处理器用、渲染从不读它；改按需 getState() 避免缩放时全节点重渲。
   const panoramaFullscreenRef = React.useRef<(() => void) | null>(null)
   const panoramaUploadInputRef = React.useRef<HTMLInputElement | null>(null)
-  // E11: provenance viewer open state (mounted into node header for AI-generated assets)
   const [provenanceOpen, setProvenanceOpen] = React.useState(false)
   const [imageStackOpen, setImageStackOpen] = React.useState(false)
   const handleImageStackOpenChange = React.useCallback((nextOpen: boolean) => {
     setImageStackOpen(nextOpen)
   }, [])
 
-  // C5: 自由缩放边界按 kind 取（text 比媒体节点更大）。在拖拽/缩放闭包之前算好，
-  // 让 handlePointerMove 与渲染期的尺寸计算用同一份 bounds。
   const sizeBounds = getNodeSizeBounds(node.kind)
 
   const handleTimelineDragStart = (event: React.DragEvent<HTMLElement>) => {
@@ -175,36 +168,7 @@ function BaseGenerationNodeImpl({
     if (patch) updateNode(node.id, patch)
   }
 
-  const playPreviewVideo = React.useCallback((host: HTMLElement): void => {
-    const video = host.querySelector<HTMLVideoElement>('[data-node-preview-video="true"]')
-    if (!video) return
-    video.muted = true
-    const playPromise = video.play()
-    if (playPromise && typeof playPromise.catch === 'function') {
-      void playPromise.catch(() => {})
-    }
-  }, [])
-
-  const stopPreviewVideo = React.useCallback((host: HTMLElement): void => {
-    const video = host.querySelector<HTMLVideoElement>('[data-node-preview-video="true"]')
-    if (!video) return
-    video.pause()
-    try {
-      video.currentTime = 0
-    } catch {
-      // Some browsers can reject seeking before metadata is ready.
-    }
-  }, [])
-
-  const handleVideoNodePointerEnter = React.useCallback((event: React.PointerEvent<HTMLElement>): void => {
-    if (node.result?.type !== 'video') return
-    playPreviewVideo(event.currentTarget)
-  }, [node.result?.type, playPreviewVideo])
-
-  const handleVideoNodePointerLeave = React.useCallback((event: React.PointerEvent<HTMLElement>): void => {
-    if (node.result?.type !== 'video') return
-    stopPreviewVideo(event.currentTarget)
-  }, [node.result?.type, stopPreviewVideo])
+  const { handleVideoNodePointerEnter, handleVideoNodePointerLeave } = useNodeVideoHoverPreview(node.result?.type)
 
   const handleFocusSourceNode = React.useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -252,8 +216,6 @@ function BaseGenerationNodeImpl({
     commitPersistedChange,
   })
   const isGenerating = status === 'queued' || status === 'running'
-  // v0.7.2 perf: 用 boolean primitive 订阅 canGenerate，而不是 getState() 同步读
-  // 之前 getState() 在 render 外读，不响应 nodes/edges 变化，是个隐藏 bug
   const canGenerate =
     useGenerationCanvasStore((state) =>
       canRunGenerationNode(node, {
@@ -274,7 +236,6 @@ function BaseGenerationNodeImpl({
   // 顶部再写一遍「生成失败」是重复噪音（2026-06-03 6 角色评审）。
   const showStatusBadge = status === 'queued' || status === 'running'
 
-  // v0.7.2 perf: 用 primitive 订阅 sourceNodeTitle / categoryId / exists 重组 label
   const sourceNodeLabel =
     sourceNodeTitle || (node.derivedFrom && !sourceNodeExists ? '源节点已不在当前项目' : node.derivedFrom || '')
   const sourceCategoryName = sourceNodeCategoryId ? getBuiltinCategoryById(sourceNodeCategoryId)?.name : null

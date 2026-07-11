@@ -1,6 +1,4 @@
 import React from 'react'
-import { IconFolderMinus, IconFolderPlus, IconPlayerPlay, IconX } from '@tabler/icons-react'
-import { WorkbenchIconButton } from '../../../design'
 import { toast } from '../../../ui/toast'
 import { cn } from '../../../utils/cn'
 import CanvasToolbar, { NodeAddMenu } from './CanvasToolbar'
@@ -15,7 +13,7 @@ import {
 import {
   subscribeBrowserAssetsImportToCanvas,
   type BrowserAssetCanvasImportItem,
-} from '../../../ui/browser/globalAssetPopoverEvents'
+} from '../../../ui/browser/overlay/globalAssetPopoverEvents'
 import { getDesktopBridge } from '../../../desktop/bridge'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
@@ -25,7 +23,6 @@ import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { buildDependencyWaves } from '../runner/dependencyWaves'
 import { confirmAndRunPlan, useBatchPlanPreviewStore } from './batchPlanPreview'
 import { useWorkbenchStore } from '../../workbenchStore'
-import { emitCanvasGesture } from '../events/canvasEventEmitter'
 import { GroupFrameList } from './GroupFrame'
 import { useAutoFitOnLoad } from './useAutoFitOnLoad'
 import { useCanvasShortcuts } from './useCanvasShortcuts'
@@ -51,6 +48,8 @@ import { shouldRenderFullNodeContent, shouldUseLightweightNodeRendering } from '
 import { LightweightGenerationNode } from './LightweightGenerationNode'
 import { hasPendingScene3DCameraMoveCapture, hasPendingScene3DStagingCapture } from './scene3dCaptureHostActivation'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
+import { useCanvasSelectionDrag } from './useCanvasSelectionDrag'
+import { CanvasSelectionToolbar } from './CanvasSelectionToolbar'
 import '../styles/generationCanvas.css'
 
 const FOCUS_GENERATION_NODE_EVENT = 'nomi-focus-generation-node'
@@ -137,11 +136,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
       })
       .map((group) => group.id)
   }, [groups, nodeById, selectedSet])
-  const draggingGroupRef = React.useRef<{ groupId: string; clientX: number; clientY: number; moved: boolean; historyCaptured: boolean } | null>(null)
-  const draggingSelectionRef = React.useRef<{ clientX: number; clientY: number; moved: boolean; historyCaptured: boolean } | null>(null)
-  const dragMoveFrameRef = React.useRef<number | null>(null)
-  const pendingGroupDeltaRef = React.useRef<{ groupId: string; x: number; y: number } | null>(null)
-  const pendingSelectionDeltaRef = React.useRef<{ x: number; y: number } | null>(null)
 
   // Pan/zoom + 视口虚拟化收口到 useCanvasViewport（壳组件顶死 800 行，抽出腾 headroom）。
   const {
@@ -214,83 +208,16 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     selectNodesInRect,
   })
   const { isPanning, isSpaceHeld, setViewportTransform, animateViewportTo, zoomAtStagePoint } = pointer
-
-  const flushPendingDragMove = React.useCallback(() => {
-    dragMoveFrameRef.current = null
-    const groupDelta = pendingGroupDeltaRef.current
-    const selectionDelta = pendingSelectionDeltaRef.current
-    pendingGroupDeltaRef.current = null
-    pendingSelectionDeltaRef.current = null
-    if (groupDelta && (groupDelta.x !== 0 || groupDelta.y !== 0)) {
-      moveGroupNodes(groupDelta.groupId, { x: groupDelta.x, y: groupDelta.y }, { persist: false, emit: false })
-    }
-    if (selectionDelta && (selectionDelta.x !== 0 || selectionDelta.y !== 0)) {
-      moveSelectedNodes(selectionDelta, { persist: false, emit: false })
-    }
-  }, [moveGroupNodes, moveSelectedNodes])
-
-  const emitGroupDragSettled = React.useCallback((groupId: string) => {
-    const state = useGenerationCanvasStore.getState()
-    const group = state.groups.find((candidate) => candidate.id === groupId)
-    if (!group?.nodeIds.length) return
-    const nodeIds = new Set(group.nodeIds)
-    const movedEvents = state.nodes
-      .filter((node) => nodeIds.has(node.id) && (node.categoryId || 'shots') === group.categoryId)
-      .map((node) => ({ type: 'canvas.node.moved' as const, payload: { nodeId: node.id, position: node.position } }))
-    if (!movedEvents.length) return
-    emitCanvasGesture([
-      ...movedEvents,
-      { type: 'canvas.group.updated', payload: { group } },
-    ])
-  }, [])
-
-  const emitSelectionDragSettled = React.useCallback(() => {
-    const state = useGenerationCanvasStore.getState()
-    const selected = new Set(state.selectedNodeIds)
-    if (!selected.size) return
-    const movedEvents = state.nodes
-      .filter((node) => selected.has(node.id))
-      .map((node) => ({ type: 'canvas.node.moved' as const, payload: { nodeId: node.id, position: node.position } }))
-    if (movedEvents.length) emitCanvasGesture(movedEvents)
-  }, [])
-
-  const requestDragMoveFrame = React.useCallback(() => {
-    if (dragMoveFrameRef.current !== null) return
-    dragMoveFrameRef.current = window.requestAnimationFrame(flushPendingDragMove)
-  }, [flushPendingDragMove])
-
-  const scheduleGroupMove = React.useCallback((groupId: string, delta: { x: number; y: number }) => {
-    const pending = pendingGroupDeltaRef.current
-    pendingGroupDeltaRef.current = pending && pending.groupId === groupId
-      ? { groupId, x: pending.x + delta.x, y: pending.y + delta.y }
-      : { groupId, x: delta.x, y: delta.y }
-    requestDragMoveFrame()
-  }, [requestDragMoveFrame])
-
-  const scheduleSelectionMove = React.useCallback((delta: { x: number; y: number }) => {
-    const pending = pendingSelectionDeltaRef.current
-    pendingSelectionDeltaRef.current = pending
-      ? { x: pending.x + delta.x, y: pending.y + delta.y }
-      : delta
-    requestDragMoveFrame()
-  }, [requestDragMoveFrame])
-
-  const flushScheduledDragMove = React.useCallback(() => {
-    if (dragMoveFrameRef.current !== null) {
-      window.cancelAnimationFrame(dragMoveFrameRef.current)
-    }
-    flushPendingDragMove()
-  }, [flushPendingDragMove])
-
-  React.useEffect(
-    () => () => {
-      if (dragMoveFrameRef.current !== null) {
-        window.cancelAnimationFrame(dragMoveFrameRef.current)
-        dragMoveFrameRef.current = null
-      }
-    },
-    [],
-  )
+  const { handleGroupFramePointerDown, handleSelectionBoundsPointerDown } = useCanvasSelectionDrag({
+    readOnly,
+    selectedNodeCount: selectedNodeIds.length,
+    zoomRef,
+    captureHistory,
+    commitPersistedChange,
+    moveGroupNodes,
+    moveSelectedNodes,
+    selectNodes,
+  })
 
   React.useEffect(() => {
     const handleFocusNode = (event: Event) => {
@@ -337,84 +264,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
       focusFlashTimerRef.current = null
     }, 1400)
   }, [activeCategoryId, allNodes, animateViewportTo, categoryViewports, pendingFocusNodeId, stageSizeRef, zoomRef])
-
-  React.useEffect(() => {
-    if (readOnly) return undefined
-    const handleMove = (event: PointerEvent) => {
-      const drag = draggingGroupRef.current
-      const scale = zoomRef.current || 1
-      if (drag) {
-        const delta = {
-          x: (event.clientX - drag.clientX) / scale,
-          y: (event.clientY - drag.clientY) / scale,
-        }
-        if (delta.x === 0 && delta.y === 0) return
-        if (!drag.historyCaptured) {
-          captureHistory()
-          drag.historyCaptured = true
-        }
-        drag.clientX = event.clientX
-        drag.clientY = event.clientY
-        drag.moved = true
-        scheduleGroupMove(drag.groupId, delta)
-        return
-      }
-      const selectionDrag = draggingSelectionRef.current
-      if (!selectionDrag) return
-      const delta = {
-        x: (event.clientX - selectionDrag.clientX) / scale,
-        y: (event.clientY - selectionDrag.clientY) / scale,
-      }
-      if (delta.x === 0 && delta.y === 0) return
-      if (!selectionDrag.historyCaptured) {
-        captureHistory()
-        selectionDrag.historyCaptured = true
-      }
-      selectionDrag.clientX = event.clientX
-      selectionDrag.clientY = event.clientY
-      selectionDrag.moved = true
-      scheduleSelectionMove(delta)
-    }
-    const handleUp = () => {
-      const drag = draggingGroupRef.current
-      const selectionDrag = draggingSelectionRef.current
-      if (drag?.moved || selectionDrag?.moved) {
-        flushScheduledDragMove()
-      }
-      if (drag) {
-        draggingGroupRef.current = null
-        if (drag.moved) {
-          emitGroupDragSettled(drag.groupId)
-          commitPersistedChange()
-        }
-      }
-      if (selectionDrag) {
-        draggingSelectionRef.current = null
-        if (selectionDrag.moved) {
-          emitSelectionDragSettled()
-          commitPersistedChange()
-        }
-      }
-    }
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('blur', handleUp)
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('blur', handleUp)
-    }
-  }, [
-    commitPersistedChange,
-    captureHistory,
-    emitGroupDragSettled,
-    emitSelectionDragSettled,
-    flushScheduledDragMove,
-    readOnly,
-    scheduleGroupMove,
-    scheduleSelectionMove,
-    zoomRef,
-  ])
 
   // Keep the store viewport in sync so nodes can read the same zoom/pan model.
   React.useEffect(() => {
@@ -589,40 +438,6 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     () => lastPastePositionRef.current ?? getToolbarInsertionPosition(),
     [getToolbarInsertionPosition],
   )
-
-  const handleGroupFramePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>, groupId: string) => {
-    if (readOnly || event.button !== 0) return
-    event.preventDefault()
-    event.stopPropagation()
-    const state = useGenerationCanvasStore.getState()
-    const group = state.groups.find((candidate) => candidate.id === groupId)
-    if (group?.nodeIds.length) {
-      const groupNodeIds = new Set(group.nodeIds)
-      const memberIds = state.nodes
-        .filter((node) => groupNodeIds.has(node.id) && (node.categoryId || 'shots') === group.categoryId)
-        .map((node) => node.id)
-      if (memberIds.length) selectNodes(memberIds)
-    }
-    draggingGroupRef.current = {
-      groupId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      moved: false,
-      historyCaptured: false,
-    }
-  }, [readOnly, selectNodes])
-
-  const handleSelectionBoundsPointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (readOnly || event.button !== 0 || selectedNodeIds.length < 2) return
-    event.preventDefault()
-    event.stopPropagation()
-    draggingSelectionRef.current = {
-      clientX: event.clientX,
-      clientY: event.clientY,
-      moved: false,
-      historyCaptured: false,
-    }
-  }, [readOnly, selectedNodeIds.length])
 
   useCanvasShortcuts({
     readOnly,
@@ -889,44 +704,15 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
               </React.Suspense>
             </div>
             {selectedBounds && selectedCount > 1 && !readOnly ? (
-              <div
-                className={cn(
-                  'generation-canvas-v2__selection-toolbar',
-                  'absolute z-[11] inline-flex items-center gap-2 px-2.5 py-1.5',
-                  'border border-nomi-line rounded-full',
-                  'bg-nomi-paper/[0.96] shadow-nomi-md pointer-events-auto',
-                )}
-                style={{
-                  transform: `translate(${Math.round(selectedBounds.minX + selectedBounds.width / 2)}px, ${Math.round(selectedBounds.minY - MULTI_SELECTION_BOUNDS_PADDING - MULTI_SELECTION_TOOLBAR_OFFSET)}px) translateX(-50%)`,
-                }}
-                aria-label="选中区域操作"
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <span className={cn('pl-1.5 pr-1 text-nomi-ink-60 text-body-sm whitespace-nowrap')}>已选 {selectedCount} 个</span>
-                {/* 主操作：批量生成（参考先行，点了直接跑能跑的；缺参考的会人话提示）。深色 pill 主角，放大更显眼。 */}
-                <button
-                  type="button"
-                  data-storyboard-run-all="true"
-                  className={cn(
-                    'inline-flex items-center gap-2 h-9 px-4 rounded-full border-0 cursor-pointer',
-                    'bg-nomi-ink text-nomi-paper text-body font-medium hover:bg-nomi-accent',
-                    'transition-colors duration-[var(--nomi-transition-fast)]',
-                  )}
-                  title="生成选中节点（参考先生成、镜头后生成；缺参考的会提示先生成参考卡）"
-                  onClick={handleBatchGenerate}
-                >
-                  <IconPlayerPlay size={16} stroke={1.6} aria-hidden />
-                  生成 {selectedCount} 个
-                </button>
-                <span className={cn('w-px h-4 bg-nomi-line')} />
-                {/* 复制/剪切已移除（⌘C / ⌘X 覆盖，去重复）；保留编组 + 清除。 */}
-                {selectedGroupIds.length > 0 ? (
-                  <WorkbenchIconButton label="解除分组 (⇧⌘G)" icon={<IconFolderMinus size={16} />} onClick={handleUngroupSelectedNodes} />
-                ) : (
-                  <WorkbenchIconButton label="创建分组 (⌘G)" icon={<IconFolderPlus size={16} />} onClick={handleGroupSelectedNodes} />
-                )}
-                <WorkbenchIconButton label="清除选择" icon={<IconX size={16} />} onClick={clearSelection} />
-              </div>
+              <CanvasSelectionToolbar
+                selectedCount={selectedCount}
+                selectedGroupCount={selectedGroupIds.length}
+                transform={`translate(${Math.round(selectedBounds.minX + selectedBounds.width / 2)}px, ${Math.round(selectedBounds.minY - MULTI_SELECTION_BOUNDS_PADDING - MULTI_SELECTION_TOOLBAR_OFFSET)}px) translateX(-50%)`}
+                onBatchGenerate={handleBatchGenerate}
+                onGroupSelectedNodes={handleGroupSelectedNodes}
+                onUngroupSelectedNodes={handleUngroupSelectedNodes}
+                onClearSelection={clearSelection}
+              />
             ) : null}
           </div>
           {pointer.marqueeRect ? (
