@@ -54,8 +54,8 @@ export const createCanvasGraphActions: CanvasSliceCreator<CanvasGraphActions> = 
     const mode: GenerationCanvasEdge['mode'] = sourceNode && targetNode
       ? selectConnectionEdgeMode(sourceNode, targetNode, pre.edges.filter((e) => e.target === targetNodeId))
       : 'reference'
-    // 连边能力校验收口到此(手动连线总闸):文本→图片、错配参考槽等盲连在创建期就拦——
-    // T8 此前只补了 agent 入口,手动拖把柄/点输入口的边落库后才在生成期被静默丢弃。
+    // 连边能力校验收口到此(手动连线总闸):错配参考槽等盲连在创建期就拦；
+    // 文本→图片/视频的通用 reference 边作为 prompt 上下文放行。
     // agent 路径已在 generationCanvasTools 预校验;这里防的是手动入口。
     if (sourceNode && targetNode) {
       const verdict = validateReferenceEdge(sourceNode, targetNode, mode)

@@ -4,12 +4,18 @@
 //
 // 用法：pnpm run build && pnpm run test:e2e
 import { _electron as electron } from "playwright";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const tempRoot = mkdtempSync(path.join(os.tmpdir(), "nomi-smoke-e2e-"));
+const userDataDir = path.join(tempRoot, "user-data");
+const projectsDir = path.join(tempRoot, "projects");
+mkdirSync(projectsDir, { recursive: true });
 
 let passed = 0;
 function assert(cond, label) {
@@ -20,9 +26,17 @@ function assert(cond, label) {
 
 const app = await electron.launch({
   executablePath: require("electron"),
-  args: ["."],
+  args: [".", `--user-data-dir=${userDataDir}`],
   cwd: repoRoot,
-  env: { ...process.env, NOMI_E2E_SMOKE: "1" },
+  env: {
+    ...process.env,
+    NOMI_E2E: "1",
+    NOMI_E2E_SMOKE: "1",
+    NOMI_E2E_ALLOW_MULTI_INSTANCE: "1",
+    NOMI_ELECTRON_USER_DATA_DIR: userDataDir,
+    NOMI_SETTINGS_DIR: userDataDir,
+    NOMI_PROJECTS_DIR: projectsDir,
+  },
 });
 
 try {

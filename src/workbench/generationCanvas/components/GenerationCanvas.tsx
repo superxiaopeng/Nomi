@@ -325,7 +325,10 @@ export default function GenerationCanvas({ readOnly = false }: GenerationCanvasP
     cancelConnection,
     onDropOnEmpty: ({ sourceNodeId, sourceSide, stagePoint, canvasPoint }) => {
       const sourceNode = allNodesRef.current.find((node) => node.id === sourceNodeId)
-      const sourceCanCreateMedia = sourceNode?.kind === 'image' || Boolean(sourceNode && isImageLikeGenerationNodeKind(sourceNode.kind))
+      const sourceCanCreateMedia =
+        sourceNode?.kind === 'text' ||
+        sourceNode?.kind === 'image' ||
+        Boolean(sourceNode && isImageLikeGenerationNodeKind(sourceNode.kind))
       if (!sourceCanCreateMedia || !stageRef.current) {
         cancelConnection()
         return

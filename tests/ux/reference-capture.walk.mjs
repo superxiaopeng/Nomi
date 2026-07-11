@@ -80,7 +80,11 @@ const snapCaptureWin = async (app, name) => {
 }
 
 const consoleErrors = []
-const app = await electron.launch({
+let app = null
+let allPassed = false
+
+try {
+app = await electron.launch({
   executablePath: require('electron'),
   args: ['.', `--user-data-dir=${settingsDir}`],
   cwd: repoRoot,
@@ -131,8 +135,33 @@ if (entryPresent) {
   await captureEntry.click({ timeout: 3000 })
   chrome = await winPromise
   if (chrome) {
+    chrome.on('console', (m) => { if (m.type() === 'error') consoleErrors.push('capture chrome: ' + m.text()) })
+    chrome.on('pageerror', (e) => consoleErrors.push('capture chrome pageerror: ' + e.message))
     await chrome.waitForLoadState('domcontentloaded').catch(() => {})
     await chrome.waitForTimeout(1800)
+    await app.evaluate(({ BrowserWindow }) => {
+      globalThis.__nomiReferenceCaptureWalkErrors = []
+      const captureWindow = BrowserWindow.getAllWindows()
+        .find((candidate) => candidate.webContents.getURL().includes('reference-capture'))
+      const view = captureWindow?.contentView?.children?.[0]
+      if (!view) {
+        globalThis.__nomiReferenceCaptureWalkErrors.push('capture view: missing WebContentsView')
+        return
+      }
+      view.webContents.on('console-message', (_event, levelOrDetails, legacyMessage) => {
+        const details = levelOrDetails && typeof levelOrDetails === 'object' ? levelOrDetails : null
+        const level = details?.level ?? levelOrDetails
+        const message = details?.message ?? legacyMessage
+        if (level === 3 || level === 'error') {
+          globalThis.__nomiReferenceCaptureWalkErrors.push(`capture view: ${String(message ?? 'unknown error')}`)
+        }
+      })
+      view.webContents.on('render-process-gone', (_event, details) => {
+        globalThis.__nomiReferenceCaptureWalkErrors.push(
+          `capture view renderer gone: ${details?.reason ?? 'unknown reason'}`,
+        )
+      })
+    })
   }
 }
 const chromeOk = !!chrome && (await chrome.locator('input[aria-label="地址栏"]').count()) > 0
@@ -208,6 +237,13 @@ if (captured) {
   await snapPage(win, 'main-asset-panel-after-capture')
 }
 
+const captureViewErrors = await app.evaluate(() =>
+  Array.isArray(globalThis.__nomiReferenceCaptureWalkErrors)
+    ? globalThis.__nomiReferenceCaptureWalkErrors
+    : [],
+)
+consoleErrors.push(...captureViewErrors)
+
 console.log('\n===== 参考捕捞窗走查判定 =====')
 console.log(`  ① 素材库有「网页捕捞」入口:   ${entryPresent ? 'PASS' : 'FAIL'}`)
 console.log(`  ② 捕捞窗打开(工具条就位):     ${chromeOk ? 'PASS' : 'FAIL'}`)
@@ -218,6 +254,21 @@ console.log(`  ⑤ 权限 deny-by-default:       ${permission.startsWith('denied
 console.log(`  ⑥ 主窗素材库回流可见:         ${mainSeesAsset ? 'PASS' : 'FAIL'}`)
 console.log(`  console errors: ${consoleErrors.length}`)
 if (consoleErrors.length) console.log('   ' + consoleErrors.slice(0, 8).join('\n   '))
+allPassed =
+  entryPresent &&
+  chromeOk &&
+  navigated &&
+  captured &&
+  !sidecarLeak &&
+  permission.startsWith('denied') &&
+  mainSeesAsset &&
+  consoleErrors.length === 0
+console.log(`  总判定: ${allPassed ? 'PASS' : 'FAIL'}`)
 console.log(`\n截图在 ${shotsDir}`)
-await app.close()
-server.close()
+} catch (error) {
+  console.error(`\n参考捕捞窗走查异常: ${error?.stack || error}`)
+} finally {
+  if (app) await app.close().catch(() => undefined)
+  await new Promise((resolve) => server.close(resolve))
+}
+if (!allPassed) process.exitCode = 1

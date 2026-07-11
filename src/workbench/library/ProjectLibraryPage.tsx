@@ -277,9 +277,9 @@ export default function ProjectLibraryPage({ onOpenProject, onDeleteProject, onN
                         <button
                           className={cn(
                             'absolute top-[9px] right-[9px] size-8 rounded-nomi-sm border-none',
-                            'bg-nomi-paper/90 text-workbench-danger grid place-items-center cursor-pointer',
+                            'bg-[var(--nomi-snap-tag)] text-nomi-paper grid place-items-center cursor-pointer',
                             'transition-[background,color] duration-150',
-                            'hover:bg-workbench-danger hover:text-nomi-paper',
+                            'hover:bg-[var(--nomi-snap)] hover:text-nomi-paper',
                           )}
                           type="button"
                           aria-label={`删除项目 ${project.name}`}

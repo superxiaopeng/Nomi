@@ -94,8 +94,11 @@ try {
   await win.keyboard.up('KeyW')
   await win.waitForTimeout(300)
   if ((await stopBtn.count()) > 0) { await stopBtn.first().click(); await win.waitForTimeout(400) }
-  const close = win.locator('[title="关闭"]').first()
-  if ((await close.count()) > 0) await close.click()
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const close = editor.locator('[title="退出 3D 场景"]').first()
+  await close.waitFor({ state: 'visible', timeout: 5000 })
+  await close.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
 
   // 轮询：第 1 次被强制判失败后，重试兜底应在 ~800ms 后重挂捕获器、第 2 次真出片。给足 ~110s。
   let mp4s = []

@@ -83,7 +83,9 @@ function start(command, args, options = {}) {
     shell: false,
     ...options,
   });
+  child.nomiExit = { exited: false, code: null, signal: null };
   child.on("exit", (code, signal) => {
+    child.nomiExit = { exited: true, code, signal };
     if (signal) process.kill(process.pid, signal);
     else if (typeof code === "number" && code !== 0) process.exit(code);
   });
@@ -103,12 +105,18 @@ function startTailwindWatcher() {
 async function waitForRenderer(
   url,
   timeoutMs = readPositiveIntegerEnv("NOMI_RENDERER_READY_TIMEOUT_MS", 180000),
+  rendererProcess = null,
 ) {
   const { hostname, port } = new URL(url);
   const numericPort = Number(port || 80);
   const startedAt = Date.now();
   let nextProgressLogMs = 15000;
   while (Date.now() - startedAt < timeoutMs) {
+    if (rendererProcess?.nomiExit?.exited) {
+      throw new Error(
+        `Renderer process exited before becoming ready${describeChildExit(rendererProcess.nomiExit)}: ${url}`,
+      );
+    }
     if (await canConnect(hostname, numericPort)) return;
     const elapsedMs = Date.now() - startedAt;
     if (elapsedMs >= nextProgressLogMs) {
@@ -118,6 +126,12 @@ async function waitForRenderer(
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`Renderer did not become ready within ${timeoutMs}ms: ${url}`);
+}
+
+function describeChildExit(exitState) {
+  if (exitState.signal) return ` (signal ${exitState.signal})`;
+  if (typeof exitState.code === "number") return ` (exit code ${exitState.code})`;
+  return "";
 }
 
 function canConnect(host, port) {
@@ -438,7 +452,7 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 process.on("exit", shutdown);
 
-await waitForRenderer(rendererUrl);
+await waitForRenderer(rendererUrl, undefined, vite);
 if (process.env.NOMI_BLOCKING_RENDERER_WARMUP === "1") {
   await warmRendererShell(rendererUrl);
   await warmCriticalRendererResources(vite, rendererUrl);

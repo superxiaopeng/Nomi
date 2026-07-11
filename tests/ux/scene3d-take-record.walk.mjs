@@ -108,8 +108,11 @@ try {
   log(`  ${pass.recStopped ? '✓' : '✗'} 停止录制`)
 
   // 关编辑器看画布
-  const close = win.locator('[title="关闭"]').first()
-  if ((await close.count()) > 0) await close.click()
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const close = editor.locator('[title="退出 3D 场景"]').first()
+  await close.waitFor({ state: 'visible', timeout: 5000 })
+  await close.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
   // #1 修复后：take 节点继承 source 分类 → 与原节点同屏；关编辑器后 requestCanvasFit（360ms 触发 + 200ms 动画）
   // 把它带进视口。等够时间让 fit 落定再截图/检查（之前 1500ms 偏紧，拉到 2600ms 更稳）。
   await win.waitForTimeout(2600)

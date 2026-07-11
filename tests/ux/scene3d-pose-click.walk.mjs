@@ -21,7 +21,7 @@ const app = await electron.launch({
   executablePath: require('electron'),
   args: ['.', `--user-data-dir=${path.join(tmp, 'udata')}`],
   cwd: repoRoot,
-  env: { ...process.env, NOMI_E2E_SMOKE: '1', NOMI_PROJECTS_DIR: projectsDir },
+  env: { ...process.env, NOMI_E2E: '1', NOMI_E2E_SMOKE: '1', NOMI_PROJECTS_DIR: projectsDir },
 })
 
 const errors = []
@@ -111,8 +111,10 @@ try {
   log(`  ${pass.thumbnailMade ? '✓' : '✗'} 编辑器内截图（生成缩略图回写）`)
 
   // 关闭编辑器
-  const close = win.locator('[title="关闭"]').first()
-  if ((await close.count()) > 0) await close.click()
+  const close = editor.locator('[title="退出 3D 场景"]').first()
+  await close.waitFor({ state: 'visible', timeout: 5000 })
+  await close.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
   await win.waitForTimeout(2000)
   await win.screenshot({ path: path.join(outDir, 'walk-04-back-on-canvas.png') })
 

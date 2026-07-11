@@ -96,8 +96,11 @@ try {
   if ((await stopBtn.count()) > 0) { await stopBtn.first().click(); await win.waitForTimeout(400) }
 
   // 关编辑器（离屏 Host 常驻，捕获在后台继续）。
-  const close = win.locator('[title="关闭"]').first()
-  if ((await close.count()) > 0) await close.click()
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const close = editor.locator('[title="退出 3D 场景"]').first()
+  await close.waitFor({ state: 'visible', timeout: 5000 })
+  await close.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
   await win.waitForTimeout(300)
 
   // —— 关键：在离屏捕获**进行中**强制对离屏 canvas 丢上下文，再稍后恢复。 ——

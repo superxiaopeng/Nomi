@@ -25,6 +25,7 @@ const app = await electron.launch({
 const log = (m) => console.log(m)
 const consoleErrors = []
 const pageErrors = []
+let ok = false
 
 try {
   const win = await app.firstWindow()
@@ -59,8 +60,10 @@ try {
   if ((await openEmpty.count()) > 0) await openEmpty.first().click()
   await win.waitForTimeout(4500)
 
-  const canvasGone = async () => (await win.locator('[aria-label="3D 场景编辑器"] canvas').count()) === 0
-  log(`  默认(1假人) canvas 不见? ${await canvasGone()}  err=${consoleErrors.length}/${pageErrors.length}`)
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const canvasGone = async () => (await editor.locator('canvas').count()) === 0
+  const initialCanvasGone = await canvasGone()
+  log(`  默认(1假人) canvas 不见? ${initialCanvasGone}  err=${consoleErrors.length}/${pageErrors.length}`)
   await win.screenshot({ path: path.join(outDir, 'w-01-default.png') })
 
   // 加第 2 个假人：旧条直接点「假人」按钮；新条点「添加」→「假人」→「单个假人」
@@ -79,13 +82,15 @@ try {
   }
   await win.waitForTimeout(3500)
 
-  log(`  加第2假人后 canvas 不见? ${await canvasGone()}  err=${consoleErrors.length}/${pageErrors.length}`)
+  const twoMannequinCanvasGone = await canvasGone()
+  log(`  加第2假人后 canvas 不见? ${twoMannequinCanvasGone}  err=${consoleErrors.length}/${pageErrors.length}`)
   await win.screenshot({ path: path.join(outDir, 'w-02-two-mannequins.png') })
 
   // 关编辑器 → 重开（走「从磁盘恢复已存场景」路径，跟用户的 2 假人场景一致）
-  const closeBtn = win.locator('[aria-label="3D 场景编辑器"] [title="关闭"], header button[title="关闭"]').first()
-  if ((await closeBtn.count()) > 0) await closeBtn.click()
-  else await win.keyboard.press('Escape').catch(() => {})
+  const closeBtn = editor.locator('[title="退出 3D 场景"]').first()
+  await closeBtn.waitFor({ state: 'visible', timeout: 5000 })
+  await closeBtn.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
   await win.waitForTimeout(1500)
   const reopen = win.getByRole('button', { name: '打开 3D 编辑器', exact: false }).first()
   if ((await reopen.count()) === 0) {
@@ -94,16 +99,20 @@ try {
     if ((await node.count()) > 0) await node.dblclick()
   } else await reopen.click()
   await win.waitForTimeout(4500)
-  log(`  重开编辑器后 canvas 不见? ${await canvasGone()}  err=${consoleErrors.length}/${pageErrors.length}`)
+  const reopenedCanvasGone = await canvasGone()
+  log(`  重开编辑器后 canvas 不见? ${reopenedCanvasGone}  err=${consoleErrors.length}/${pageErrors.length}`)
   await win.screenshot({ path: path.join(outDir, 'w-03-reopened.png') })
 
   log('\n=== console errors ===')
   consoleErrors.slice(0, 20).forEach((e) => log('  • ' + e.slice(0, 300)))
   log('=== page errors ===')
   pageErrors.slice(0, 20).forEach((e) => log('  • ' + e.slice(0, 500)))
+  ok = !initialCanvasGone && !twoMannequinCanvasGone && !reopenedCanvasGone
+    && consoleErrors.length === 0 && pageErrors.length === 0
+  log(`\n${ok ? '✓ PASS' : '✗ FAIL'}：3D 双假人场景与重开流程无白屏、无脚本错误`)
 } catch (e) {
   log(`✗ 异常：${String(e)}`)
 } finally {
-  await app.close()
-  process.exit(0)
+  await app.close().catch(() => undefined)
+  process.exit(ok ? 0 : 1)
 }

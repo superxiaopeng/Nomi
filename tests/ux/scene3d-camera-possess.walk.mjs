@@ -158,8 +158,12 @@ try {
   // 出片是异步的；关编辑器后画布上应多出一个「录制走位参考」3D 节点（运镜 take 已落节点 = mp4 链路已起）。
   // 计 3D 节点入口数：原 1 个 → 录完应为 2 个（buildRecordedCameraTakeScene 返回非 null 才会建节点）。
   const beforeNodes = await win.getByText('点击进入 3D 编辑器', { exact: false }).count()
-  const closeBtn = win.locator('[aria-label="3D 场景编辑器"] [title="关闭"]').first()
-  if ((await closeBtn.count()) > 0) { await closeBtn.click(); await win.waitForTimeout(3500) }
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const closeBtn = editor.locator('[title="退出 3D 场景"]').first()
+  await closeBtn.waitFor({ state: 'visible', timeout: 5000 })
+  await closeBtn.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
+  await win.waitForTimeout(3500)
   const node3dCount = await win.getByText('点击进入 3D 编辑器', { exact: false }).count()
   const titleSeen = (await win.getByText('录制走位参考', { exact: false }).count()) > 0
   pass.recordedNode = node3dCount >= 2 || titleSeen
