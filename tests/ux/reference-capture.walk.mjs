@@ -154,6 +154,26 @@ try {
   }
   await snapPage(win, 'browser-open')
 
+  // —— ②b 用户手点工具条「素材盒」→ 伴生弹层必须真的出现且有内容（2026-07-13 用户抓过点不开） ——
+  let companionOpensByClick = false
+  if (browserOpen) {
+    await win.locator('button[aria-label="打开素材盒"]').first().click({ timeout: 3000 }).catch(() => {})
+    for (let i = 0; i < 10 && !companionOpensByClick; i++) {
+      await win.waitForTimeout(400)
+      const overlay = app.windows().find((p) => p.url().includes('browser-asset-overlay')) || null
+      if (overlay) {
+        companionOpensByClick = await overlay.evaluate(() =>
+          Boolean(document.querySelector('input[aria-label="搜索素材"]')) || document.querySelectorAll('button').length > 0,
+        ).catch(() => false)
+      }
+    }
+    console.log('  ②b 手点素材盒开弹层(带内容):', companionOpensByClick)
+    await snapPage(win, 'companion-open-by-click')
+    // 顺带测关：收起后走后续捕捞流（捕捞事件会再自动弹出）。
+    await win.locator('button[aria-label="收起素材盒"]').first().click({ timeout: 2000 }).catch(() => {})
+    await win.waitForTimeout(500)
+  }
+
   // —— ③ 地址栏导航到本地测试页 ——
   let navigated = false
   const findView = async () =>
@@ -314,6 +334,7 @@ try {
   console.log('\n===== 捕捞面收敛走查判定 =====')
   console.log(`  ① 浏览器唯一门(无旧入口/顶栏无素材盒): ${entryPresent ? 'PASS' : 'FAIL'}`)
   console.log(`  ② 应用内浏览器打开:           ${browserOpen ? 'PASS' : 'FAIL'}`)
+  console.log(`     手点工具条素材盒弹层出现:   ${companionOpensByClick ? 'PASS' : 'FAIL'}`)
   console.log(`  ③ 地址栏导航本地页:           ${navigated ? 'PASS' : 'FAIL'}`)
   console.log(`  ④ 悬停+Ctrl+C 捕捞落 imported: ${captured ? `PASS (${capturedFile})` : 'FAIL'}`)
   console.log(`     sidecar originalUrl 恒 null(不进信任窗): ${captured && !sidecarLeak ? 'PASS' : 'FAIL'}`)
@@ -325,6 +346,7 @@ try {
   allPassed =
     entryPresent &&
     browserOpen &&
+    companionOpensByClick &&
     navigated &&
     captured &&
     !sidecarLeak &&

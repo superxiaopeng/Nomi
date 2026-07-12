@@ -330,16 +330,6 @@ export function useBrowserDialogActions({
     [openNativeAssetPopover],
   )
 
-  React.useEffect(
-    () =>
-      subscribeBrowserAssetPopoverOpen((nextOpened) => {
-        if (nextOpened && openNativeAssetPopover()) return
-        if (!nextOpened) browserBridge?.assetOverlay?.close()
-        setBrowserAssetPopoverOpen(nextOpened)
-      }),
-    [browserBridge, openNativeAssetPopover],
-  )
-
   React.useEffect(() => {
     if (!browserBridge?.onPromptCapture) return undefined
     return browserBridge.onPromptCapture((event: DesktopBrowserPromptCaptureEvent) => {
@@ -470,7 +460,11 @@ export function useBrowserDialogActions({
     [activeTab, browserBridge, runBrowserScreenshotPrompt],
   )
 
+  // 开合的唯一门：native overlay 模式下必须真的叫 openNativeAssetPopover/close，
+  // 只翻 React 状态弹层永远不会出现（工具条素材盒按钮点不开的根因，2026-07-13 用户抓出）。
   const handleBrowserAssetPopoverOpenChange = React.useCallback((nextOpen: boolean): void => {
+    if (nextOpen && openNativeAssetPopover()) return
+    if (!nextOpen) browserBridge?.assetOverlay?.close()
     setBrowserAssetPopoverOpen(nextOpen)
     if (!nextOpen) {
       setBrowserAssetPopoverRect(null)
@@ -478,7 +472,13 @@ export function useBrowserDialogActions({
       setBrowserResourceCaptureEnabled(false)
       setBrowserPromptCaptureRequest(null)
     }
-  }, [])
+  }, [browserBridge, openNativeAssetPopover])
+
+  // 顶层/画布等处派来的开合事件也走同一扇门（原先这里有第二份 native-open 逻辑，已收敛）。
+  React.useEffect(
+    () => subscribeBrowserAssetPopoverOpen((nextOpened) => handleBrowserAssetPopoverOpenChange(nextOpened)),
+    [handleBrowserAssetPopoverOpenChange],
+  )
 
   const handleBrowserAssetPopoverRectChange = React.useCallback((nextRect: FloatingWindowBoundsRect | null): void => {
     setBrowserAssetPopoverRect((current) => (sameBoundsRect(current, nextRect) ? current : nextRect))
