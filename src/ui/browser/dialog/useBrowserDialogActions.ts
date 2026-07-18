@@ -2,7 +2,6 @@
 import React from 'react'
 import { getDesktopActiveProjectId } from '../../../desktop/activeProject'
 import {
-  getDesktopBridge,
   type DesktopBrowserChromeMenuItem,
   type DesktopBrowserPromptCaptureEvent,
   type DesktopBrowserTextPromptSaveEvent,
@@ -501,34 +500,17 @@ export function useBrowserDialogActions({
       if (!projectId) throw new Error('projectId is required')
       const tab = tabsRef.current.find((item) => item.id === activeTabIdRef.current)
       const fallbackTitle = input.title || input.fileName || (input.mediaType === 'video' ? '网页视频' : '网页图片')
-      if (tab?.viewId && browserBridge?.importMedia && canDownloadFromBrowserView(input.url)) {
-        const asset = await browserBridge.importMedia({
-          viewId: tab.viewId,
-          projectId,
-          url: input.url,
-          fileName: input.fileName,
-          title: input.title,
-          mediaType: input.mediaType,
-        })
-        return browserAssetFromDesktopAsset(asset, fallbackTitle)
+      if (!tab?.viewId || !browserBridge?.importMedia || !canDownloadFromBrowserView(input.url)) {
+        throw new Error('来源页面会话已失效，请回到原网页重新拖入')
       }
-      if (tab?.viewId && browserBridge?.importImage && input.mediaType !== 'video' && /^https?:\/\//i.test(input.url)) {
-        const asset = await browserBridge.importImage({
-          viewId: tab.viewId,
-          projectId,
-          url: input.url,
-          fileName: input.fileName,
-          title: input.title,
-        })
-        return browserAssetFromDesktopAsset(asset, fallbackTitle)
-      }
-      const asset = await getDesktopBridge()?.assets.importRemoteUrl({
+      const asset = await browserBridge.importMedia({
+        viewId: tab.viewId,
         projectId,
         url: input.url,
-        kind: 'browser-capture',
         fileName: input.fileName,
+        title: input.title,
+        mediaType: input.mediaType,
       })
-      if (!asset) throw new Error('desktop asset import is unavailable')
       return browserAssetFromDesktopAsset(asset, fallbackTitle)
     },
     [browserBridge],

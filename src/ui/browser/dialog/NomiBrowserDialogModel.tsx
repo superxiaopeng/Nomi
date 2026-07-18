@@ -455,7 +455,7 @@ export function PromptModeOption({
   return (
     <button
       type="button"
-      className="flex w-full cursor-pointer items-start gap-2 rounded-nomi-sm border-0 bg-transparent p-2 text-left text-caption text-nomi-ink-70 transition-colors hover:bg-nomi-ink-05 hover:text-nomi-ink"
+      className="flex w-full cursor-pointer items-start gap-2 rounded-nomi-sm border-0 bg-transparent p-2 text-left text-caption text-nomi-ink-80 transition-colors hover:bg-nomi-ink-05 hover:text-nomi-ink"
       role="menuitem"
       onClick={() => onSelect(mode)}
     >
@@ -471,7 +471,7 @@ export function PromptModeOption({
         <span className="block font-semibold leading-[1.25] text-nomi-ink">
           {BROWSER_PROMPT_EXTRACTION_MODE_LABELS[mode]}
         </span>
-        <span className="mt-0.5 block text-micro leading-snug text-nomi-ink-45">
+        <span className="mt-0.5 block text-micro leading-snug text-nomi-ink-40">
           {styleMode ? '提取配色、字体、构图、效果 JSON' : '还原主体、构图、光影和细节'}
         </span>
       </span>

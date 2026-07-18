@@ -14,20 +14,48 @@ export async function installBrowserImageDragBridge(record: BrowserViewRecord): 
   const dragMime = ${JSON.stringify(BROWSER_IMAGE_DRAG_MIME)};
   if (window.__nomiBrowserImageDragBridgeInstalled) return true;
   window.__nomiBrowserImageDragBridgeInstalled = true;
-  const pickImageElement = (target) => {
+  const pickMediaElement = (target) => {
     if (!(target instanceof Element)) return null;
-    if (target instanceof HTMLImageElement) return target;
-    return target.closest ? target.closest('img') : null;
+    if (target instanceof HTMLImageElement || target instanceof HTMLVideoElement) return target;
+    const closestMedia = target.closest ? target.closest('img,video') : null;
+    if (closestMedia) return closestMedia;
+    const container = target.closest ? target.closest('[draggable="true"],a,picture,figure') : null;
+    return container?.querySelector ? container.querySelector('img,video') : null;
   };
-  const readImageUrl = (image) => {
-    if (!image) return '';
-    return image.currentSrc || image.src || image.getAttribute('data-src') || image.getAttribute('data-original') || '';
+  const readBackgroundUrl = (target) => {
+    if (!(target instanceof Element)) return '';
+    const candidates = [target, target.closest?.('[draggable="true"],a,figure')].filter(Boolean);
+    for (const candidate of candidates) {
+      const value = getComputedStyle(candidate).backgroundImage || '';
+      const match = value.match(/url\\(["']?(.+?)["']?\\)/i);
+      if (match?.[1]) return match[1];
+    }
+    return '';
+  };
+  const readMedia = (target) => {
+    const media = pickMediaElement(target);
+    if (media instanceof HTMLVideoElement) {
+      const videoUrl = media.currentSrc || media.src || media.querySelector('source')?.src || '';
+      return {
+        element: media,
+        url: videoUrl || media.poster || '',
+        mediaType: videoUrl ? 'video' : 'image',
+      };
+    }
+    if (media instanceof HTMLImageElement) {
+      return {
+        element: media,
+        url: media.currentSrc || media.src || media.getAttribute('data-src') || media.getAttribute('data-original') || media.getAttribute('data-lazy-src') || '',
+        mediaType: 'image',
+      };
+    }
+    return { element: target instanceof Element ? target : null, url: readBackgroundUrl(target), mediaType: 'image' };
   };
   document.addEventListener('dragstart', (event) => {
     const transfer = event.dataTransfer;
     if (!transfer) return;
-    const image = pickImageElement(event.target);
-    const rawUrl = readImageUrl(image);
+    const media = readMedia(event.target);
+    const rawUrl = media.url;
     if (!rawUrl) return;
     let url = '';
     try {
@@ -35,10 +63,11 @@ export async function installBrowserImageDragBridge(record: BrowserViewRecord): 
     } catch {
       return;
     }
-    const title = (image.getAttribute('alt') || image.getAttribute('title') || document.title || '').trim();
+    const title = (media.element?.getAttribute?.('alt') || media.element?.getAttribute?.('title') || document.title || '').trim();
     const payload = {
       url,
       title,
+      mediaType: media.mediaType,
       pageUrl: window.location.href,
       pageTitle: document.title || '',
     };
@@ -49,6 +78,9 @@ export async function installBrowserImageDragBridge(record: BrowserViewRecord): 
     try { console.info(${JSON.stringify(BROWSER_IMAGE_DRAG_START_CONSOLE_PREFIX)} + JSON.stringify(payload)); } catch {}
   }, true);
   document.addEventListener('dragend', () => {
+    try { console.info(${JSON.stringify(BROWSER_IMAGE_DRAG_END_CONSOLE_MESSAGE)}); } catch {}
+  }, true);
+  document.addEventListener('drop', () => {
     try { console.info(${JSON.stringify(BROWSER_IMAGE_DRAG_END_CONSOLE_MESSAGE)}); } catch {}
   }, true);
   return true;

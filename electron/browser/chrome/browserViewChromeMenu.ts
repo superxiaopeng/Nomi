@@ -54,7 +54,27 @@ function browserChromeMenuHeight(items: BrowserChromeMenuItem[]): number {
   return Math.max(1, contentHeight + 12);
 }
 
-function browserChromeMenuHtml(items: BrowserChromeMenuItem[]): string {
+export function browserChromeMenuPreloadPath(moduleDir: string = __dirname): string {
+  return path.join(moduleDir, "../../preload.js");
+}
+
+const BROWSER_CHROME_MENU_BEHAVIOR = `(() => {
+  const api = window.nomiDesktop && window.nomiDesktop.browserChromeMenu;
+  const selectFromEvent = (event) => {
+    const button = event.target && event.target.closest ? event.target.closest('button[data-id]') : null;
+    if (!button || button.disabled || !api) return;
+    api.select(button.dataset.id || '');
+  };
+  document.addEventListener('pointerup', selectFromEvent);
+  document.addEventListener('click', selectFromEvent);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && api) api.cancel();
+  });
+  const first = document.querySelector('button[data-id]:not([disabled])');
+  if (first) first.focus();
+})()`;
+
+export function browserChromeMenuHtml(items: BrowserChromeMenuItem[]): string {
   const rows = items
     .map((item) => {
       if (item.type === "separator") return '<div class="separator" role="separator"></div>';
@@ -67,6 +87,7 @@ function browserChromeMenuHtml(items: BrowserChromeMenuItem[]): string {
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" />
     <title>Nomi Browser Chrome Menu</title>
     <style>
       :root { color-scheme: dark; }
@@ -82,21 +103,6 @@ function browserChromeMenuHtml(items: BrowserChromeMenuItem[]): string {
   </head>
   <body>
     <div class="menu" role="menu" aria-label="浏览器菜单">${rows}</div>
-    <script>
-      const api = window.nomiDesktop && window.nomiDesktop.browserChromeMenu;
-      const selectFromEvent = (event) => {
-        const button = event.target && event.target.closest ? event.target.closest('button[data-id]') : null;
-        if (!button || button.disabled || !api) return;
-        api.select(button.dataset.id || '');
-      };
-      document.addEventListener('pointerup', selectFromEvent);
-      document.addEventListener('click', selectFromEvent);
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && api) api.cancel();
-      });
-      const first = document.querySelector('button[data-id]:not([disabled])');
-      if (first) first.focus();
-    </script>
   </body>
 </html>`;
 }
@@ -139,7 +145,7 @@ export function showBrowserChromeMenu(
       width: payload.width,
       height,
       webPreferences: {
-        preload: path.join(__dirname, "../preload.js"),
+        preload: browserChromeMenuPreloadPath(),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
@@ -161,6 +167,11 @@ export function showBrowserChromeMenu(
       closeBrowserChromeMenu(record, null);
     });
     menuWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    menuWindow.webContents.once("did-finish-load", () => {
+      void menuWindow.webContents.executeJavaScript(BROWSER_CHROME_MENU_BEHAVIOR, true).catch(() => {
+        closeBrowserChromeMenu(record, null);
+      });
+    });
     menuWindow.once("ready-to-show", () => {
       if (!menuWindow.isDestroyed()) menuWindow.show();
     });

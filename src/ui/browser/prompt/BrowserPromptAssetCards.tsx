@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { IconCheck, IconCopy, IconFileText, IconPhoto, IconX } from '../../../vendor/tablerIcons'
 import { cn } from '../../../utils/cn'
 import type { NomiBrowserAsset } from '../assets/browserAssetData'
+import { isBrowserAssetDraggable } from '../popover/browserAssetPopoverUtils'
 import { promptTypeLabel as getBrowserPromptTypeLabel } from '../assets/browserAssetLibraryStorage'
 import { BROWSER_PROMPT_EXTRACTION_MODE_LABELS, type BrowserPromptExtractionMode } from './browserPromptExtraction'
 import { TOOL_BUTTON_CLASS } from '../popover/browserAssetPopoverConstants'
@@ -71,7 +72,7 @@ export const BrowserPromptAssetTile = React.memo(function BrowserPromptAssetTile
       ref={setNodeRef}
       role="button"
       tabIndex={0}
-      draggable
+      draggable={isBrowserAssetDraggable(asset, false)}
       data-browser-asset-tile="true"
       data-asset-id={asset.id}
       aria-label={asset.title}
@@ -101,12 +102,12 @@ export const BrowserPromptAssetTile = React.memo(function BrowserPromptAssetTile
         {previewUrl ? (
           <img src={previewUrl} alt="" draggable={false} className="block size-full object-cover" />
         ) : (
-          <div className="grid size-full place-items-center text-nomi-ink-35">
+          <div className="grid size-full place-items-center text-nomi-ink-40">
             <IconPhoto size={26} stroke={1.5} aria-hidden="true" />
           </div>
         )}
         {loading ? (
-          <div className="absolute inset-0 grid place-items-center bg-nomi-paper/74 text-nomi-ink-45 backdrop-blur-[1px]">
+          <div className="absolute inset-0 grid place-items-center bg-nomi-paper/75 text-nomi-ink-40 backdrop-blur-[1px]">
             <span className="size-5 animate-spin rounded-pill border-2 border-nomi-ink-20 border-t-nomi-accent" />
           </div>
         ) : null}
@@ -176,10 +177,10 @@ export function BrowserPromptDetailModal({
         </div>
         <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
           <section className="grid min-h-0 gap-2">
-            <div className="text-caption font-semibold text-nomi-ink-70">参考图片</div>
+            <div className="text-caption font-semibold text-nomi-ink-80">参考图片</div>
             <div className="relative min-h-[260px] overflow-hidden rounded-nomi border border-nomi-line bg-nomi-bg">
               {previewUrl ? <img src={previewUrl} alt="" draggable={false} className="block size-full object-contain" /> : (
-                <div className="grid size-full min-h-[260px] place-items-center text-nomi-ink-35">
+                <div className="grid size-full min-h-[260px] place-items-center text-nomi-ink-40">
                   <IconPhoto size={34} stroke={1.45} aria-hidden="true" />
                 </div>
               )}
@@ -197,20 +198,20 @@ export function BrowserPromptDetailModal({
           </section>
           <section className="flex min-h-0 flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-caption font-semibold text-nomi-ink-70">提示词</div>
+              <div className="text-caption font-semibold text-nomi-ink-80">提示词</div>
               <span className="inline-flex h-6 items-center rounded-pill bg-nomi-ink-05 px-2 text-micro font-semibold text-nomi-ink-55">
                 {promptTypeLabel(asset, promptCategories)}
               </span>
             </div>
-            <textarea readOnly value={prompt} className={cn('min-h-[260px] flex-1 resize-none rounded-nomi border bg-nomi-bg p-3 text-body-sm leading-relaxed outline-none', asset.status === 'error' ? 'border-workbench-danger/35 text-workbench-danger' : 'border-nomi-line text-nomi-ink-75')} />
-            <div className="flex items-center gap-2 text-caption text-nomi-ink-45">
+            <textarea readOnly value={prompt} className={cn('min-h-[260px] flex-1 resize-none rounded-nomi border bg-nomi-bg p-3 text-body-sm leading-relaxed outline-none', asset.status === 'error' ? 'border-workbench-danger/35 text-workbench-danger' : 'border-nomi-line text-nomi-ink-80')} />
+            <div className="flex items-center gap-2 text-caption text-nomi-ink-40">
               <span className="font-semibold text-nomi-ink-60">模型</span>
               <span className="rounded-pill bg-nomi-accent-soft px-2 py-1 text-micro font-semibold text-nomi-accent">当前文本模型</span>
             </div>
           </section>
         </div>
         <div className="flex min-h-14 shrink-0 items-center justify-end gap-2 border-t border-nomi-line-soft px-4">
-          <button type="button" className={cn('inline-flex h-9 items-center gap-2 rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold', 'cursor-pointer text-nomi-ink-70 hover:bg-nomi-ink-05 hover:text-nomi-ink', !canUsePrompt && 'cursor-not-allowed opacity-45 hover:bg-nomi-paper')} disabled={!canUsePrompt} onClick={() => void copyPrompt()}>
+          <button type="button" className={cn('inline-flex h-9 items-center gap-2 rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold', 'cursor-pointer text-nomi-ink-80 hover:bg-nomi-ink-05 hover:text-nomi-ink', !canUsePrompt && 'cursor-not-allowed opacity-50 hover:bg-nomi-paper')} disabled={!canUsePrompt} onClick={() => void copyPrompt()}>
             <IconCopy size={15} stroke={1.8} aria-hidden="true" />
             {copied ? '已复制' : '复制'}
           </button>

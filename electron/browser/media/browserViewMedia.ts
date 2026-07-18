@@ -3,8 +3,9 @@ import type { DownloadItem, Rectangle, WebContents } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { extensionFromMime, extensionFromUrl } from "../../assets/assetPaths";
+import { captureFileName } from "../captureNaming";
 import { bringBrowserViewToFront } from "../core/browserViewUtils";
+import { BROWSER_MEDIA_MAX_BYTES, mediaTypeFromContentType, resolveBrowserMediaContentType, streamBrowserMediaResponseToFile } from "./browserMediaValidation";
 import type {
   BrowserDownloadResult,
   BrowserPromptScreenshotSelectionResult,
@@ -16,7 +17,20 @@ import type {
   BrowserViewRecord,
 } from "../core/browserViewTypes";
 
-const BROWSER_MEDIA_MAX_BYTES = 200 * 1024 * 1024;
+export const BROWSER_PROMPT_IMAGE_MAX_BYTES = 16 * 1024 * 1024;
+const browserBlobDownloadQueues = new Map<number, Promise<void>>();
+
+async function enqueueBrowserBlobDownload<T>(contents: WebContents, task: () => Promise<T>): Promise<T> {
+  const previous = browserBlobDownloadQueues.get(contents.id) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  const settled = run.then(() => undefined, () => undefined);
+  browserBlobDownloadQueues.set(contents.id, settled);
+  try {
+    return await run;
+  } finally {
+    if (browserBlobDownloadQueues.get(contents.id) === settled) browserBlobDownloadQueues.delete(contents.id);
+  }
+}
 
 function normalizeBrowserMediaUrl(url: unknown, baseUrl: string): string {
   const value = String(url || "").trim();
@@ -38,20 +52,6 @@ function safeHeaderUrl(url: string): string {
   } catch {
     return "";
   }
-}
-
-function fileNameFromMediaUrl(url: string, fallback: unknown, contentType: string): string {
-  const ext = extensionFromMime(contentType, extensionFromUrl(url));
-  const preferred = String(fallback || "").trim();
-  const fromPath = (() => {
-    try {
-      return path.basename(new URL(url).pathname);
-    } catch {
-      return "";
-    }
-  })();
-  const rawName = preferred || fromPath || `browser-resource-${Date.now()}.${ext}`;
-  return rawName.includes(".") ? rawName : `${rawName}.${ext}`;
 }
 
 function safeTempFileName(fileName: string): string {
@@ -185,7 +185,65 @@ export async function captureBrowserResource(record: BrowserViewRecord): Promise
   }
 }
 
-async function downloadBrowserMediaFromPageView(
+async function downloadHttpBrowserMediaFromPageSession(
+  record: BrowserViewRecord,
+  mediaUrl: string,
+  fallbackName: unknown,
+  requestedMediaType: "image" | "video" | null,
+): Promise<BrowserDownloadResult> {
+  const contents = record.view.webContents;
+  const referrer = safeHeaderUrl(contents.getURL());
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "nomi-browser-capture-"));
+  const abortController = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+  }, 120_000);
+
+  try {
+    const response = await contents.session.fetch(mediaUrl, {
+      credentials: "include",
+      redirect: "follow",
+      signal: abortController.signal,
+      ...(referrer ? { referrer } : {}),
+      headers: {
+        Accept: acceptHeaderForMediaType(requestedMediaType),
+        ...(referrer ? { Referer: referrer } : {}),
+      },
+    });
+    if (!response.ok) throw new Error(`网页素材下载失败（HTTP ${response.status}）`);
+    const stagingPath = path.join(tempDir, "download.part");
+    const header = await streamBrowserMediaResponseToFile(response, stagingPath);
+    const resolved = resolveBrowserMediaContentType(
+      response.headers.get("content-type") || "",
+      requestedMediaType,
+      header,
+    );
+    const tempFileName = safeTempFileName(
+      captureFileName(mediaUrl, resolved.contentType, resolved.mediaType, fallbackName),
+    );
+    const savePath = path.join(tempDir, tempFileName);
+    await fs.promises.rename(stagingPath, savePath);
+    return {
+      absolutePath: savePath,
+      fileName: tempFileName,
+      contentType: resolved.contentType,
+      mediaType: resolved.mediaType,
+      cleanupDir: tempDir,
+    };
+  } catch (error) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+      throw new Error("Media download timed out", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadBrowserBlobFromPageViewUnqueued(
   record: BrowserViewRecord,
   mediaUrl: string,
   fallbackName: unknown,
@@ -197,6 +255,7 @@ async function downloadBrowserMediaFromPageView(
   const referrer = safeHeaderUrl(contents.getURL());
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "nomi-browser-capture-"));
   let activeItem: DownloadItem | null = null;
+  let downloadExceededLimit = false;
 
   return new Promise<BrowserDownloadResult>((resolve, reject) => {
     let settled = false;
@@ -242,17 +301,25 @@ async function downloadBrowserMediaFromPageView(
       const fallbackContentType = fallbackContentTypeForMediaType(requestedMediaType);
       const itemContentType = normalizeDownloadedContentType(item.getMimeType() || fallbackContentType, requestedMediaType);
       const tempFileName = safeTempFileName(
-        fileNameFromMediaUrl(mediaUrl, item.getFilename() || fallbackName, itemContentType),
+        captureFileName(
+          mediaUrl,
+          itemContentType,
+          requestedMediaType || mediaTypeFromContentType(itemContentType) || "image",
+          item.getFilename() || fallbackName,
+        ),
       );
       const savePath = path.join(tempDir, tempFileName);
       item.setSavePath(savePath);
 
       item.on("updated", () => {
-        if (item.getReceivedBytes() > BROWSER_MEDIA_MAX_BYTES) item.cancel();
+        if (item.getReceivedBytes() > BROWSER_MEDIA_MAX_BYTES) {
+          downloadExceededLimit = true;
+          item.cancel();
+        }
       });
       item.once("done", (_doneEvent, state) => {
         if (state !== "completed") {
-          finish(new Error(`Media download ${state}`));
+          finish(new Error(downloadExceededLimit ? "Media is too large to import" : `Media download ${state}`));
           return;
         }
         if (!fs.existsSync(savePath)) {
@@ -268,24 +335,35 @@ async function downloadBrowserMediaFromPageView(
           finish(new Error("Media is too large to import"));
           return;
         }
-        const contentType = normalizeDownloadedContentType(
-          item.getMimeType() || itemContentType || fallbackContentType,
-          requestedMediaType,
-        );
-        const mediaType = contentType.startsWith("video/")
-          ? "video"
-          : contentType.startsWith("image/")
-            ? "image"
-            : requestedMediaType;
-        if (mediaType !== "image" && mediaType !== "video" && contentType !== "application/octet-stream") {
-          finish(new Error(`Downloaded resource is not supported media: ${contentType}`));
+        const fileDescriptor = fs.openSync(savePath, "r");
+        const header = Buffer.alloc(4096);
+        let headerBytes: number;
+        try {
+          headerBytes = fs.readSync(fileDescriptor, header, 0, header.byteLength, 0);
+        } finally {
+          fs.closeSync(fileDescriptor);
+        }
+        let resolved: { contentType: string; mediaType: "image" | "video" };
+        try {
+          resolved = resolveBrowserMediaContentType(
+            item.getMimeType() || itemContentType || fallbackContentType,
+            requestedMediaType,
+            header.subarray(0, headerBytes),
+          );
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error(String(error)));
           return;
         }
+        const verifiedFileName = safeTempFileName(
+          captureFileName(mediaUrl, resolved.contentType, resolved.mediaType, item.getFilename() || fallbackName),
+        );
+        const verifiedSavePath = path.join(tempDir, verifiedFileName);
+        if (verifiedSavePath !== savePath) fs.renameSync(savePath, verifiedSavePath);
         finish(null, {
-          absolutePath: savePath,
-          fileName: item.getFilename() || tempFileName,
-          contentType,
-          mediaType,
+          absolutePath: verifiedSavePath,
+          fileName: verifiedFileName,
+          contentType: resolved.contentType,
+          mediaType: resolved.mediaType,
           cleanupDir: tempDir,
         });
       });
@@ -303,6 +381,31 @@ async function downloadBrowserMediaFromPageView(
       finish(error instanceof Error ? error : new Error(String(error)));
     }
   });
+}
+
+async function downloadBrowserBlobFromPageView(
+  record: BrowserViewRecord,
+  mediaUrl: string,
+  fallbackName: unknown,
+  requestedMediaType: "image" | "video" | null,
+): Promise<BrowserDownloadResult> {
+  const contents = record.view.webContents;
+  return enqueueBrowserBlobDownload(contents, () =>
+    downloadBrowserBlobFromPageViewUnqueued(record, mediaUrl, fallbackName, requestedMediaType));
+}
+
+export async function downloadBrowserMediaFromPageView(
+  record: BrowserViewRecord,
+  mediaUrl: string,
+  fallbackName: unknown,
+  requestedMediaType: "image" | "video" | null,
+): Promise<BrowserDownloadResult> {
+  const contents = record.view.webContents;
+  if (contents.isDestroyed()) throw new Error("Browser view is unavailable");
+  if (mediaUrl.startsWith("blob:")) {
+    return downloadBrowserBlobFromPageView(record, mediaUrl, fallbackName, requestedMediaType);
+  }
+  return downloadHttpBrowserMediaFromPageSession(record, mediaUrl, fallbackName, requestedMediaType);
 }
 
 export async function importBrowserMedia(record: BrowserViewRecord, payload: BrowserViewImportMediaPayload): Promise<unknown> {
@@ -324,7 +427,12 @@ export async function importBrowserMedia(record: BrowserViewRecord, payload: Bro
     return moveAssetFile(
       projectId,
       download.absolutePath,
-      fileNameFromMediaUrl(mediaUrl, payload.fileName || payload.title || download.fileName, download.contentType),
+      captureFileName(
+        mediaUrl,
+        download.contentType,
+        download.mediaType || requestedMediaType || "image",
+        payload.fileName || payload.title || download.fileName,
+      ),
       download.contentType,
       {
         kind: "browser-capture",
@@ -341,9 +449,18 @@ export async function importBrowserMedia(record: BrowserViewRecord, payload: Bro
   }
 }
 
-function dataUrlFromFile(filePath: string, contentType: string): string {
+export function assertPromptReferenceDataUrlSize(byteLength: number): void {
+  if (!Number.isFinite(byteLength) || byteLength < 0 || byteLength > BROWSER_PROMPT_IMAGE_MAX_BYTES) {
+    throw new Error("图片过大，无法用于提示词提取（最大 16 MB）");
+  }
+}
+
+async function dataUrlFromFile(filePath: string, contentType: string): Promise<string> {
   const mime = normalizeDownloadedContentType(contentType, "image");
-  return `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+  const stat = await fs.promises.stat(filePath);
+  assertPromptReferenceDataUrlSize(stat.size);
+  const bytes = await fs.promises.readFile(filePath);
+  return `data:${mime};base64,${bytes.toString("base64")}`;
 }
 
 async function movePromptReferenceFile(input: {
@@ -380,8 +497,8 @@ export async function captureBrowserPromptImage(
   try {
     if (download.mediaType && download.mediaType !== "image") throw new Error("The selected resource is not an image");
     const contentType = normalizeDownloadedContentType(download.contentType, "image");
-    const dataUrl = dataUrlFromFile(download.absolutePath, contentType);
-    const fileName = fileNameFromMediaUrl(mediaUrl, payload.fileName || payload.title || download.fileName, contentType);
+    const dataUrl = await dataUrlFromFile(download.absolutePath, contentType);
+    const fileName = captureFileName(mediaUrl, contentType, "image", payload.fileName || payload.title || download.fileName);
     const asset = await movePromptReferenceFile({
       projectId,
       absolutePath: download.absolutePath,

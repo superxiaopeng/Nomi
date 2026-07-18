@@ -2,6 +2,7 @@ import React from 'react'
 import { IconCheck, IconFileText, IconFolder, IconPhoto, IconPlayerPlayFilled, IconPlus, IconVideo } from '../../../vendor/tablerIcons'
 import { cn } from '../../../utils/cn'
 import type { NomiBrowserAsset, NomiBrowserAssetTab, NomiBrowserAssetTabDefinition } from '../assets/browserAssetData'
+import { browserAssetDisplaySubtitle, isBrowserAssetDraggable } from './browserAssetPopoverUtils'
 
 type AssetTileProps = {
   asset: NomiBrowserAsset
@@ -184,15 +185,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
   const loading = asset.status === 'loading'
   const failed = asset.status === 'error'
   const isPromptCard = Boolean(asset.promptCard)
-  const subtitle = loading
-    ? isPromptCard
-      ? '提取中...'
-      : '下载中...'
-    : failed
-      ? isPromptCard
-        ? '提取失败'
-        : '下载失败'
-      : asset.subtitle || getAssetTypeLabel(asset)
+  const subtitle = browserAssetDisplaySubtitle(asset)
   const listMeta = isFolder ? '文件夹' : asset.duration || getAssetTypeLabel(asset)
   const isVideo = asset.type === 'video' || asset.previewMediaType === 'video'
 
@@ -201,7 +194,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
     role: 'button',
     tabIndex: 0,
     // 重命名时禁拖拽：否则输入框里选中文字的拖动会触发 tile 拖拽。
-    draggable: !renaming,
+    draggable: isBrowserAssetDraggable(asset, renaming),
     'data-browser-asset-tile': 'true',
     'data-asset-id': asset.id,
     'aria-label': asset.title,
@@ -231,7 +224,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
           'cursor-pointer select-none transition-[background,border-color,box-shadow,color] duration-[var(--nomi-transition-fast)]',
           selected
             ? 'border-nomi-accent-soft bg-nomi-accent-soft text-nomi-ink shadow-nomi-sm'
-            : 'border-transparent text-nomi-ink-70 hover:border-nomi-line-soft hover:bg-nomi-ink-05 focus-visible:border-nomi-accent focus-visible:bg-nomi-ink-05',
+            : 'border-transparent text-nomi-ink-80 hover:border-nomi-line-soft hover:bg-nomi-ink-05 focus-visible:border-nomi-accent focus-visible:bg-nomi-ink-05',
           failed && 'text-workbench-danger',
         )}
       >
@@ -240,7 +233,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
         ) : null}
         <span
           className={cn(
-            'relative grid size-8 place-items-center overflow-hidden rounded-nomi-sm border bg-nomi-ink-05 text-nomi-ink-45',
+            'relative grid size-8 place-items-center overflow-hidden rounded-nomi-sm border bg-nomi-ink-05 text-nomi-ink-40',
             selected ? 'border-nomi-accent-soft bg-nomi-paper text-nomi-accent' : 'border-nomi-line-soft',
             isFolder && !selected && 'bg-nomi-paper text-nomi-ink-50',
           )}
@@ -288,7 +281,7 @@ export const BrowserAssetTile = React.memo(function BrowserAssetTile({
               'shrink-0 rounded-nomi-sm px-1.5 py-0.5 text-micro leading-none',
               selected
                 ? 'bg-nomi-paper/80 text-nomi-accent'
-                : 'bg-nomi-ink-05 text-nomi-ink-45 group-hover:bg-nomi-paper',
+                : 'bg-nomi-ink-05 text-nomi-ink-40 group-hover:bg-nomi-paper',
             )}
           >
             {loading ? '...' : failed ? '!' : listMeta}
@@ -466,7 +459,7 @@ export const BrowserAssetFilterPopover = React.memo(function BrowserAssetFilterP
                         ? 'bg-nomi-paper text-nomi-accent'
                         : disabled
                           ? 'text-nomi-ink-30'
-                          : 'bg-nomi-ink-05 text-nomi-ink-45',
+                          : 'bg-nomi-ink-05 text-nomi-ink-40',
                     )}
                   >
                     {count}
@@ -560,7 +553,7 @@ export const BrowserPromptCategoryFilterPopover = React.memo(function BrowserPro
                     ? 'bg-nomi-paper text-nomi-accent'
                     : disabled
                       ? 'text-nomi-ink-30'
-                      : 'bg-nomi-ink-05 text-nomi-ink-45',
+                      : 'bg-nomi-ink-05 text-nomi-ink-40',
                 )}
               >
                 {count}

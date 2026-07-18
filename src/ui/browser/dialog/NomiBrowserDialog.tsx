@@ -86,11 +86,14 @@ export function NomiBrowserDialog({ opened, onClose }: NomiBrowserDialogProps): 
   const materialSitesRef = React.useRef<HTMLDivElement | null>(null)
   const tabsRef = React.useRef(tabs)
   const activeTabIdRef = React.useRef(activeTabId)
+  const escapeLayerRef = React.useRef({ materialSitesOpen, promptModePicker, tabContextMenu, bookmarkContextMenu })
   const addressEditingRef = React.useRef(false)
   const pendingCaptureFlyoutRef = React.useRef<Extract<DesktopBrowserResourceCaptureEvent, { ok: true }> | null>(null)
   const lastShownBrowserViewIdRef = React.useRef<number | null>(null)
   const lastBrowserViewBoundsRef = React.useRef<{ viewId: number; bounds: DesktopBrowserViewBounds } | null>(null)
   const lastBrowserAssetOverlayHostRef = React.useRef<{ viewId: number | null; bounds: DesktopBrowserViewBounds } | null>(null)
+
+  escapeLayerRef.current = { materialSitesOpen, promptModePicker, tabContextMenu, bookmarkContextMenu }
 
   React.useEffect(() => {
     tabsRef.current = tabs
@@ -364,11 +367,20 @@ export function NomiBrowserDialog({ opened, onClose }: NomiBrowserDialogProps): 
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      if (tabContextMenu) {
+      const layer = escapeLayerRef.current
+      if (layer.materialSitesOpen) {
+        setMaterialSitesOpen(false)
+        return
+      }
+      if (layer.promptModePicker) {
+        setPromptModePicker(null)
+        return
+      }
+      if (layer.tabContextMenu) {
         setTabContextMenu(null)
         return
       }
-      if (bookmarkContextMenu) {
+      if (layer.bookmarkContextMenu) {
         setBookmarkContextMenu(null)
         return
       }
@@ -376,7 +388,7 @@ export function NomiBrowserDialog({ opened, onClose }: NomiBrowserDialogProps): 
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [bookmarkContextMenu, onClose, opened, tabContextMenu])
+  }, [onClose, opened])
 
   React.useEffect(() => {
     if (!tabContextMenu) return

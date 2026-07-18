@@ -25,6 +25,11 @@ fs.mkdirSync(shotsDir, { recursive: true })
 const base = '/tmp/nomi-overlay-walk'
 fs.rmSync(base, { recursive: true, force: true })
 fs.mkdirSync(path.join(base, 'projects'), { recursive: true })
+const uploadPath = path.join(base, 'walk-upload.png')
+fs.writeFileSync(uploadPath, Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+))
 
 const results = {}
 const consoleErrors = []
@@ -84,7 +89,7 @@ try {
   const cardRectScreen = async () => {
     const org = await overlayScreen()
     const local = await overlay.evaluate(() => {
-      const el = document.querySelector('.nomi-browser-asset-popover [role="dialog"][aria-label="资产包"], .nomi-browser-asset-popover')
+      const el = document.querySelector('.nomi-browser-asset-popover [role="dialog"][aria-label="素材盒"], .nomi-browser-asset-popover')
       if (!el) return null
       const r = el.getBoundingClientRect()
       return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }
@@ -92,7 +97,33 @@ try {
     if (!org || !local) return null
     return { left: org.x + local.left, top: org.y + local.top, right: org.x + local.right, bottom: org.y + local.bottom, width: local.width, height: local.height }
   }
-  const hitRect = async () => overlay.evaluate(() => window.__nomiOverlayHitRect || null)
+  const cardInsideOverlayViewport = async () => overlay.evaluate(() => {
+    const el = document.querySelector('[role="dialog"][aria-label="素材盒"]')
+    if (!el) return { ok: false, rect: null, viewport: null }
+    const rect = el.getBoundingClientRect()
+    const viewport = { width: window.innerWidth, height: window.innerHeight }
+    return {
+      ok: rect.left >= 0 && rect.top >= 0 && rect.right <= viewport.width && rect.bottom <= viewport.height,
+      rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height },
+      viewport,
+    }
+  })
+  const hitRect = async () => {
+    const raw = await overlay.evaluate(() => window.__nomiOverlayHitRect || null)
+    const owner = await app.evaluate(({ BrowserWindow }) => {
+      const overlayWindow = BrowserWindow.getAllWindows().find((item) => item.webContents.getURL().includes('browser-asset-overlay'))
+      return overlayWindow?.getParentWindow()?.getContentBounds() || null
+    })
+    if (!raw || !owner) return null
+    return {
+      left: owner.x + raw.left,
+      top: owner.y + raw.top,
+      right: owner.x + raw.right,
+      bottom: owner.y + raw.bottom,
+      width: raw.width,
+      height: raw.height,
+    }
+  }
   const elemScreen = async (selector) => {
     const org = await overlayScreen()
     const local = await overlay.evaluate((sel) => {
@@ -104,7 +135,45 @@ try {
     if (!org || !local) return null
     return { left: org.x + local.left, top: org.y + local.top, right: org.x + local.right, bottom: org.y + local.bottom, width: local.width, height: local.height }
   }
-  const snap = async (name) => { n += 1; await overlay.screenshot({ path: path.join(shotsDir, `${String(n).padStart(2, '0')}-${name}.png`) }).catch(() => {}) }
+  const visibleInteractiveCentersInsideHit = async () => {
+    const org = await overlayScreen()
+    const hit = await hitRect()
+    if (!org || !hit) return { ok: false, outside: ['missing-window-or-hit'] }
+    const elements = await overlay.evaluate(() =>
+      [...document.querySelectorAll('button,input,textarea,select,[role="tab"],[role="menuitem"],[role="option"]')]
+        .filter((el) => {
+          const style = getComputedStyle(el)
+          const rect = el.getBoundingClientRect()
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+        })
+        .map((el) => {
+          const rect = el.getBoundingClientRect()
+          return {
+            label: el.getAttribute('aria-label') || el.textContent?.trim().slice(0, 36) || el.tagName,
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          }
+        }),
+    )
+    const outside = elements
+      .filter((element) => !centerInside({
+        left: org.x + element.left,
+        top: org.y + element.top,
+        width: element.width,
+        height: element.height,
+      }, hit))
+      .map((element) => element.label)
+    return { ok: outside.length === 0, outside }
+  }
+  const snap = async (name) => {
+    n += 1
+    await Promise.race([
+      overlay.screenshot({ path: path.join(shotsDir, `${String(n).padStart(2, '0')}-${name}.png`) }).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ])
+  }
 
   await snap('overlay-default')
 
@@ -167,6 +236,133 @@ try {
     await overlay.waitForTimeout(400)
   }
 
+  // ⑥ 资源捕捞开/关：必须由真实按钮切状态，不再直接调 IPC。
+  const captureOn = overlay.locator('button[aria-label="开启资源捕捞"]').first()
+  if (await captureOn.count()) {
+    if (await captureOn.isDisabled()) {
+      // 起始页尚无网页 WebContents，禁用是正确行为；真实网页上的开/关由 reference-capture 旅程覆盖。
+      results.captureToggleOn = true
+      results.captureToggleOff = true
+    } else {
+      await captureOn.click({ timeout: 2000 }).catch(() => {})
+      await overlay.waitForTimeout(350)
+      results.captureToggleOn = (await overlay.locator('button[aria-label="关闭资源捕捞"][aria-pressed="true"]').count()) > 0
+      await overlay.locator('button[aria-label="关闭资源捕捞"]').first().click({ timeout: 2000 }).catch(() => {})
+      await overlay.waitForTimeout(300)
+      results.captureToggleOff = (await overlay.locator('button[aria-label="开启资源捕捞"][aria-pressed="false"]').count()) > 0
+    }
+  }
+
+  // ⑦ 用户口中的“两列”按钮：浮动 → 右侧并排 → 恢复浮动。
+  await overlay.locator('button[aria-label="并排显示素材盒"]').first().click({ timeout: 2500 }).catch(() => {})
+  await overlay.waitForTimeout(800)
+  results.dockRight = (await overlay.locator('[role="dialog"][data-dock-mode="right"]').count()) > 0
+  const dockHit = await hitRect()
+  const dockWin = await overlayScreen()
+  results.dockHitIsCard = Boolean(dockHit && dockWin && dockHit.width < dockWin.width - 40)
+  const dockGeometry = await visibleInteractiveCentersInsideHit()
+  results.dockControlsInHit = dockGeometry.ok
+  if (!dockGeometry.ok) console.log('  dock 热区外控件:', dockGeometry.outside)
+  await snap('docked-right')
+  await overlay.locator('button[aria-label="恢复浮动素材盒"]').first().click({ timeout: 2500 }).catch(() => {})
+  await overlay.waitForTimeout(800)
+  results.restoreFloating = (await overlay.locator('[role="dialog"][data-dock-mode="floating"]').count()) > 0
+  await snap('restored-floating')
+
+  // ⑧ 搜索、上传、新建文件夹、进入/返回文件夹。
+  const search = overlay.locator('input[aria-label="搜索素材"]').first()
+  await search.fill('绝不命中的走查词')
+  await overlay.waitForTimeout(250)
+  results.searchFilters = (await overlay.getByText('没有匹配的素材', { exact: false }).count()) > 0
+  await search.fill('')
+  await overlay.locator('input[aria-label="选择素材文件"]').setInputFiles(uploadPath)
+  await overlay.waitForTimeout(1200)
+  results.uploadWorks = (await overlay.getByText('walk-upload.png', { exact: false }).count()) > 0 ||
+    (await overlay.locator('[data-browser-asset-tile]').count()) > 0
+  await overlay.locator('button[aria-label="新建文件夹"]').first().click({ timeout: 2000 }).catch(() => {})
+  const rename = overlay.locator('input[aria-label="重命名文件夹"]').first()
+  if (await rename.count()) {
+    await rename.fill('走查文件夹')
+    await rename.press('Enter')
+    await overlay.waitForTimeout(350)
+  }
+  results.createFolder = (await overlay.getByText('走查文件夹', { exact: true }).count()) > 0
+  const folderTile = overlay.locator('[data-browser-asset-tile]', { hasText: '走查文件夹' }).first()
+  if (await folderTile.count()) {
+    await folderTile.dblclick({ timeout: 2000 }).catch(() => {})
+    await overlay.waitForTimeout(350)
+    results.enterFolder = (await overlay.locator('button[aria-label="返回上一级文件夹"]').count()) > 0
+    await overlay.locator('button[aria-label="返回上一级文件夹"]').first().click({ timeout: 2000 }).catch(() => {})
+    await overlay.waitForTimeout(300)
+    results.exitFolder = (await overlay.getByText('走查文件夹', { exact: true }).count()) > 0
+  }
+
+  // ⑨ 布局、排序、筛选、素材右键、空白右键；每个 icon 真点一遍。
+  const more = overlay.locator('button[aria-label="更多素材工具"]').first()
+  if (await more.count()) await more.click({ timeout: 2000 }).catch(() => {})
+  const layout = overlay.locator('button[aria-label="切换素材布局"]').first()
+  if (await layout.count()) {
+    const before = await layout.getAttribute('aria-pressed')
+    await layout.click({ timeout: 2000 }).catch(() => {})
+    results.layoutToggle = (await layout.getAttribute('aria-pressed')) !== before
+  }
+  const sort = overlay.locator('button[aria-label="最新优先"],button[aria-label="最早优先"]').first()
+  if (await sort.count()) {
+    const before = await sort.getAttribute('aria-label')
+    await sort.click({ timeout: 2000 }).catch(() => {})
+    results.sortToggle = (await sort.getAttribute('aria-label')) !== before
+  }
+  const filter = overlay.locator('button[aria-label="筛选分类"]').first()
+  if (await filter.count()) {
+    await filter.click({ timeout: 2000 }).catch(() => {})
+    await overlay.waitForTimeout(250)
+    results.filterOpens = (await overlay.locator('[role="dialog"][aria-label="素材分类筛选"]').count()) > 0
+    const imageOption = overlay.getByRole('option', { name: /图片/ }).first()
+    if (await imageOption.count()) await imageOption.click({ timeout: 2000 }).catch(() => {})
+    await overlay.waitForTimeout(250)
+    results.filterSelects = (await overlay.getByText('走查文件夹', { exact: true }).count()) === 0 &&
+      (await overlay.getByText('walk-upload.png', { exact: false }).count()) > 0
+    if (await more.count()) await more.click({ timeout: 2000 }).catch(() => {})
+    await overlay.locator('button[aria-label="筛选分类"]').first().click({ timeout: 2000 }).catch(() => {})
+    const showAll = overlay.getByText('显示全部', { exact: true }).first()
+    if (await showAll.count()) await showAll.click({ timeout: 2000 }).catch(() => {})
+  }
+  const firstTile = overlay.locator('[data-browser-asset-tile]').first()
+  if (await firstTile.count()) {
+    await firstTile.click({ button: 'right', timeout: 2000 }).catch(() => {})
+    results.assetContextMenu = (await overlay.locator('[role="menu"][aria-label="素材操作"]').count()) > 0
+    await overlay.keyboard.press('Escape').catch(() => {})
+  }
+  const grid = overlay.locator('[aria-label="素材网格"],[aria-label="素材列表"]').first()
+  if (await grid.count()) {
+    await grid.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      element.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.right - 8,
+        clientY: rect.bottom - 8,
+      }))
+    }).catch(() => {})
+    results.blankContextMenu = (await overlay.locator('[role="menu"][aria-label="空白区域操作"]').count()) > 0
+    await overlay.keyboard.press('Escape').catch(() => {})
+  }
+  await snap('controls-exercised')
+
+  // ⑩ 明确收起并从浏览器工具条重开，不允许幽灵 overlay。
+  await overlay.locator('button[aria-label="收起素材盒"]').first().click({ timeout: 2000 }).catch(() => {})
+  await win.waitForTimeout(600)
+  results.collapseWorks = (await win.locator('button[aria-label="打开素材盒"]').count()) > 0
+  await win.locator('button[aria-label="打开素材盒"]').first().click({ timeout: 2000 }).catch(() => {})
+  await overlay.waitForTimeout(700)
+  results.reopenWorks = (await overlay.locator('[role="dialog"][aria-label="素材盒"]').count()) > 0
+  const reopenedGeometry = await cardInsideOverlayViewport()
+  results.reopenFullyVisible = reopenedGeometry.ok
+  console.log(`  ⑩ 重开几何: ${JSON.stringify(reopenedGeometry)}`)
+  const finalGeometry = await visibleInteractiveCentersInsideHit()
+  results.finalControlsInHit = finalGeometry.ok
+  await snap('reopened')
+
   console.log('\n===== 素材盒浮层交互走查判定 =====')
   const checks = [
     ['浏览器打开', results.browserOpen],
@@ -181,6 +377,27 @@ try {
     ['★设置框伸出卡外(证明修复有意义)', results.modalOutsideCard],
     ['关闭后热区缩回卡片', results.hitRevertedToCard],
     ['源标签切换不崩', results.tabSwitchOk],
+    ['资源捕捞按钮开', results.captureToggleOn],
+    ['资源捕捞按钮关', results.captureToggleOff],
+    ['并排到右侧', results.dockRight],
+    ['并排热区仍只覆盖素材盒', results.dockHitIsCard],
+    ['并排态全部可见控件在热区', results.dockControlsInHit],
+    ['恢复浮动', results.restoreFloating],
+    ['搜索过滤', results.searchFilters],
+    ['上传素材', results.uploadWorks],
+    ['新建文件夹', results.createFolder],
+    ['进入文件夹', results.enterFolder],
+    ['返回文件夹', results.exitFolder],
+    ['网格/列表切换', results.layoutToggle],
+    ['最新/最早排序', results.sortToggle],
+    ['筛选弹出', results.filterOpens],
+    ['筛选生效', results.filterSelects],
+    ['素材右键菜单', results.assetContextMenu],
+    ['空白右键菜单', results.blankContextMenu],
+    ['明确收起', results.collapseWorks],
+    ['工具条重开', results.reopenWorks],
+    ['重开后素材盒完整可见', results.reopenFullyVisible],
+    ['重开后全部可见控件在热区', results.finalControlsInHit],
   ]
   for (const [label, ok] of checks) console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}`)
   console.log(`  console errors: ${consoleErrors.length}`)

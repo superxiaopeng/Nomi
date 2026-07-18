@@ -27,14 +27,11 @@ export type BrowserViewResizePayload = BrowserViewIdPayload & {
   bounds?: Partial<Rectangle>;
 };
 
-export type BrowserViewImportImagePayload = BrowserViewIdPayload & {
+export type BrowserViewImportMediaPayload = BrowserViewIdPayload & {
   projectId?: unknown;
   url?: unknown;
   fileName?: unknown;
   title?: unknown;
-};
-
-export type BrowserViewImportMediaPayload = BrowserViewImportImagePayload & {
   mediaType?: unknown;
 };
 
@@ -162,6 +159,8 @@ export type BrowserAssetOverlayRecord = {
   pendingPromptRequest: BrowserAssetOverlayPromptRequest | null;
   dockMode: BrowserAssetOverlayDockMode;
   popoverRect: BrowserAssetOverlayRect | null;
+  /** True only when a native window shape was actually applied on a supported platform. */
+  shapeInteractive: boolean;
   pointerInteractive: boolean;
   hoverInteractive: boolean;
   dragInteractive: boolean;

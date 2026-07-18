@@ -323,14 +323,7 @@ export type DesktopBridge = {
     resize: (payload: { viewId: number; bounds: DesktopBrowserViewBounds }) => void
     show: (payload: { viewId: number }) => void
     hide: (payload: { viewId: number }) => void
-    importImage: (payload: {
-      viewId: number
-      projectId: string
-      url: string
-      fileName?: string
-      title?: string
-    }) => Promise<DesktopAssetDto>
-    importMedia?: (payload: {
+    importMedia: (payload: {
       viewId: number
       projectId: string
       url: string
@@ -390,6 +383,7 @@ export type DesktopBridge = {
       promptRequest?: (payload: unknown) => void
       ready?: () => void
       setInteractive: (payload: { interactive: boolean }) => void
+      finishDrag?: () => void
       setState: (payload: {
         dockMode?: DesktopBrowserAssetOverlayDockMode
         popoverRect?: DesktopBrowserAssetOverlayRect | null

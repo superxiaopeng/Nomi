@@ -118,6 +118,32 @@ export function browserAssetTimeValue(asset: NomiBrowserAsset): number {
   return idTime ? Number(idTime) : 0
 }
 
+export function browserAssetDisplaySubtitle(asset: NomiBrowserAsset): string {
+  const concreteSubtitle = asset.subtitle?.trim()
+  if (asset.status === 'loading') return asset.promptCard ? '提取中...' : '下载中...'
+  if (asset.status === 'error') return concreteSubtitle || (asset.promptCard ? '提取失败' : '下载失败')
+  if (concreteSubtitle) return concreteSubtitle
+  if (asset.type === 'folder') return '文件夹'
+  if (asset.type === 'image') return '图片'
+  if (asset.type === 'video') return '视频'
+  return '提示词'
+}
+
+export function isBrowserAssetDraggable(asset: NomiBrowserAsset, renaming: boolean): boolean {
+  return !renaming && asset.status !== 'loading' && asset.status !== 'error'
+}
+
+export function browserAssetImportErrorMessage(reason: string, url: string): string {
+  if (/来源页面会话|source page session/i.test(reason)) return '来源网页已关闭，请重新拖入'
+  if (/timed out|超时/i.test(reason)) return '下载超时，请重试'
+  if (/HTTP\s*(401|403)|forbidden|hotlink|referer/i.test(reason)) return '网站拒绝下载（可能需要登录）'
+  if (/HTTP\s*(404|410)/i.test(reason)) return '网页素材已失效'
+  if (/不是图片或视频|not supported media|media type/i.test(reason)) return '网站返回的不是图片或视频'
+  if (/too large|200\s*MiB|超过.*MB/i.test(reason)) return '素材超过 200MB'
+  if (/^blob:/i.test(url)) return '网页临时资源已失效'
+  return '下载失败，请重试'
+}
+
 function isPromptAssetFileName(fileName: string): boolean {
   return /\.(md|markdown|txt)$/i.test(fileName)
 }
@@ -247,17 +273,31 @@ function firstUsableImageUrlFromText(text: string): string {
   return ''
 }
 
-function imageUrlFromHtml(html: string): { url: string; title?: string } | null {
+function mediaUrlFromHtml(html: string): { url: string; title?: string; mediaType: 'image' | 'video' } | null {
   if (!html.trim()) return null
+  if (typeof DOMParser === 'undefined') {
+    const videoTag = html.match(/<video\b[^>]*>/i)?.[0] || ''
+    const posterUrl = videoTag.match(/\bposter\s*=\s*["']([^"']+)["']/i)?.[1] || ''
+    const title = videoTag.match(/\btitle\s*=\s*["']([^"']+)["']/i)?.[1] || undefined
+    return posterUrl ? { url: posterUrl, title, mediaType: 'image' } : null
+  }
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const image = doc.querySelector('img')
-    const url = image?.getAttribute('src') || image?.getAttribute('data-src') || ''
-    if (!url) return null
-    return { url, title: image?.getAttribute('alt') || image?.getAttribute('title') || undefined }
+    const imageUrl = image?.getAttribute('src') || image?.getAttribute('data-src') || ''
+    if (imageUrl) return { url: imageUrl, title: image?.getAttribute('alt') || image?.getAttribute('title') || undefined, mediaType: 'image' }
+    const video = doc.querySelector('video')
+    const videoUrl = video?.getAttribute('src') || video?.querySelector('source')?.getAttribute('src') || ''
+    if (videoUrl) return { url: videoUrl, title: video?.getAttribute('title') || undefined, mediaType: 'video' }
+    const posterUrl = video?.getAttribute('poster') || ''
+    return posterUrl ? { url: posterUrl, title: video?.getAttribute('title') || undefined, mediaType: 'image' } : null
   } catch {
     return null
   }
+}
+
+function mediaTypeFromRemoteUrl(url: string): 'image' | 'video' {
+  return /\.(?:mp4|m4v|mov|webm|ogv|ogg|avi)(?:[?#]|$)/i.test(url) ? 'video' : 'image'
 }
 
 export function fileNameFromRemoteAssetUrl(url: string): string {
@@ -274,21 +314,24 @@ export function readBrowserImageDragPayload(dataTransfer: DataTransfer): Browser
   const customPayload = dataTransfer.getData(BROWSER_IMAGE_DRAG_MIME)
   if (customPayload) {
     try {
-      const parsed = JSON.parse(customPayload) as { url?: unknown; title?: unknown }
+      const parsed = JSON.parse(customPayload) as { url?: unknown; title?: unknown; mediaType?: unknown }
       const url = typeof parsed.url === 'string' ? parsed.url.trim() : ''
       if (url) {
-        return { url, title: typeof parsed.title === 'string' ? parsed.title.trim() || undefined : undefined, fileName: fileNameFromRemoteAssetUrl(url), mediaType: 'image' }
+        const mediaType = parsed.mediaType === 'video' || parsed.mediaType === 'image'
+          ? parsed.mediaType
+          : mediaTypeFromRemoteUrl(url)
+        return { url, title: typeof parsed.title === 'string' ? parsed.title.trim() || undefined : undefined, fileName: fileNameFromRemoteAssetUrl(url), mediaType }
       }
     } catch {
       // Ignore malformed drag payloads and fall back to standard browser data.
     }
   }
   const uriListUrl = firstUsableImageUrlFromText(dataTransfer.getData('text/uri-list'))
-  if (uriListUrl) return { url: uriListUrl, fileName: fileNameFromRemoteAssetUrl(uriListUrl), mediaType: 'image' }
-  const htmlImage = imageUrlFromHtml(dataTransfer.getData('text/html'))
-  if (htmlImage) return { ...htmlImage, fileName: fileNameFromRemoteAssetUrl(htmlImage.url), mediaType: 'image' }
+  if (uriListUrl) return { url: uriListUrl, fileName: fileNameFromRemoteAssetUrl(uriListUrl), mediaType: mediaTypeFromRemoteUrl(uriListUrl) }
+  const htmlMedia = mediaUrlFromHtml(dataTransfer.getData('text/html'))
+  if (htmlMedia) return { ...htmlMedia, fileName: fileNameFromRemoteAssetUrl(htmlMedia.url) }
   const plainUrl = firstUsableImageUrlFromText(dataTransfer.getData('text/plain'))
-  return plainUrl ? { url: plainUrl, fileName: fileNameFromRemoteAssetUrl(plainUrl), mediaType: 'image' } : null
+  return plainUrl ? { url: plainUrl, fileName: fileNameFromRemoteAssetUrl(plainUrl), mediaType: mediaTypeFromRemoteUrl(plainUrl) } : null
 }
 
 export function promptReferenceImagesFromRequest(request: BrowserAssetPromptCaptureRequest): BrowserAssetPromptReference[] {

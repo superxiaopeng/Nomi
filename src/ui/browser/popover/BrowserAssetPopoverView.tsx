@@ -84,7 +84,7 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
             'cursor-pointer bg-nomi-ink text-nomi-paper shadow-nomi-md',
             'transition-[background,transform] duration-[var(--nomi-transition-fast)] hover:-translate-y-px hover:bg-nomi-accent',
           )}
-          aria-label="打开资产包"
+          aria-label="打开素材盒"
           aria-expanded={popoverOpen}
           onClick={() => setPopoverOpen(!popoverOpen)}
         >
@@ -113,7 +113,7 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
                 : { type: 'spring', stiffness: 420, damping: 30, mass: 0.8 }
           }
           role="dialog"
-          aria-label="资产包"
+          aria-label="素材盒"
           data-dock-mode={dockMode ?? 'floating'}
           onMouseDown={(event) => event.stopPropagation()}
           onDragEnter={handleWindowDragEnter}
@@ -166,7 +166,7 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
                 <IconAdjustmentsHorizontal size={17} strokeWidth={1.8} aria-hidden="true" />
               </button>
               {canDock ? (
-                <button type="button" className={toolbarButtonClass} aria-label={dockMode ? '恢复浮动素材盒' : '吸附到右侧'} title={dockMode ? '恢复浮动' : '吸附到右侧'} disabled={!activeBounds} onClick={toggleDockMode}>
+                <button type="button" className={toolbarButtonClass} aria-label={dockMode ? '恢复浮动素材盒' : '并排显示素材盒'} title={dockMode ? '恢复浮动' : '并排显示'} disabled={!activeBounds} onClick={toggleDockMode}>
                   {dockMode === 'left' ? (
                     <IconLayoutSidebarLeftExpand size={17} strokeWidth={1.8} aria-hidden="true" />
                   ) : dockMode === 'right' ? (
@@ -176,7 +176,7 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
                   )}
                 </button>
               ) : null}
-              <button type="button" className={toolbarButtonClass} aria-label="最小化资产包" onClick={() => setPopoverOpen(false)}>
+              <button type="button" className={toolbarButtonClass} aria-label="收起素材盒" title="收起素材盒" onClick={() => setPopoverOpen(false)}>
                 <IconMinus size={17} stroke={1.8} aria-hidden="true" />
               </button>
             </div>
@@ -270,11 +270,11 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
                   <ol className="flex min-w-0 flex-1 items-center overflow-hidden">
                     <li className={cn('flex min-w-0 items-center gap-1', currentFolder ? 'shrink-0' : 'flex-1')}>
                       {currentFolder ? (
-                        <button type="button" className={cn('max-w-28 truncate rounded-nomi-sm border-0 bg-transparent px-1 py-0.5 text-caption', 'cursor-pointer font-semibold text-nomi-ink-45 hover:bg-nomi-ink-05 hover:text-nomi-ink')} title={activeSourceLabel} onClick={openAssetRoot}>
+                        <button type="button" className={cn('max-w-28 truncate rounded-nomi-sm border-0 bg-transparent px-1 py-0.5 text-caption', 'cursor-pointer font-semibold text-nomi-ink-40 hover:bg-nomi-ink-05 hover:text-nomi-ink')} title={activeSourceLabel} onClick={openAssetRoot}>
                           {activeSourceLabel}
                         </button>
                       ) : (
-                        <span className="min-w-0 truncate font-semibold text-nomi-ink-70" aria-current="page" title={activeSourceLabel}>{activeSourceLabel}</span>
+                        <span className="min-w-0 truncate font-semibold text-nomi-ink-80" aria-current="page" title={activeSourceLabel}>{activeSourceLabel}</span>
                       )}
                     </li>
                     {folderBreadcrumbs.map((folder: any, index: number) => {
@@ -283,9 +283,9 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
                         <li key={folder.id} className={cn('flex min-w-0 items-center gap-1', current ? 'flex-1' : 'shrink-0')}>
                           <IconChevronRight size={13} stroke={1.8} className="shrink-0 text-nomi-ink-30" aria-hidden="true" />
                           {current ? (
-                            <span className="min-w-0 truncate font-semibold text-nomi-ink-70" aria-current="page" title={folder.title}>{folder.title}</span>
+                            <span className="min-w-0 truncate font-semibold text-nomi-ink-80" aria-current="page" title={folder.title}>{folder.title}</span>
                           ) : (
-                            <button type="button" className={cn('max-w-28 truncate rounded-nomi-sm border-0 bg-transparent px-1 py-0.5 text-caption', 'cursor-pointer font-semibold text-nomi-ink-45 hover:bg-nomi-ink-05 hover:text-nomi-ink')} title={folder.title} onClick={() => openFolder(folder)}>{folder.title}</button>
+                            <button type="button" className={cn('max-w-28 truncate rounded-nomi-sm border-0 bg-transparent px-1 py-0.5 text-caption', 'cursor-pointer font-semibold text-nomi-ink-40 hover:bg-nomi-ink-05 hover:text-nomi-ink')} title={folder.title} onClick={() => openFolder(folder)}>{folder.title}</button>
                           )}
                         </li>
                       )
@@ -330,13 +330,13 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
           {assetContextMenu && selectedIds.size > 0 ? (
             <div ref={assetContextMenuRef} className="absolute z-[9] rounded-nomi border border-nomi-line bg-nomi-paper p-1 shadow-nomi-lg" style={{ left: assetContextMenu.x, top: assetContextMenu.y, width: ASSET_CONTEXT_MENU_WIDTH }} role="menu" aria-label="素材操作" onContextMenu={(event) => event.preventDefault()} onMouseDown={(event) => event.stopPropagation()}>
               {canImportSelectedAssetsToCanvas ? (
-                <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-75 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={importSelectedAssetsToCanvas}>
+                <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-80 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={importSelectedAssetsToCanvas}>
                   <IconArrowForwardUp size={15} stroke={1.8} aria-hidden="true" className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">导入画布</span>
                 </button>
               ) : null}
               {canRenameSelectedFolder ? (
-                <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-75 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={beginRenameSelectedFolder}>
+                <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-80 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={beginRenameSelectedFolder}>
                   <IconPencil size={15} stroke={1.8} aria-hidden="true" className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">重命名</span>
                 </button>
@@ -349,7 +349,7 @@ export function BrowserAssetPopoverView(props: BrowserAssetPopoverViewProps): JS
           ) : null}
           {blankContextMenu ? (
             <div ref={blankContextMenuRef} className="absolute z-[9] rounded-nomi border border-nomi-line bg-nomi-paper p-1 shadow-nomi-lg" style={{ left: blankContextMenu.x, top: blankContextMenu.y, width: BLANK_CONTEXT_MENU_WIDTH }} role="menu" aria-label="空白区域操作" onContextMenu={(event) => event.preventDefault()} onMouseDown={(event) => event.stopPropagation()}>
-              <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-75 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={createFolder}>
+              <button type="button" className={cn('flex h-8 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2 text-left', 'cursor-pointer text-caption text-nomi-ink-80 transition-colors duration-[var(--nomi-transition-fast)]', 'hover:bg-nomi-ink-05 hover:text-nomi-ink focus-visible:bg-nomi-ink-05 focus-visible:outline-none')} role="menuitem" onClick={createFolder}>
                 <IconFolderPlus size={15} stroke={1.8} aria-hidden="true" className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate">新建文件夹</span>
               </button>

@@ -88,7 +88,6 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     resize: (payload: unknown) => ipcRenderer.send("browser:view:resize", payload),
     show: (payload: unknown) => ipcRenderer.send("browser:view:show", payload),
     hide: (payload: unknown) => ipcRenderer.send("browser:view:hide", payload),
-    importImage: (payload: unknown) => ipcRenderer.invoke("browser:view:import-image", payload),
     importMedia: (payload: unknown) => ipcRenderer.invoke("browser:view:import-media", payload),
     capturePromptImage: (payload: unknown) => ipcRenderer.invoke("browser:view:capture-prompt-image", payload),
     selectPromptScreenshot: (payload: unknown) =>
@@ -111,6 +110,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
       promptRequest: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:prompt-request", payload),
       ready: () => ipcRenderer.send("browser:asset-overlay:ready"),
       setInteractive: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:set-interactive", payload),
+      finishDrag: () => ipcRenderer.send("browser:asset-overlay:finish-drag"),
       setState: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:set-state", payload),
       importToCanvas: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:import-to-canvas", payload),
       onConfig: (callback: (event: unknown) => void) => {

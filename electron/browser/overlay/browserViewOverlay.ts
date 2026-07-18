@@ -124,19 +124,34 @@ export function sendBrowserAssetOverlayState(record: BrowserAssetOverlayRecord, 
   });
 }
 
-function setBrowserAssetOverlayShape(record: BrowserAssetOverlayRecord, rects: Rectangle[]): void {
+function browserAssetOverlayShapeSupported(platform: NodeJS.Platform): boolean {
+  return platform === "win32" || platform === "linux";
+}
+
+function setBrowserAssetOverlayShape(
+  record: BrowserAssetOverlayRecord,
+  rects: Rectangle[],
+  platform: NodeJS.Platform,
+): boolean {
+  if (!browserAssetOverlayShapeSupported(platform)) return false;
   const shapedWindow = record.window as BrowserWindow & { setShape?: (rects: Rectangle[]) => void };
+  if (typeof shapedWindow.setShape !== "function") return false;
   try {
-    shapedWindow.setShape?.(rects);
+    shapedWindow.setShape(rects);
+    return rects.length > 0;
   } catch {
-    // Shape support is platform-dependent; mouse forwarding remains as the fallback.
+    return false;
   }
 }
 
-export function applyBrowserAssetOverlayShape(record: BrowserAssetOverlayRecord): void {
+export function applyBrowserAssetOverlayShape(
+  record: BrowserAssetOverlayRecord,
+  platform: NodeJS.Platform = process.platform,
+): void {
   if (record.window.isDestroyed()) return;
   if (!record.dockMode || !record.popoverRect) {
-    setBrowserAssetOverlayShape(record, []);
+    setBrowserAssetOverlayShape(record, [], platform);
+    record.shapeInteractive = false;
     return;
   }
   const rawLeft = Math.round(record.popoverRect.left - record.hostBounds.x);
@@ -147,21 +162,20 @@ export function applyBrowserAssetOverlayShape(record: BrowserAssetOverlayRecord)
   const top = clampNumber(rawTop - BROWSER_ASSET_OVERLAY_SHAPE_SLOP, 0, record.hostBounds.height);
   const right = clampNumber(rawRight + BROWSER_ASSET_OVERLAY_SHAPE_SLOP, left + 1, record.hostBounds.width);
   const bottom = clampNumber(rawBottom + BROWSER_ASSET_OVERLAY_SHAPE_SLOP, top + 1, record.hostBounds.height);
-  setBrowserAssetOverlayShape(record, [
+  record.shapeInteractive = setBrowserAssetOverlayShape(record, [
     {
       x: left,
       y: top,
       width: Math.max(1, right - left),
       height: Math.max(1, bottom - top),
     },
-  ]);
+  ], platform);
 }
 
 export function applyBrowserAssetOverlayMouseEvents(record: BrowserAssetOverlayRecord): void {
   if (record.window.isDestroyed()) return;
-  const shapedDockInteractive = Boolean(record.dockMode && record.popoverRect);
   const interactive =
-    shapedDockInteractive || record.pointerInteractive || record.hoverInteractive || record.dragInteractive;
+    record.shapeInteractive || record.pointerInteractive || record.hoverInteractive || record.dragInteractive;
   record.window.setIgnoreMouseEvents(!interactive, { forward: true });
 }
 
@@ -240,6 +254,12 @@ export function setBrowserAssetOverlayDragInteractive(record: BrowserAssetOverla
     }, 30_000);
   }
   applyBrowserAssetOverlayMouseEvents(record);
+}
+
+/** 原生拖拽可能吞掉 renderer 的 pointerup；结束时同时释放两层全窗命中态，避免继续挡住网页。 */
+export function finishBrowserAssetOverlayDrag(record: BrowserAssetOverlayRecord): void {
+  record.pointerInteractive = false;
+  setBrowserAssetOverlayDragInteractive(record, false);
 }
 
 export function setBrowserAssetOverlayCaptureEnabled(record: BrowserAssetOverlayRecord, enabled: boolean): void {
@@ -343,6 +363,7 @@ function ensureBrowserAssetOverlay(owner: BrowserWindow): BrowserAssetOverlayRec
     pendingPromptRequest: null,
     dockMode: null,
     popoverRect: null,
+    shapeInteractive: false,
     pointerInteractive: false,
     hoverInteractive: false,
     dragInteractive: false,

@@ -19,6 +19,7 @@ import type {
 } from './browserAssetPopoverTypes'
 import {
   browserAssetStorageKey,
+  browserAssetImportErrorMessage,
   createPromptCardAsset,
   fileNameFromRemoteAssetUrl,
   promptExtractionModeFromRequest,
@@ -115,13 +116,7 @@ export function useBrowserAssetCaptureImport({
         // 把真实原因(超时/防盗链 403/内容类型/blob)带到卡片副标题，控制台留全文供排查。
         const reason = error instanceof Error ? error.message : String(error)
         console.error('[nomi:browser] 网页素材导入失败:', reason, input.url)
-        const shortReason = /timed out|超时/i.test(reason)
-          ? '下载超时'
-          : /403|forbidden|hotlink|referer/i.test(reason)
-            ? '被网站拒绝(防盗链)'
-            : /blob:/i.test(input.url)
-              ? '这张图无法直接下载'
-              : '下载失败'
+        const shortReason = browserAssetImportErrorMessage(reason, input.url)
         setLocalAssets((current) =>
           current.map((asset) => asset.id === pendingId ? { ...asset, subtitle: shortReason, status: 'error' } : asset),
         )

@@ -26,6 +26,7 @@ import {
   applyBrowserAssetOverlayMouseEvents,
   applyBrowserAssetOverlayShape,
   closeBrowserAssetOverlay,
+  finishBrowserAssetOverlayDrag,
   getOverlayForSender,
   getOwnerWindowForSender,
   normalizeOverlayBounds,
@@ -68,7 +69,6 @@ import type {
   BrowserResourceCapturePayload,
   BrowserViewCreatePayload,
   BrowserViewIdPayload,
-  BrowserViewImportImagePayload,
   BrowserViewImportMediaPayload,
   BrowserViewNavigatePayload,
   BrowserViewPromptImagePayload,
@@ -328,11 +328,6 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     void record.view.webContents.session.cookies.flushStore().catch(() => undefined);
   });
 
-  ipcMain.handle("browser:view:import-image", async (event, payload: BrowserViewImportImagePayload) => {
-    const record = getBrowserViewForSender(event.sender, payload);
-    return importBrowserMedia(record, { ...payload, mediaType: "image" });
-  });
-
   ipcMain.handle("browser:view:import-media", async (event, payload: BrowserViewImportMediaPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     return importBrowserMedia(record, payload);
@@ -444,6 +439,12 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     if (!record || record.window.isDestroyed()) return;
     record.pointerInteractive = payload.interactive === true;
     applyBrowserAssetOverlayMouseEvents(record);
+  });
+
+  ipcMain.on("browser:asset-overlay:finish-drag", (event) => {
+    const record = getOverlayForSender(event.sender);
+    if (!record || record.window.isDestroyed()) return;
+    finishBrowserAssetOverlayDrag(record);
   });
 
   ipcMain.on("browser:asset-overlay:set-state", (event, payload: BrowserAssetOverlayStatePayload) => {

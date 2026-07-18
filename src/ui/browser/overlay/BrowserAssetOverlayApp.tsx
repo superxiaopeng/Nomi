@@ -372,24 +372,18 @@ export function BrowserAssetOverlayApp(): JSX.Element {
   )
 
   React.useEffect(() => {
-    const updateFromPoint = (x: number, y: number): void => {
-      setInteractive(pointerDownRef.current || pointInsidePopover(x, y))
-    }
-    const handlePointerMove = (event: PointerEvent): void => updateFromPoint(event.clientX, event.clientY)
     const handlePointerDown = (event: PointerEvent): void => {
       pointerDownRef.current = pointInsidePopover(event.clientX, event.clientY)
-      updateFromPoint(event.clientX, event.clientY)
+      setInteractive(pointerDownRef.current)
     }
-    const handlePointerUp = (event: PointerEvent): void => {
+    const handlePointerUp = (): void => {
       pointerDownRef.current = false
-      updateFromPoint(event.clientX, event.clientY)
+      setInteractive(false)
     }
-    window.addEventListener('pointermove', handlePointerMove, { capture: true })
     window.addEventListener('pointerdown', handlePointerDown, { capture: true })
     window.addEventListener('pointerup', handlePointerUp, { capture: true })
     window.addEventListener('pointercancel', handlePointerUp, { capture: true })
     return () => {
-      window.removeEventListener('pointermove', handlePointerMove, { capture: true })
       window.removeEventListener('pointerdown', handlePointerDown, { capture: true })
       window.removeEventListener('pointerup', handlePointerUp, { capture: true })
       window.removeEventListener('pointercancel', handlePointerUp, { capture: true })
@@ -397,8 +391,28 @@ export function BrowserAssetOverlayApp(): JSX.Element {
   }, [pointInsidePopover, setInteractive])
 
   React.useEffect(() => {
-    if (!config.opened) setInteractive(false)
-  }, [config.opened, setInteractive])
+    if (!config.opened || !fullWindowModal) {
+      if (!pointerDownRef.current) setInteractive(false)
+      return
+    }
+    setInteractive(true)
+  }, [config.opened, fullWindowModal, setInteractive])
+
+  React.useEffect(() => {
+    const finishDrag = (): void => {
+      pointerDownRef.current = false
+      // drop 落在卡片内时 hoverInteractive 已负责维持卡片命中；不要把 pointerInteractive
+      // 再置回 true，否则原生拖拽吞掉 pointermove/up 后，透明整窗会继续挡住网页。
+      interactiveRef.current = false
+      overlayBridge?.finishDrag?.()
+    }
+    window.addEventListener('drop', finishDrag, { capture: true })
+    window.addEventListener('dragend', finishDrag, { capture: true })
+    return () => {
+      window.removeEventListener('drop', finishDrag, { capture: true })
+      window.removeEventListener('dragend', finishDrag, { capture: true })
+    }
+  }, [overlayBridge])
 
   React.useEffect(() => {
     const pending = pendingCaptureFlyoutRef.current
@@ -425,40 +439,22 @@ export function BrowserAssetOverlayApp(): JSX.Element {
       if (!projectId) throw new Error('projectId is required')
       const viewId = config.viewId
       const fallbackTitle = input.title || input.fileName || (input.mediaType === 'video' ? '网页视频' : '网页图片')
-      // 直连拉取兜底：会话下载(带 cookie/Referer,能过防盗链)失败时退这条，别直接判「下载失败」。
-      const importViaRemoteUrl = async (): Promise<NomiBrowserAsset> => {
-        const asset = await desktop?.assets.importRemoteUrl({
-          projectId,
-          url: input.url,
-          kind: 'browser-capture',
-          fileName: input.fileName,
-        })
-        if (!asset) throw new Error('素材导入通道不可用')
-        return browserAssetFromDesktopAsset(asset, fallbackTitle)
+      // 原生素材盒只接受当前内置网页产生的拖拽；没有来源 WebContents 时不准换成另一套
+      // 无 Cookie/Referer 的网络栈重抓 URL，否则既破坏防盗链，也会把真实错误掩盖掉。
+      if (!viewId || !browserBridge?.importMedia || !canDownloadFromBrowserView(input.url)) {
+        throw new Error('来源页面会话已失效，请回到原网页重新拖入')
       }
-      if (viewId && browserBridge?.importMedia && canDownloadFromBrowserView(input.url)) {
-        try {
-          const asset = await browserBridge.importMedia({
-            viewId,
-            projectId,
-            url: input.url,
-            fileName: input.fileName,
-            title: input.title,
-            mediaType: input.mediaType,
-          })
-          return browserAssetFromDesktopAsset(asset, fallbackTitle)
-        } catch (sessionError) {
-          // 会话下载失败(防盗链头不够/内容类型/blob 跨界)→ 退直连拉取；两条都失败才抛真实原因。
-          try {
-            return await importViaRemoteUrl()
-          } catch {
-            throw sessionError instanceof Error ? sessionError : new Error(String(sessionError))
-          }
-        }
-      }
-      return importViaRemoteUrl()
+      const asset = await browserBridge.importMedia({
+        viewId,
+        projectId,
+        url: input.url,
+        fileName: input.fileName,
+        title: input.title,
+        mediaType: input.mediaType,
+      })
+      return browserAssetFromDesktopAsset(asset, fallbackTitle)
     },
-    [browserBridge, config.viewId, desktop?.assets],
+    [browserBridge, config.viewId],
   )
 
   const handleOpenChange = React.useCallback(

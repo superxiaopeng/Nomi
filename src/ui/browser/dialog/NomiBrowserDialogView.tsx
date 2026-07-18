@@ -249,7 +249,7 @@ export function NomiBrowserDialogView({
                 type="button"
                 className={cn(
                   'grid size-6 shrink-0 place-items-center rounded-pill border-0 bg-transparent',
-                  'cursor-pointer text-nomi-ink-35 transition-colors duration-[var(--nomi-transition-fast)] hover:bg-nomi-ink-05 hover:text-nomi-ink',
+                  'cursor-pointer text-nomi-ink-40 transition-colors duration-[var(--nomi-transition-fast)] hover:bg-nomi-ink-05 hover:text-nomi-ink',
                   activeBookmarked && 'text-nomi-accent hover:text-nomi-accent',
                   (!activeTab?.url || activeBookmarked) && 'cursor-default',
                 )}
@@ -294,13 +294,13 @@ export function NomiBrowserDialogView({
                       <button
                         key={site.url}
                         type="button"
-                        className="flex h-9 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2.5 text-left text-body-sm text-nomi-ink-70 hover:bg-nomi-ink-05 hover:text-nomi-ink"
+                        className="flex h-9 w-full items-center gap-2 rounded-nomi-sm border-0 bg-transparent px-2.5 text-left text-body-sm text-nomi-ink-80 hover:bg-nomi-ink-05 hover:text-nomi-ink"
                         onClick={() => {
                           setMaterialSitesOpen(false)
                           void createTab(site.url)
                         }}
                       >
-                        <IconWorld size={15} stroke={1.7} className="shrink-0 text-nomi-ink-35" aria-hidden="true" />
+                        <IconWorld size={15} stroke={1.7} className="shrink-0 text-nomi-ink-40" aria-hidden="true" />
                         <span className="min-w-0 flex-1 truncate">{site.name}</span>
                         <IconExternalLink size={13} stroke={1.7} className="shrink-0 text-nomi-ink-30" aria-hidden="true" />
                       </button>
@@ -419,7 +419,7 @@ export function NomiBrowserDialogView({
                     </div>
                   </form>
                   <div>
-                    <div className="mb-3 text-caption font-semibold text-nomi-ink-45">常用参考站点</div>
+                    <div className="mb-3 text-caption font-semibold text-nomi-ink-40">常用参考站点</div>
                     <div
                       className="grid gap-2"
                       style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}
@@ -447,7 +447,7 @@ export function NomiBrowserDialogView({
                             </span>
                             <span className="grid min-w-0 flex-1 gap-0.5">
                               <span className="truncate text-caption font-semibold text-nomi-ink">{site.label}</span>
-                              <span className="truncate text-micro text-nomi-ink-45">{site.hint}</span>
+                              <span className="truncate text-micro text-nomi-ink-40">{site.hint}</span>
                             </span>
                           </button>
                         )

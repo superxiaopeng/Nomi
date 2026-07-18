@@ -147,7 +147,7 @@ export function BrowserPromptExtractionSettingsModal({
                 )
               })}
             </div>
-            <button type="button" className="inline-flex h-9 items-center justify-center gap-2 rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold text-nomi-ink-70 hover:bg-nomi-ink-05" onClick={addCustomTemplate}>
+            <button type="button" className="inline-flex h-9 items-center justify-center gap-2 rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold text-nomi-ink-80 hover:bg-nomi-ink-05" onClick={addCustomTemplate}>
               <IconFolderPlus size={15} stroke={1.8} aria-hidden="true" />
               添加自定义
             </button>
@@ -162,7 +162,7 @@ export function BrowserPromptExtractionSettingsModal({
               <textarea value={selectedTemplate.prompt} className="min-h-[340px] flex-1 resize-none rounded-nomi border border-nomi-line bg-nomi-bg p-3 text-body-sm leading-relaxed text-nomi-ink outline-none focus:border-nomi-accent" onChange={(event) => updateTemplate({ prompt: event.target.value })} />
             </label>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-caption text-nomi-ink-45">{projectAvailable ? '设置会随项目文件夹迁移' : '当前项目目录不可用，保存会失败'}</div>
+              <div className="text-caption text-nomi-ink-40">{projectAvailable ? '设置会随项目文件夹迁移' : '当前项目目录不可用，保存会失败'}</div>
               <div className="flex items-center gap-2">
                 {isDefaultTemplate ? (
                   <button type="button" className="inline-flex h-9 items-center rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold text-nomi-ink-60 hover:bg-nomi-ink-05" onClick={resetDefaultTemplate}>恢复默认</button>
@@ -172,7 +172,7 @@ export function BrowserPromptExtractionSettingsModal({
                     删除
                   </button>
                 )}
-                <button type="button" className="inline-flex h-9 items-center rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold text-nomi-ink-70 hover:bg-nomi-ink-05" onClick={onClose}>取消</button>
+                <button type="button" className="inline-flex h-9 items-center rounded-nomi border border-nomi-line bg-nomi-paper px-3 text-caption font-semibold text-nomi-ink-80 hover:bg-nomi-ink-05" onClick={onClose}>取消</button>
                 <button type="button" className="inline-flex h-9 items-center gap-2 rounded-nomi border-0 bg-nomi-ink px-4 text-caption font-semibold text-nomi-paper hover:bg-nomi-accent" onClick={() => onSave(normalizeBrowserPromptExtractionTemplateSettings(draft))}>
                   <IconCheck size={15} stroke={2} aria-hidden="true" />
                   保存

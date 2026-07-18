@@ -222,7 +222,7 @@ export function NomiBrowserAssetPopover({
   }, [activeLibraryProjectId])
 
   React.useEffect(() => {
-    if (!popoverOpen) return
+    if (!popoverOpen || contained) return
     const handleMouseDown = (event: MouseEvent): void => {
       const target = event.target as Node
       const targetElement = target instanceof HTMLElement ? target : target.parentElement
@@ -232,7 +232,7 @@ export function NomiBrowserAssetPopover({
     }
     document.addEventListener('mousedown', handleMouseDown)
     return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [popoverOpen, setPopoverOpen])
+  }, [contained, popoverOpen, setPopoverOpen])
 
   React.useEffect(() => {
     if (!popoverOpen) return
@@ -240,6 +240,11 @@ export function NomiBrowserAssetPopover({
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopImmediatePropagation()
+      if (actionsOpen || filtersOpen) {
+        setActionsOpen(false)
+        setFiltersOpen(false)
+        return
+      }
       if (promptExtractionSettingsOpen) {
         setPromptExtractionSettingsOpen(false)
         return
@@ -265,7 +270,7 @@ export function NomiBrowserAssetPopover({
     }
     window.addEventListener('keydown', handleKeyDown, { capture: true })
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true })
-  }, [assetContextMenu, blankContextMenu, popoverOpen, promptDetailAssetId, promptExtractionSettingsOpen, renamingAssetId, setPopoverOpen])
+  }, [actionsOpen, assetContextMenu, blankContextMenu, filtersOpen, popoverOpen, promptDetailAssetId, promptExtractionSettingsOpen, renamingAssetId, setPopoverOpen])
 
   React.useEffect(() => {
     if (!popoverOpen) {
@@ -548,13 +553,9 @@ export function NomiBrowserAssetPopover({
   const acceptsExternalAssetDrop = React.useCallback((dataTransfer: DataTransfer): boolean => {
     const types = Array.from(dataTransfer.types)
     if (types.includes(NOMI_ASSET_DRAG_MIME) || types.includes(LEGACY_BROWSER_ASSET_DRAG_MIME)) return false
-    return (
-      types.includes(BROWSER_IMAGE_DRAG_MIME) ||
-      types.includes('text/uri-list') ||
-      types.includes('text/html') ||
-      types.includes('text/plain') ||
-      dataTransfer.files.length > 0
-    )
+    // 只有 Nomi 网页桥的确定媒体 payload 或真实文件才亮“松开保存”。普通文本/HTML
+    // 在 dragover 阶段无法可靠解析，提前接纳会造成松手后静默无事发生。
+    return types.includes(BROWSER_IMAGE_DRAG_MIME) || dataTransfer.files.length > 0
   }, [])
 
   const handleWindowDragEnter = React.useCallback(

@@ -21,6 +21,7 @@ import {
   browserAssetStorageKey,
   clampNumber,
   contentTypeFromFile,
+  isBrowserAssetDraggable,
   upsertBrowserAsset,
 } from './browserAssetPopoverUtils'
 
@@ -432,6 +433,10 @@ export function useBrowserAssetActions({
   }, [filteredAssets.length, popoverOpen, rootRef, selectAllVisibleAssets])
 
   const handleTileDragStart = React.useCallback((asset: NomiBrowserAsset, event: React.DragEvent<HTMLDivElement>) => {
+    if (!isBrowserAssetDraggable(asset, false)) {
+      event.preventDefault()
+      return
+    }
     const dragSelection = selectedIds.has(asset.id) ? selectedAssets : [asset]
     const serializedSelection = JSON.stringify(dragSelection)
     event.dataTransfer.setData(NOMI_ASSET_DRAG_MIME, serializedSelection)
