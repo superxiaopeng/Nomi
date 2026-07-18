@@ -41,7 +41,26 @@ const app = await electron.launch({
 
 const errors = []
 const log = (m) => console.log(m)
-const pass = { editorOpen: false, possessed: false, recStarted: false, recStopped: false, takeNode: false, mp4Made: false }
+const pass = {
+  editorOpen: false,
+  possessed: false,
+  recStarted: false,
+  recStopped: false,
+  takeNode: false,
+  mp4Made: false,
+  videoVisible: false,
+  completedBadgeRemoved: false,
+  editorEntryVisible: false,
+}
+
+async function closeApp() {
+  const process = app.process()
+  await Promise.race([
+    app.close().catch(() => undefined),
+    new Promise((resolve) => setTimeout(resolve, 8000)),
+  ])
+  if (process.exitCode === null) process.kill('SIGKILL')
+}
 
 try {
   const win = await app.firstWindow()
@@ -77,6 +96,13 @@ try {
   await win.waitForTimeout(4000)
   pass.editorOpen = (await win.locator('[aria-label="3D 场景编辑器"]').count()) > 0
   log(`  ${pass.editorOpen ? '✓' : '✗'} 编辑器打开`)
+
+  // 首次进入会出现三步 coach marks；本旅程测试录制，不让 onboarding 遮罩拦住假人行。
+  const coachSkip = win.getByRole('button', { name: '跳过', exact: true }).first()
+  if ((await coachSkip.count()) > 0) {
+    await coachSkip.click()
+    await win.waitForTimeout(500)
+  }
 
   // possess 假人
   const firstMan = win.getByText('假人', { exact: true }).first()
@@ -136,6 +162,15 @@ try {
     await win.waitForTimeout(2000)
   }
   pass.mp4Made = mp4s.length > 0
+  const takeVideo = win.locator('[data-scene3d-take-video="true"]').first()
+  await takeVideo.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {})
+  pass.videoVisible = (await takeVideo.count()) > 0 && await takeVideo.isVisible().catch(() => false)
+  if (pass.videoVisible) {
+    pass.videoVisible = await takeVideo.evaluate((video) => video instanceof HTMLVideoElement && video.controls)
+    const takeCard = takeVideo.locator('xpath=ancestor::*[@data-node-id][1]')
+    pass.editorEntryVisible = (await takeCard.getByRole('button', { name: '打开 3D 编辑器', exact: false }).count()) > 0
+  }
+  pass.completedBadgeRemoved = (await win.getByText('参考视频已生成', { exact: false }).count()) === 0
   await win.screenshot({ path: path.join(outDir, 'tr-03-after-capture.png') })
   // 把出的 mp4 拷进持久 outDir（临时 projectsDir 跑完即清），方便用户抽帧看腿。
   let savedMp4 = ''
@@ -144,6 +179,9 @@ try {
     try { copyFileSync(mp4s[0], savedMp4) } catch { savedMp4 = mp4s[0] }
   }
   log(`  ${pass.mp4Made ? '✓' : '✗'} 生成 mp4（${mp4s.length} 个）${savedMp4 ? ' → ' + savedMp4 : ''}`)
+  log(`  ${pass.videoVisible ? '✓' : '✗'} take 卡内显示可播放视频`)
+  log(`  ${pass.completedBadgeRemoved ? '✓' : '✗'} 完成横条已由视频结果取代`)
+  log(`  ${pass.editorEntryVisible ? '✓' : '✗'} 视频态保留 3D 编辑器入口`)
 
   log('\n═══ 结果 ═══')
   log(`  编辑器可开:      ${pass.editorOpen ? '✓' : '✗'}`)
@@ -152,14 +190,17 @@ try {
   log(`  停止录制:        ${pass.recStopped ? '✓' : '✗'}`)
   log(`  建 take 节点:    ${pass.takeNode ? '✓' : '✗'}`)
   log(`  端到端出 mp4:    ${pass.mp4Made ? '✓' : '✗'}`)
+  log(`  卡内视频可播:    ${pass.videoVisible ? '✓' : '✗'}`)
+  log(`  完成横条已删除:  ${pass.completedBadgeRemoved ? '✓' : '✗'}`)
+  log(`  3D 入口保留:     ${pass.editorEntryVisible ? '✓' : '✗'}`)
   log(errors.length ? `\nconsole errors:\n  ${errors.slice(0, 8).join('\n  ')}` : '\nno console errors')
   // #1 修复后 takeNode 也是硬证据（同分类必渲染）；mp4Made 是离屏端到端真证据。
-  const ok = pass.editorOpen && pass.possessed && pass.recStarted && pass.recStopped && pass.takeNode && pass.mp4Made
-  await app.close()
+  const ok = Object.values(pass).every(Boolean)
+  await closeApp()
   process.exit(ok ? 0 : 1)
 } catch (err) {
   log(`\nFAIL: ${err?.message || err}`)
   try { const win = await app.firstWindow(); await win.screenshot({ path: path.join(outDir, 'tr-FAIL.png') }) } catch {}
-  await app.close().catch(() => undefined)
+  await closeApp()
   process.exit(1)
 }

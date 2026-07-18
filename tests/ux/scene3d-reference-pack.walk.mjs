@@ -88,7 +88,18 @@ const pass = {
   referencePanel: false,
   moveApplied: false,
   framesConnected: false,
+  framesVisible: false,
   takeVideoRefAttached: false,
+  takeVideoVisible: false,
+}
+
+async function closeApp() {
+  const process = app.process()
+  await Promise.race([
+    app.close().catch(() => undefined),
+    new Promise((resolve) => setTimeout(resolve, 8000)),
+  ])
+  if (process.exitCode === null) process.kill('SIGKILL')
 }
 
 async function dismiss(win) {
@@ -187,6 +198,13 @@ try {
   pass.editorOpen = (await win.locator('[aria-label="3D 场景编辑器"]').count()) > 0
   log(`  ${pass.editorOpen ? '✓' : '✗'} 点击打开 3D 编辑器`)
 
+  // 首次进入的 coach marks 会遮住相机行；本旅程聚焦参考包出口，显式跳过后再操作。
+  const coachSkip = win.getByRole('button', { name: '跳过', exact: true }).first()
+  if ((await coachSkip.count()) > 0) {
+    await coachSkip.click()
+    await win.waitForTimeout(500)
+  }
+
   const cameraRow = win.getByRole('button', { name: '相机1', exact: true }).first()
   await cameraRow.click({ timeout: 8000 })
   await win.waitForTimeout(700)
@@ -232,6 +250,8 @@ try {
       imageCount: imageSources.size,
       firstConnected: Boolean(first && imageSources.has(first.source)),
       lastConnected: Boolean(last && imageSources.has(last.source)),
+      firstSourceId: first?.source || null,
+      lastSourceId: last?.source || null,
       modes: incoming.map((edge) => edge.mode).sort(),
     }
   }, ids.targetId)
@@ -264,9 +284,12 @@ try {
       const state = useGenerationCanvasStore.getState()
       const target = state.nodes.find((node) => node.id === targetId)
       const takeNodes = state.nodes.filter((node) => node.title === '录制走位参考')
+      const targetVideoUrls = Array.isArray(target?.meta?.referenceVideoUrls) ? target.meta.referenceVideoUrls : []
       return {
-        targetVideoUrls: Array.isArray(target?.meta?.referenceVideoUrls) ? target.meta.referenceVideoUrls : [],
-        targetAttached: target?.meta?.cameraMoveAttached === true,
+        targetVideoUrls,
+        targetAttachedUrl: typeof target?.meta?.cameraMoveAttachedUrl === 'string'
+          ? target.meta.cameraMoveAttachedUrl
+          : '',
         targetModeId: target?.meta?.archetype?.modeId,
         takeCount: takeNodes.length,
         takeStatuses: takeNodes.map((node) => ({
@@ -275,13 +298,16 @@ try {
         })),
       }
     }, ids.targetId)
-    if (attachedState?.targetVideoUrls?.length > 0 && attachedState?.targetAttached) break
+    if (
+      attachedState?.targetVideoUrls?.length > 0
+      && attachedState.targetVideoUrls.includes(attachedState.targetAttachedUrl)
+    ) break
     await win.waitForTimeout(2000)
   }
   await win.screenshot({ path: path.join(outDir, '05-after-record-take.png') })
   pass.takeVideoRefAttached = Boolean(
     attachedState?.targetVideoUrls?.length > 0 &&
-    attachedState?.targetAttached &&
+    attachedState.targetVideoUrls.includes(attachedState.targetAttachedUrl) &&
     attachedState?.targetModeId === 'omni' &&
     attachedState?.takeCount > 0,
   )
@@ -289,6 +315,34 @@ try {
     `  ${pass.takeVideoRefAttached ? '✓' : '✗'} 录 take 参考视频写入 video_ref ` +
     `(urls=${attachedState?.targetVideoUrls?.length ?? 0}, takes=${attachedState?.takeCount ?? 0}, mode=${attachedState?.targetModeId ?? 'n/a'})`,
   )
+
+  // 关闭全屏后检查用户实际看见的画布结果：首尾帧必须是有真实 <img> 的标准图片节点，
+  // take 节点必须直接显示可播放视频，而不是只剩一个“已生成”状态条。
+  const editor = win.locator('[aria-label="3D 场景编辑器"]')
+  const close = editor.locator('[title="退出 3D 场景"]').first()
+  await close.waitFor({ state: 'visible', timeout: 5000 })
+  await close.click()
+  await editor.waitFor({ state: 'hidden', timeout: 5000 })
+  await win.waitForTimeout(2600)
+
+  const frameIds = [frameState.firstSourceId, frameState.lastSourceId].filter(Boolean)
+  const frameImagesLoaded = []
+  for (const frameId of frameIds) {
+    const image = win.locator(`[data-node-id="${frameId}"] img`).first()
+    await image.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {})
+    frameImagesLoaded.push(
+      (await image.count()) > 0 && await image.evaluate((element) => element instanceof HTMLImageElement && element.naturalWidth > 0).catch(() => false),
+    )
+  }
+  pass.framesVisible = frameImagesLoaded.length === 2 && frameImagesLoaded.every(Boolean)
+
+  const takeVideo = win.locator('[data-scene3d-take-video="true"]').first()
+  await takeVideo.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {})
+  pass.takeVideoVisible = (await takeVideo.count()) > 0
+    && await takeVideo.evaluate((video) => video instanceof HTMLVideoElement && video.controls).catch(() => false)
+  await win.screenshot({ path: path.join(outDir, '06-canvas-reference-media-visible.png') })
+  log(`  ${pass.framesVisible ? '✓' : '✗'} 首/尾帧图片节点在画布中真实可见`)
+  log(`  ${pass.takeVideoVisible ? '✓' : '✗'} take 节点在画布中显示可播放视频`)
 
   log('\n═══ 结果 ═══')
   log(`  隔离项目:              ${pass.projectOpen ? '✓' : '✗'}`)
@@ -299,11 +353,13 @@ try {
   log(`  UI 显示 video_ref:     ${pass.referencePanel ? '✓' : '✗'}`)
   log(`  推近运镜落轨迹:        ${pass.moveApplied ? '✓' : '✗'}`)
   log(`  首尾帧自动连视频槽:    ${pass.framesConnected ? '✓' : '✗'}`)
+  log(`  首尾帧图片真实可见:    ${pass.framesVisible ? '✓' : '✗'}`)
   log(`  录 take 写入 video_ref: ${pass.takeVideoRefAttached ? '✓' : '✗'}`)
+  log(`  take 卡内视频可播:      ${pass.takeVideoVisible ? '✓' : '✗'}`)
   log(errors.length ? `\nconsole errors:\n  ${errors.slice(0, 8).join('\n  ')}` : '\nno console errors')
 
   const ok = Object.values(pass).every(Boolean)
-  await app.close()
+  await closeApp()
   vite.kill('SIGTERM')
   process.exit(ok ? 0 : 1)
 } catch (err) {
@@ -312,7 +368,7 @@ try {
     const win = await app.firstWindow()
     await win.screenshot({ path: path.join(outDir, 'FAIL.png') })
   } catch {}
-  await app.close().catch(() => undefined)
+  await closeApp()
   vite.kill('SIGTERM')
   process.exit(1)
 }

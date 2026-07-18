@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { scene3DStateEqual, readTakeCaptureStatus } from "./Scene3DEditor";
+import { readScene3DCardPreview } from "./scene3d/scene3dCardPreview";
 import { normalizeScene3DState } from "./scene3d/scene3dSerializer";
 import type { Scene3DState } from "./scene3d/scene3dTypes";
 import type { GenerationCanvasNode } from "../model/generationCanvasTypes";
@@ -108,11 +109,43 @@ describe("readTakeCaptureStatus（录 take 闭环徽标状态，#1）", () => {
     expect(readTakeCaptureStatus(nodeWithMeta({ cameraMoveVideo: { fps: 24 } }))).toBe(null);
   });
 
+  it("cameraMoveVideo 的 url 只有空白 → 不算完成", () => {
+    expect(readTakeCaptureStatus(nodeWithMeta({ cameraMoveVideo: { url: "   ", fps: 24 } }))).toBe(null);
+  });
+
   it("出片中优先 generating（标志尚未清，video 还没写）", () => {
     expect(
       readTakeCaptureStatus(
         nodeWithMeta({ cameraMoveAutoCapture: { fps: 24 }, cameraMoveVideo: { url: "x" } }),
       ),
     ).toBe("generating");
+  });
+});
+
+describe("readScene3DCardPreview（3D 卡面媒体单一选择器）", () => {
+  it("参考视频与旧截图同时存在时优先显示参考视频", () => {
+    expect(
+      readScene3DCardPreview(
+        nodeWithMeta({
+          cameraMoveVideo: { url: "  asset://take.mp4  ", fps: 24 },
+          scene3dState: { lastThumbnail: "asset://old-frame.png" },
+        }),
+      ),
+    ).toEqual({ kind: "video", url: "asset://take.mp4" });
+  });
+
+  it("没有有效参考视频时回退到 3D 截图", () => {
+    expect(
+      readScene3DCardPreview(
+        nodeWithMeta({
+          cameraMoveVideo: { url: "  " },
+          scene3dState: { lastThumbnail: "asset://frame.png" },
+        }),
+      ),
+    ).toEqual({ kind: "image", url: "asset://frame.png" });
+  });
+
+  it("视频和截图都没有时显示空态", () => {
+    expect(readScene3DCardPreview(nodeWithMeta({ scene3dState: {} }))).toEqual({ kind: "empty" });
   });
 });

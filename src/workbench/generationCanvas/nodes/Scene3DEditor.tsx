@@ -1,5 +1,5 @@
 import React from 'react'
-import { IconCube, IconMaximize, IconMovie } from '@tabler/icons-react'
+import { IconCube, IconMaximize } from '@tabler/icons-react'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { cn } from '../../../utils/cn'
 import { EmptyStateLauncher } from './render/CardCommon'
@@ -13,6 +13,10 @@ import { cloneScene3DState, normalizeScene3DState } from './scene3d/scene3dSeria
 import { persistScene3DScreenshot } from './scene3d/scene3dScreenshot'
 import { frameCountForDuration } from './scene3d/takeRecording'
 import { isVideoLikeGenerationNodeKind } from '../model/generationNodeKinds'
+import { DeferredNodeVideo } from './DeferredNodeMedia'
+import { buildVideoPlaybackUrl } from '../../../media/videoPlaybackUrl'
+import { diagnoseVideoPlaybackFailure, logVideoPlaybackFailure } from '../../../media/videoPlaybackDiagnostics'
+import { readScene3DCardPreview } from './scene3d/scene3dCardPreview'
 import {
   referenceSlotForScene3DCaptureTitle,
   shouldAttachScene3DFrameReference,
@@ -43,6 +47,12 @@ function imageNodeSize(width: number, height: number): { width: number; height: 
 
 function readScene3DState(node: GenerationCanvasNode): Scene3DState {
   return normalizeScene3DState(node.meta?.scene3dState)
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized || null
 }
 
 function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
@@ -92,35 +102,21 @@ export function readTakeCaptureStatus(node: GenerationCanvasNode): 'generating' 
   if (!meta) return null
   if (meta.cameraMoveAutoCapture && typeof meta.cameraMoveAutoCapture === 'object') return 'generating'
   const video = meta.cameraMoveVideo
-  if (video && typeof video === 'object' && typeof (video as { url?: unknown }).url === 'string') return 'done'
+  if (video && typeof video === 'object' && readNonEmptyString((video as { url?: unknown }).url)) return 'done'
   return null
 }
 
-function Scene3DTakeStatusOverlay({ status }: { status: 'generating' | 'done' }): JSX.Element {
-  if (status === 'generating') {
-    return (
-      <div
-        className={cn(
-          'pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex items-center justify-center gap-2',
-          'bg-nomi-ink/[0.62] px-3 py-1.5 text-caption font-medium text-nomi-paper backdrop-blur-[3px]',
-        )}
-        aria-live="polite"
-      >
-        <NomiLoadingMark size={16} />
-        <span>参考视频生成中…</span>
-      </div>
-    )
-  }
+function Scene3DTakeGeneratingOverlay(): JSX.Element {
   return (
     <div
       className={cn(
-        'pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex items-center justify-center gap-1.5',
-        'bg-nomi-accent/[0.92] px-3 py-1.5 text-caption font-medium text-nomi-paper',
+        'pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex items-center justify-center gap-2',
+        'bg-nomi-ink/[0.62] px-3 py-1.5 text-caption font-medium text-nomi-paper backdrop-blur-[3px]',
       )}
       aria-live="polite"
     >
-      <IconMovie size={14} stroke={1.9} />
-      <span>参考视频已生成 ✓</span>
+      <NomiLoadingMark size={16} />
+      <span>参考视频生成中…</span>
     </div>
   )
 }
@@ -141,7 +137,7 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
   )
   const persistedSceneStateKeyRef = React.useRef(sceneStateKey)
   const lastThumbnailRef = React.useRef(sceneState.lastThumbnail)
-  const thumbnailUrl = sceneState.lastThumbnail
+  const cardPreview = readScene3DCardPreview(node)
 
   React.useEffect(() => {
     persistedSceneStateKeyRef.current = sceneStateKey
@@ -311,12 +307,27 @@ function Scene3DEditor({ node, width, height, readOnly = false }: Scene3DEditorP
   return (
     <>
       <div className="group relative w-full h-full overflow-hidden" data-tour-target="staging trajectory">
-        {takeCaptureStatus ? <Scene3DTakeStatusOverlay status={takeCaptureStatus} /> : null}
-        {thumbnailUrl ? (
+        {takeCaptureStatus === 'generating' ? <Scene3DTakeGeneratingOverlay /> : null}
+        {cardPreview.kind === 'video' ? (
+          <DeferredNodeVideo
+            data-scene3d-take-video="true"
+            className="h-full w-full min-h-0 bg-nomi-ink-05 object-contain pointer-events-auto select-none"
+            src={buildVideoPlaybackUrl(cardPreview.url)}
+            crossOrigin="use-credentials"
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            draggable={false}
+            onError={(event) => {
+              void diagnoseVideoPlaybackFailure(cardPreview.url, event.currentTarget.error).then(logVideoPlaybackFailure)
+            }}
+          />
+        ) : cardPreview.kind === 'image' ? (
           <>
             <img
               className="w-full h-full object-contain select-none pointer-events-none bg-nomi-ink-05"
-              src={thumbnailUrl}
+              src={cardPreview.url}
               alt=""
               draggable={false}
             />
