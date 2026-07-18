@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { localizeAssetsForVendor, resolveAssetIngestionWithFallback } from "./catalog/assetLocalization";
+import { localizeAssetsForVendor, resolveAssetIngestionWithFallback, trustedLocalOutputOrigin } from "./catalog/assetLocalization";
 import { readNomiLocalAsset, postJsonForAssetUpload, postMultipartForAssetUpload } from "./assets/localAssetFile";
 import { importRemoteAsset, writeAsset } from "./assets/projectAssetStore";
 import { endpoint } from "./vendorEndpoint";
@@ -221,7 +221,7 @@ export async function localizeTaskAsset(
   projectId: string,
   assetUrl: string,
   type: "image" | "video" | "audio" | "model3d",
-  nodeId?: string,
+  nodeId?: string, vendor?: Pick<Vendor, "key" | "baseUrlHint">,
 ): Promise<TaskResult["assets"][number]> {
   const imported = (await importRemoteAsset({
     projectId,
@@ -229,7 +229,7 @@ export async function localizeTaskAsset(
     kind: "generated",
     ownerNodeId: nodeId || null,
     fileName: `${type}-${Date.now()}.${type === "image" ? "png" : type === "video" ? "mp4" : type === "model3d" ? "glb" : "mp3"}`,
-  })) as { id?: string; name?: string; data?: { url?: string; absolutePath?: string } };
+  }, { trustedPrivateOrigin: trustedLocalOutputOrigin(vendor) || undefined })) as { id?: string; name?: string; data?: { url?: string; absolutePath?: string } };
   if (type === "image" || type === "video")
     scheduleTechnicalReview({
       projectId,
@@ -413,7 +413,7 @@ export async function buildProfileTaskResult(input: {
   const type: "image" | "video" | "model3d" =
     input.wantedKind === "video" ? "video" : input.wantedKind === "model3d" ? "model3d" : "image";
   const assets = input.projectId
-    ? await Promise.all(assetUrls.map((url) => localizeTaskAsset(input.projectId || "", url, type, input.nodeId)))
+    ? await Promise.all(assetUrls.map((url) => localizeTaskAsset(input.projectId || "", url, type, input.nodeId, input.vendor)))
     : assetUrls.map((url) => ({ type, url, thumbnailUrl: type === "image" ? url : null }));
   return {
     providerMeta,
@@ -579,7 +579,7 @@ export async function runTask(payload: unknown): Promise<TaskResult> {
   const type: "image" | "video" | "model3d" =
     wantedKind === "video" ? "video" : wantedKind === "model3d" ? "model3d" : "image";
   const asset: TaskResult["assets"][number] = projectId
-    ? await localizeTaskAsset(projectId, assetUrl, type, nodeId)
+    ? await localizeTaskAsset(projectId, assetUrl, type, nodeId, vendor)
     : { type, url: assetUrl, thumbnailUrl: type === "image" ? assetUrl : null };
   // E11 provenance + S4-1 终态事件:与 profile 路径共用 vendor/provenance 模块(单一真相)。
   const provenance = buildTaskProvenance({ vendor, model, request, vendorRequestId: upstreamTaskId });

@@ -30,6 +30,11 @@ export type HardenedFetchOptions = {
   body?: unknown;
   /** 是否拒抛非 2xx —— 默认 true（保持旧行为）。设为 false 则返回任何 status 不抛错（让调用方读 body 自己判断）。 */
   throwOnNon2xx?: boolean;
+  /**
+   * 内部可信本地服务的精确 origin 白名单。只允许完全同源的私网/回环 URL，且启用后强制禁止重定向。
+   * 不得从 renderer/Agent 原样透传；当前只由已配置的本地 ComfyUI 产物回收使用。
+   */
+  allowedPrivateOrigins?: readonly string[];
 };
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -85,7 +90,18 @@ export function isPrivateHost(hostname: string): boolean {
   return false;
 }
 
-function assertSafeUrl(targetUrl: string): URL {
+function isExplicitlyAllowedPrivateOrigin(url: URL, allowedOrigins: readonly string[]): boolean {
+  return allowedOrigins.some((rawOrigin) => {
+    try {
+      const allowed = new URL(rawOrigin);
+      return (allowed.protocol === "http:" || allowed.protocol === "https:") && allowed.origin === url.origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function assertSafeUrl(targetUrl: string, allowedPrivateOrigins: readonly string[] = []): URL {
   let url: URL;
   try {
     url = new URL(targetUrl);
@@ -95,7 +111,7 @@ function assertSafeUrl(targetUrl: string): URL {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`Only http/https URLs are allowed (got ${url.protocol})`);
   }
-  if (isPrivateHost(url.hostname)) {
+  if (isPrivateHost(url.hostname) && !isExplicitlyAllowedPrivateOrigin(url, allowedPrivateOrigins)) {
     throw new Error(`Refusing to fetch private/loopback host: ${url.hostname}`);
   }
   return url;
@@ -125,10 +141,12 @@ export async function hardenedFetch(
   rawUrl: string,
   options: HardenedFetchOptions = {},
 ): Promise<HardenedFetchResult> {
-  const url = assertSafeUrl(rawUrl);
+  const allowedPrivateOrigins = options.allowedPrivateOrigins || [];
+  const url = assertSafeUrl(rawUrl, allowedPrivateOrigins);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-  const allowRedirect = options.allowRedirect !== false;
+  // 可信本地服务只允许精确同源的一跳请求。禁止重定向，避免先访问重定向目标、事后才校验。
+  const allowRedirect = allowedPrivateOrigins.length === 0 && options.allowRedirect !== false;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -156,7 +174,7 @@ export async function hardenedFetch(
 
     // 重定向终点必须也通过私网检查
     if (response.url && response.url !== url.toString()) {
-      assertSafeUrl(response.url);
+      assertSafeUrl(response.url, allowedPrivateOrigins);
     }
 
     const contentType = response.headers.get("content-type") || "";

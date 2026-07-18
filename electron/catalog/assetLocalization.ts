@@ -26,6 +26,22 @@ export function trustedOriginalUrl(asset: Pick<LocalAsset, "originalUrl" | "ageM
   if (typeof asset.ageMs === "number" && asset.ageMs > ORIGINAL_URL_TRUST_MS) return null;
   return asset.originalUrl;
 }
+
+/**
+ * 代码所有的本地生成后端可回收产物 origin。安全例外集中在素材边界，不让通用 runtime 写供应商分支；
+ * 仅 curated ComfyUI 生效，用户导入的普通 vendor 不能靠持久化字段自行打开私网下载。
+ */
+export function trustedLocalOutputOrigin(
+  vendor: { key?: string; baseUrlHint?: string | null } | null | undefined,
+): string | null {
+  if (vendor?.key !== COMFYUI_VENDOR_KEY || !vendor.baseUrlHint) return null;
+  try {
+    const url = new URL(vendor.baseUrlHint);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
 export type LocalAssetReader = (url: string) => LocalAsset | null;
 export type HttpPostJson = (url: string, headers: Record<string, string>, body: unknown) => Promise<unknown>;
 // extraFields：multipart 里除 file 外的文本字段(如 KIE stream 的 uploadPath/fileName)。

@@ -5,7 +5,7 @@
  * 自定义导入的 WAN/VHS 类工作流出的是 gifs（VHS_VideoCombine 历史命名，mp4 也落 gifs），走 S1 扩后的
  * comfyui-history 变换归一成 video_url。起假 ComfyUI（node http）：POST /prompt 返 id、GET /history/{id}
  * 头一拍空后一拍出 gifs、GET /view 返 mp4；用**真 runtime**跑提交→轮询→变换→succeeded，坐实：
- * ① /prompt 收到 API 格式图 + 提示词注入；② gifs → video_url（不是 image_url）；③ /view 契约（video/mp4）。
+ * ① /prompt 收到 API 格式图 + 提示词注入；② gifs → video_url（不是 image_url）；③ /view 视频下载并落进真实项目。
  */
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -22,9 +22,10 @@ vi.mock("electron", () => ({
     encryptString: (s: string) => Buffer.from(s),
     decryptString: (b: Buffer) => b.toString(),
   },
+  webContents: { getAllWebContents: () => [] },
 }));
 
-import { executeProfileOperation, buildProfileTaskResult } from "./runtime";
+import { executeProfileOperation, buildProfileTaskResult, createProject } from "./runtime";
 import type { HttpOperation } from "./catalog/types";
 // 导入本文件即注册 "comfyui-history" 变换（副作用）——runtime 按名查表要它在场。
 import "./catalog/comfyuiLocal";
@@ -109,6 +110,8 @@ afterAll(() => {
 
 describe("本地 ComfyUI 视频传输链（真 HTTP 端到端）", () => {
   it("VHS gifs 输出 → video_url（非 image_url）→ /view 取到 mp4", async () => {
+    const projectRoot = fs.mkdtempSync(path.join(mockedUserDataRoot, "project-"));
+    const project = createProject({ rootPath: projectRoot, name: "ComfyUI 视频回收验证", payload: {} });
     const vendor = {
       key: "comfyui-local", name: "本地 ComfyUI", enabled: true,
       baseUrlHint: baseUrl, authType: "none" as const, authHeader: null,
@@ -140,7 +143,7 @@ describe("本地 ComfyUI 视频传输链（真 HTTP 端到端）", () => {
       const polled = await executeProfileOperation({ vendor, model, apiKey: "", request, operation: VIDEO_QUERY_OP, providerMeta });
       const norm = await buildProfileTaskResult({
         response: polled.response, mapping: { create: VIDEO_CREATE_OP, query: VIDEO_QUERY_OP } as never,
-        operation: VIDEO_QUERY_OP, request, taskIdFallback: "vid-abc", wantedKind: "video", vendor, model,
+        operation: VIDEO_QUERY_OP, request, taskIdFallback: "vid-abc", wantedKind: "video", projectId: project.id, vendor, model,
       });
       status = norm.result.status;
       assetUrl = norm.result.assets[0]?.url || "";
@@ -148,15 +151,11 @@ describe("本地 ComfyUI 视频传输链（真 HTTP 端到端）", () => {
 
     expect(status).toBe("succeeded");
     expect(historyHits).toBeGreaterThanOrEqual(2); // 真轮询过
-    // gifs（VHS 视频输出）→ video_url，拼出 /view 完整 URL——证走的是视频键 gifs 不是 images（/history 里只有 gifs）。
-    expect(assetUrl).toContain(`${baseUrl}/view?`);
-    expect(assetUrl).toContain("filename=Nomi_00001.mp4");
-    expect(assetUrl).toContain("type=output");
-
-    // ── 3) 该 URL 真能取到视频（/view 契约）──
-    const vid = await fetch(assetUrl);
-    expect(vid.status).toBe(200);
-    expect(vid.headers.get("content-type")).toBe("video/mp4");
+    // gifs（VHS 视频输出）→ video_url，并把 /view 产物回收到真实项目。
+    expect(assetUrl).toContain("nomi-local://asset/");
+    const generatedDir = path.join(projectRoot, "assets", "generated");
+    const generatedFiles = fs.readdirSync(generatedDir, { recursive: true }).map(String);
+    expect(generatedFiles.some((file) => /video-\d+\.mp4$/.test(file))).toBe(true);
     expect(viewHits).toBeGreaterThanOrEqual(1);
   });
 });

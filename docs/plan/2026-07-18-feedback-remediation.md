@@ -68,7 +68,11 @@
 
 ### P1-2：ComfyUI 已出图/视频但 Nomi 未回收
 
-**现状：** 最新代码已覆盖标准 `/history/{prompt_id}` 的 image、gif、video 输出，群内至少三人报告真实工作流仍失败。仅凭文字无法判断是自定义节点输出形状、路径编码、子图结构还是轮询时序。
+**现状：** 最新代码已覆盖标准 `/history/{prompt_id}` 的 image、gif、video 输出；群内有明确反馈和失败截图，表现为 ComfyUI 已成功生成、Nomi 没拿回图片。仅凭截图无法判断是自定义节点输出形状、路径编码、子图结构还是轮询时序。
+
+**2026-07-18 根因复现：** `/history` 变换能正确拼出 `http://127.0.0.1:8188/view?...`，但真实生成带 `projectId`，终态会调用 `importRemoteAsset` 把产物本地化；该函数使用通用 `hardenedFetch`，按 SSRF 规则拒绝所有 loopback/私网地址。旧集成测试没传 `projectId`，只验证到 URL 拼接，绕开了失败点。因此 ComfyUI 日志显示成功，Nomi 在回收文件时失败。
+
+**修复边界：** 通用远程素材导入仍默认拒绝私网；仅当任务供应商是 `comfyui-local`，并且产物 URL 与用户配置的 ComfyUI `baseUrl` 精确同源时，允许下载且禁止重定向。集成测试必须带真实项目目录，验证 `/view` 被请求、文件落到 `assets/generated`、返回 `nomi-local://`。
 
 **处理顺序：**
 
