@@ -46,7 +46,6 @@ function firstIssueLabel(issue: PlanIssue): string {
 export default function StoryboardPlanEditor(): JSX.Element | null {
   const plan = useWorkbenchStore((s) => s.storyboardPlan)
   const setStoryboardPlan = useWorkbenchStore((s) => s.setStoryboardPlan)
-  const setStoryboardEditorOpen = useWorkbenchStore((s) => s.setStoryboardEditorOpen)
   const commitStoryboardPlan = useWorkbenchStore((s) => s.commitStoryboardPlan)
   const discardStoryboardPlan = useWorkbenchStore((s) => s.discardStoryboardPlan)
   const setWorkspaceMode = useWorkbenchStore((s) => s.setWorkspaceMode)
@@ -124,13 +123,6 @@ export default function StoryboardPlanEditor(): JSX.Element | null {
           <span className="shrink-0 text-micro text-nomi-ink-40 bg-nomi-ink-05 px-2 py-0.5 rounded-full">{plan.shots.length} 镜</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <WorkbenchButton
-            variant="default"
-            size="sm"
-            onClick={() => setStoryboardEditorOpen(false)}
-          >
-            收起
-          </WorkbenchButton>
           <WorkbenchButton
             variant="default"
             size="sm"

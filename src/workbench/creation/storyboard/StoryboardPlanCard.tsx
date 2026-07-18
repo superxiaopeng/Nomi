@@ -65,7 +65,7 @@ export default function StoryboardPlanCard(): JSX.Element | null {
         <>
           <span className="text-caption text-nomi-ink-60">正在左侧编辑器中修改 · {shotCount} 个镜头</span>
           <div className="flex items-center gap-2">
-            <WorkbenchButton variant="default" size="sm" onClick={() => setStoryboardEditorOpen(false)}>收起卡片</WorkbenchButton>
+            <WorkbenchButton variant="default" size="sm" onClick={() => setStoryboardEditorOpen(false)}>返回原稿</WorkbenchButton>
             <span className="ml-auto text-caption text-nomi-ink-40">在编辑器里确认即落画布</span>
           </div>
         </>

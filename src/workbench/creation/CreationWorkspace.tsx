@@ -12,8 +12,11 @@ export default function CreationWorkspace(): JSX.Element {
   // 一次性信号：打开示例/新项目时自动展开助手，让「拆镜头」CTA 一眼可见，消费后清掉。
   const autoOpen = useWorkbenchStore((s) => s.creationAssistantAutoOpen)
   const setAutoOpen = useWorkbenchStore((s) => s.setCreationAssistantAutoOpen)
-  // 编辑器「打开」时主列展开分镜方案编辑器，替换文档编辑器；收起则回文档、方案以卡片留在对话流（回看链路）。
+  // 原稿与分镜是同一创作阶段的两个工作面；方案存在后始终给出明确入口，避免“内容被替换”的错觉。
+  const storyboardPlan = useWorkbenchStore((s) => s.storyboardPlan)
+  const storyboardPlanCommitted = useWorkbenchStore((s) => s.storyboardPlanCommitted)
   const storyboardEditorOpen = useWorkbenchStore((s) => s.storyboardEditorOpen)
+  const setStoryboardEditorOpen = useWorkbenchStore((s) => s.setStoryboardEditorOpen)
   React.useEffect(() => {
     if (autoOpen) {
       setCollapsed(false)
@@ -37,7 +40,48 @@ export default function CreationWorkspace(): JSX.Element {
       )}
       aria-label="创作区"
     >
-      {storyboardEditorOpen ? <StoryboardPlanEditor /> : <WorkbenchEditor />}
+      <div className="min-w-0 min-h-0 flex flex-col gap-2">
+        {storyboardPlan ? (
+          <div
+            className="h-9 shrink-0 flex items-center justify-between gap-3 p-0.5 border border-nomi-line rounded-nomi bg-nomi-paper"
+            role="tablist"
+            aria-label="创作工作面"
+          >
+            <div className="flex items-center gap-0.5">
+              {([
+                { label: '原稿', active: !storyboardEditorOpen, open: false },
+                { label: '分镜方案', active: storyboardEditorOpen, open: true },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.label}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.active}
+                  onClick={() => setStoryboardEditorOpen(tab.open)}
+                  className={cn(
+                    'h-7 px-3 rounded-nomi-sm text-caption font-semibold cursor-pointer',
+                    'transition-[background,color,box-shadow] duration-[var(--nomi-transition-fast)]',
+                    tab.active
+                      ? 'bg-nomi-ink-10 text-nomi-ink shadow-nomi-sm'
+                      : 'bg-transparent text-nomi-ink-40 hover:text-nomi-ink-60',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <span className={cn(
+              'mr-2 text-micro',
+              storyboardPlanCommitted ? 'text-workbench-success' : 'text-nomi-accent',
+            )}>
+              {storyboardPlanCommitted ? '已落画布' : '草稿 · 尚未落画布'}
+            </span>
+          </div>
+        ) : null}
+        <div className="min-h-0 flex-1" data-creation-surface={storyboardEditorOpen ? 'storyboard' : 'source'}>
+          {storyboardEditorOpen ? <StoryboardPlanEditor /> : <WorkbenchEditor />}
+        </div>
+      </div>
       {collapsed ? (
         <WorkbenchButton
           className={cn(
