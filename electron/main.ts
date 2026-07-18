@@ -45,6 +45,7 @@ import { setRendererTarget } from "./capabilityCore/rendererBridge";
 import { readMcpInfo, installMcp, uninstallMcp } from "./capabilityCore/mcpConfig";
 import { registerLocalProtocol } from "./protocol/localProtocol";
 import { installWindowCloseConfirmation } from "./windowCloseConfirmation";
+import { installAppPageZoomGuard } from "./windowInput";
 
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
@@ -304,6 +305,7 @@ async function createWindow(
     },
   });
   mainWindowRef = mainWindow;
+  installAppPageZoomGuard(mainWindow.webContents);
   installWindowCloseConfirmation(mainWindow);
   mainWindow.on("closed", () => {
     if (mainWindowRef === mainWindow) mainWindowRef = null;

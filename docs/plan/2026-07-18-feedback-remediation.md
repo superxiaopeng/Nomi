@@ -58,6 +58,14 @@
 
 **进入实现的门：** 先以 Electron E2E 证明当前快捷键能改变 `webContents.getZoomFactor()`，再写纯函数快捷键判定红测。
 
+**精确文件与验收：**
+
+- 新增：`electron/windowInput.ts`，只负责识别主窗口页面缩放快捷键与安装 zoom factor 守卫。
+- 新增：`electron/windowInput.test.ts`，覆盖 macOS Meta、Windows/Linux Ctrl、主键区/小键盘 `+ - 0`，并证明无修饰键、Alt、普通按键不被拦。
+- 修改：`electron/main.ts`，创建主窗口后安装守卫；不挂到应用内浏览器 `WebContentsView`。
+- 新增：`tests/ux/app-page-zoom.e2e.mjs`，真实发送 Cmd/Ctrl `-`、`+`、`0` 并断言主窗口 `getZoomFactor()` 始终为 1。
+- 验收：页面快捷键不再改变应用壳尺寸；画布滚轮/工具栏缩放仍改变 canvas transform；浏览器视图不受影响。
+
 ### P1-2：ComfyUI 已出图/视频但 Nomi 未回收
 
 **现状：** 最新代码已覆盖标准 `/history/{prompt_id}` 的 image、gif、video 输出，群内至少三人报告真实工作流仍失败。仅凭文字无法判断是自定义节点输出形状、路径编码、子图结构还是轮询时序。
