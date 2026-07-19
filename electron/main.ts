@@ -467,7 +467,12 @@ function registerIpc(): void {
     recreateMainWindowFromSender(event.sender, { preserveRoute: true, reason: "hard reload window" });
   });
   registerSyncIpc("nomi:model-catalog:vendors:list", listModelCatalogVendors);
-  registerSyncIpc("nomi:model-catalog:models:list", listModelCatalogModels);
+  registerSyncIpc("nomi:model-catalog:models:list", (params?: unknown) => {
+    // Renderer 热更新不会重启 Electron main；读取时补一次内置种子，避免 onboarding
+    // 长时间停留在旧的持久化目录（例如 APIMart 缺 Grok Imagine 1.5）。
+    ensureBuiltinModelSeeds();
+    return listModelCatalogModels(params);
+  });
   registerSyncIpc("nomi:model-catalog:mappings:list", listModelCatalogMappings);
   registerSyncIpc("nomi:model-catalog:health", getModelCatalogHealth);
   registerSyncIpc("nomi:model-catalog:vendor:upsert", upsertModelCatalogVendor);
