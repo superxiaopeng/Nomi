@@ -44,10 +44,7 @@ import { registerUpdaterIpc } from "./update/autoUpdater";
 import { setRendererTarget } from "./capabilityCore/rendererBridge";
 import { readMcpInfo, installMcp, uninstallMcp } from "./capabilityCore/mcpConfig";
 import { registerLocalProtocol } from "./protocol/localProtocol";
-import { installWindowCloseConfirmation } from "./windowCloseConfirmation";
-import { installAppPageZoomGuard } from "./windowInput";
-import { installWindowZoomShortcuts } from "./windowZoomShortcuts";
-
+import { installMainWindowInteractions } from "./mainWindowInteractions";
 // 尽早安装：捕获引导阶段起的 uncaughtException / unhandledRejection，落盘到 app logs（P0-8）。
 installCrashHandlers();
 
@@ -306,13 +303,7 @@ async function createWindow(
     },
   });
   mainWindowRef = mainWindow;
-  installAppPageZoomGuard(mainWindow.webContents);
-  installWindowZoomShortcuts(mainWindow.webContents);
-  // e2e/走查（NOMI_E2E=1）不装关闭确认：自动化里没人点确认框，装了 = app.close() 被
-  // preventDefault 卡死 → 验证窗口留在用户桌面、进程残留（2026-07-17 用户实况反馈）。
-  if (process.env.NOMI_E2E !== "1") {
-    installWindowCloseConfirmation(mainWindow);
-  }
+  installMainWindowInteractions(mainWindow);
   mainWindow.on("closed", () => {
     if (mainWindowRef === mainWindow) mainWindowRef = null;
   });
