@@ -8,6 +8,7 @@ import { getBuiltinCategoryById } from '../../project/projectCategories'
 import { NodeCardBody } from './render/NodeCardBody'
 import ImageCropGridOverlay from './render/ImageCropGridOverlay'
 import NodeImageEditToolbar from './NodeImageEditToolbar'
+import NodeMediaPreviewDialog from './NodeMediaPreviewDialog'
 import NodeResultDownloadButton from './NodeResultDownloadButton'
 import { ImageResultStackControls } from './ImageResultStack'
 import { FloatingToolbarShell, TOOLBAR_ICON as TBI, ToolbarButton, ToolbarDivider } from './NodeFloatingToolbar'
@@ -117,6 +118,9 @@ function BaseGenerationNodeImpl({
   const panoramaUploadInputRef = React.useRef<HTMLInputElement | null>(null)
   const [provenanceOpen, setProvenanceOpen] = React.useState(false)
   const [imageStackOpen, setImageStackOpen] = React.useState(false)
+  const [mediaPreviewOpen, setMediaPreviewOpen] = React.useState(false)
+  const openMediaPreview = React.useCallback(() => setMediaPreviewOpen(true), [])
+  const closeMediaPreview = React.useCallback(() => setMediaPreviewOpen(false), [])
   const handleImageStackOpenChange = React.useCallback((nextOpen: boolean) => {
     setImageStackOpen(nextOpen)
   }, [])
@@ -421,11 +425,25 @@ function BaseGenerationNodeImpl({
           onTransform={(op) => void imageEditing.handleImageTransform(op)}
           onRemoveBackground={() => void imageEditing.handleRemoveBackground()}
           removeBackgroundBusy={isRemoveBackgroundPending}
+          onPreview={openMediaPreview}
         />
       ) : null}
 
       {/* 视频等无编辑工具条的结果：单独一条「下载」浮条；多选时藏（只留居中批量条，不糊一片）。 */}
-      <NodeResultDownloadButton node={node} selected={selected && !isMultiSelectActive && !imageStackOpen} />
+      <NodeResultDownloadButton
+        node={node}
+        selected={selected && !isMultiSelectActive && !imageStackOpen}
+        onPreview={openMediaPreview}
+      />
+
+      {mediaPreviewOpen && node.result?.url && (node.result.type === 'image' || node.result.type === 'video') ? (
+        <NodeMediaPreviewDialog
+          mediaType={node.result.type}
+          url={node.result.url}
+          title={node.title || (node.result.type === 'video' ? '视频' : '图片')}
+          onClose={closeMediaPreview}
+        />
+      ) : null}
 
       <header
         className={cn(
