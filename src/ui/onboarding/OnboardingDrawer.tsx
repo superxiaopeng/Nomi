@@ -201,13 +201,17 @@ export function OnboardingDrawer(): JSX.Element {
     dreaminaConnected ||
     assistantConnected
 
-  // 能力覆盖：某 kind 有「已连通供应商（hasApiKey）」的模型 = 现在就能生成（诚实，未连通不算）。
-  const coveredKinds = React.useMemo(() => {
-    const set = new Set<string>()
+  // 能力覆盖：某 kind 有「已连通供应商（hasApiKey）+ 已启用」的模型 = 现在就能生成（诚实，未连通不算）。
+  // 计数 = 该 kind 下已启用且可用的模型数（用户 2026-07-17：能力条要显示选中的不同类型模型数量）。
+  const coveredKindCounts = React.useMemo(() => {
+    const counts = new Map<string, number>()
     for (const m of models) {
-      if (vendorMeta.get(m.vendorKey)?.hasApiKey) set.add(String(m.kind))
+      if (!m.enabled) continue
+      if (!vendorMeta.get(m.vendorKey)?.hasApiKey) continue
+      const k = String(m.kind)
+      counts.set(k, (counts.get(k) ?? 0) + 1)
     }
-    return set
+    return counts
   }, [models, vendorMeta])
 
   // 其他（自定义中转）按 vendor 拆成每家一张卡，卡名用用户在接入时填的「来源名称」（vendorMeta.name）。
@@ -235,6 +239,7 @@ export function OnboardingDrawer(): JSX.Element {
       baseUrl={card.meta.baseUrl}
       hasApiKey={card.meta.hasApiKey}
       models={card.vendorModels}
+      onToggleModel={(model, enabled) => handleSetEnabled([model], enabled)}
       onChanged={refresh}
     />
   )
@@ -250,7 +255,8 @@ export function OnboardingDrawer(): JSX.Element {
         <div className="text-micro text-nomi-ink-40 mb-1.5">你现在已经能生成</div>
         <div className="flex flex-wrap gap-1.5">
           {KIND_CAPS.map(({ kind, label, Icon }) => {
-            const on = coveredKinds.has(kind)
+            const count = coveredKindCounts.get(kind) ?? 0
+            const on = count > 0
             return (
               <span
                 key={kind}
@@ -261,7 +267,8 @@ export function OnboardingDrawer(): JSX.Element {
               >
                 <Icon size={13} stroke={1.7} />
                 {label}
-                {on ? null : <span className="text-nomi-ink-30">未接</span>}
+                {/* 数量 = 该类型下已启用且厂商已连通的模型数（用户 2026-07-17 要求）。 */}
+                {on ? <span className="font-semibold tabular-nums">{count}</span> : <span className="text-nomi-ink-30">未接</span>}
               </span>
             )
           })}
